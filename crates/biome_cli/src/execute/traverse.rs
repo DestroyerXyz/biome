@@ -316,7 +316,7 @@ fn process_messages(options: ProcessMessagesOptions) {
     let mut is_msg_open = true;
     let mut is_report_open = true;
     let mut diagnostics_to_print = vec![];
-    dbg!(diagnostic_level);
+
     while is_msg_open || is_report_open {
         let msg = select! {
             recv(recv_msgs) -> msg => match msg {
