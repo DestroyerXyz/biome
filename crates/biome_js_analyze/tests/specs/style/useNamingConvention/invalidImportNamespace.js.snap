@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidImportNamespace.js
 ---
 # Input
-```js
+```jsx
 import * as X from ""
 
 import * as PascalCase from ""
@@ -29,8 +29,6 @@ invalidImportNamespace.js:5:13 lint/style/useNamingConvention  FIXABLE  ━━�
     6 │ 
     7 │ import * as snake_case from ""
   
-  i The name could be renamed to `constantCase`.
-  
   i Safe fix: Rename this symbol in camelCase.
   
      3  3 │   import * as PascalCase from ""
@@ -55,8 +53,6 @@ invalidImportNamespace.js:7:13 lint/style/useNamingConvention  FIXABLE  ━━�
     8 │ 
     9 │ import * as Unknown_Style from ""
   
-  i The name could be renamed to `snakeCase`.
-  
   i Safe fix: Rename this symbol in camelCase.
   
      5  5 │   import * as CONSTANT_CASE from ""
@@ -80,8 +76,6 @@ invalidImportNamespace.js:9:13 lint/style/useNamingConvention  FIXABLE  ━━�
        │             ^^^^^^^^^^^^^
     10 │ 
   
-  i The name could be renamed to `unknownStyle`.
-  
   i Safe fix: Rename this symbol in camelCase.
   
      7  7 │   import * as snake_case from ""
@@ -92,5 +86,3 @@ invalidImportNamespace.js:9:13 lint/style/useNamingConvention  FIXABLE  ━━�
   
 
 ```
-
-

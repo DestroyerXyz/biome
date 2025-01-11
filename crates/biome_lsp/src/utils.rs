@@ -1,5 +1,3 @@
-use crate::converters::line_index::LineIndex;
-use crate::converters::{from_proto, to_proto, PositionEncoding};
 use anyhow::{ensure, Context, Result};
 use biome_analyze::ActionCategory;
 use biome_console::fmt::Termcolor;
@@ -9,13 +7,16 @@ use biome_diagnostics::termcolor::NoColor;
 use biome_diagnostics::{
     Applicability, {Diagnostic, DiagnosticTags, Location, PrintDescription, Severity, Visit},
 };
-use biome_rowan::TextSize;
+use biome_lsp_converters::line_index::LineIndex;
+use biome_lsp_converters::{from_proto, to_proto, PositionEncoding};
+use biome_rowan::{TextRange, TextSize};
 use biome_service::workspace::CodeAction;
 use biome_text_edit::{CompressedOp, DiffOp, TextEdit};
 use std::any::Any;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::ops::Range;
+use std::ops::{Add, Range};
 use std::{io, mem};
 use tower_lsp::jsonrpc::Error as LspError;
 use tower_lsp::lsp_types;
@@ -26,9 +27,14 @@ pub(crate) fn text_edit(
     line_index: &LineIndex,
     diff: TextEdit,
     position_encoding: PositionEncoding,
+    offset: Option<u32>,
 ) -> Result<Vec<lsp::TextEdit>> {
     let mut result: Vec<lsp::TextEdit> = Vec::new();
-    let mut offset = TextSize::from(0);
+    let mut offset = if let Some(offset) = offset {
+        TextSize::from(offset)
+    } else {
+        TextSize::from(0)
+    };
 
     for op in diff.iter() {
         match op {
@@ -91,6 +97,7 @@ pub(crate) fn code_fix_to_lsp(
     position_encoding: PositionEncoding,
     diagnostics: &[lsp::Diagnostic],
     action: CodeAction,
+    offset: Option<u32>,
 ) -> Result<lsp::CodeAction> {
     // Mark diagnostics emitted by the same rule as resolved by this action
     let diagnostics: Vec<_> = action
@@ -121,22 +128,11 @@ pub(crate) fn code_fix_to_lsp(
         })
         .unwrap_or_default();
 
-    let kind = action.category.to_str();
-    let mut kind = kind.into_owned();
-
-    if !matches!(action.category, ActionCategory::Source(_)) {
-        if let Some((group, rule)) = action.rule_name {
-            kind.push('.');
-            kind.push_str(group.as_ref());
-            kind.push('.');
-            kind.push_str(rule.as_ref());
-        }
-    }
-
+    let kind = action.category.to_str().into_owned();
     let suggestion = action.suggestion;
 
     let mut changes = HashMap::new();
-    let edits = text_edit(line_index, suggestion.suggestion, position_encoding)?;
+    let edits = text_edit(line_index, suggestion.suggestion, position_encoding, offset)?;
 
     changes.insert(url.clone(), edits);
 
@@ -175,10 +171,19 @@ pub(crate) fn diagnostic_to_lsp<D: Diagnostic>(
     url: &lsp::Url,
     line_index: &LineIndex,
     position_encoding: PositionEncoding,
+    offset: Option<u32>,
 ) -> Result<lsp::Diagnostic> {
     let location = diagnostic.location();
 
     let span = location.span.context("diagnostic location has no span")?;
+    let span = if let Some(offset) = offset {
+        TextRange::new(
+            span.start().add(TextSize::from(offset)),
+            span.end().add(TextSize::from(offset)),
+        )
+    } else {
+        span
+    };
     let span = to_proto::range(line_index, span, position_encoding)
         .context("failed to convert diagnostic span to LSP range")?;
 
@@ -294,7 +299,7 @@ fn print_markup(markup: &MarkupBuf) -> String {
 pub(crate) fn into_lsp_error(msg: impl Display + Debug) -> LspError {
     let mut error = LspError::internal_error();
     error!("Error: {}", msg);
-    error.message = msg.to_string();
+    error.message = Cow::Owned(msg.to_string());
     error.data = Some(format!("{msg:?}").into());
     error
 }
@@ -304,14 +309,14 @@ pub(crate) fn panic_to_lsp_error(err: Box<dyn Any + Send>) -> LspError {
 
     match err.downcast::<String>() {
         Ok(msg) => {
-            error.message = *msg;
+            error.message = Cow::Owned(msg.to_string());
         }
         Err(err) => match err.downcast::<&str>() {
             Ok(msg) => {
-                error.message = msg.to_string();
+                error.message = Cow::Owned(msg.to_string());
             }
             Err(_) => {
-                error.message = String::from("Biome encountered an unknown error");
+                error.message = Cow::Owned(String::from("Biome encountered an unknown error"));
             }
         },
     }
@@ -329,8 +334,7 @@ pub(crate) fn apply_document_changes(
         .iter()
         .rev()
         .position(|change| change.range.is_none())
-        .map(|idx| content_changes.len() - idx - 1)
-        .unwrap_or(0);
+        .map_or(0, |idx| content_changes.len() - idx - 1);
 
     let mut text: String = match content_changes.get_mut(start) {
         // peek at the first content change as an optimization
@@ -376,8 +380,8 @@ pub(crate) fn apply_document_changes(
 #[cfg(test)]
 mod tests {
     use super::apply_document_changes;
-    use crate::converters::line_index::LineIndex;
-    use crate::converters::{PositionEncoding, WideEncoding};
+    use biome_lsp_converters::line_index::LineIndex;
+    use biome_lsp_converters::{PositionEncoding, WideEncoding};
     use biome_text_edit::TextEdit;
     use tower_lsp::lsp_types as lsp;
     use tower_lsp::lsp_types::{Position, Range, TextDocumentContentChangeEvent};
@@ -403,7 +407,7 @@ line 7 new";
         let line_index = LineIndex::new(OLD);
         let diff = TextEdit::from_unicode_words(OLD, NEW);
 
-        let text_edit = super::text_edit(&line_index, diff, PositionEncoding::Utf8).unwrap();
+        let text_edit = super::text_edit(&line_index, diff, PositionEncoding::Utf8, None).unwrap();
 
         assert_eq!(
             text_edit.as_slice(),
@@ -446,7 +450,7 @@ line 7 new";
         let line_index = LineIndex::new(OLD);
         let diff = TextEdit::from_unicode_words(OLD, NEW);
 
-        let text_edit = super::text_edit(&line_index, diff, PositionEncoding::Utf8).unwrap();
+        let text_edit = super::text_edit(&line_index, diff, PositionEncoding::Utf8, None).unwrap();
 
         assert_eq!(
             text_edit.as_slice(),

@@ -23,7 +23,6 @@ declare_node_union! {
 impl Format<JsFormatContext> for AnyJsxOpeningElement {
     fn fmt(&self, f: &mut Formatter<JsFormatContext>) -> FormatResult<()> {
         let layout = self.compute_layout(f.context().comments())?;
-
         let l_angle_token = self.l_angle_token()?;
         let name = self.name()?;
         let type_arguments = self.type_arguments();
@@ -69,7 +68,10 @@ impl Format<JsFormatContext> for AnyJsxOpeningElement {
                     ]
                 )
             }
-            OpeningElementLayout::IndentAttributes { name_has_comments } => {
+            OpeningElementLayout::IndentAttributes {
+                name_has_comments,
+                last_attribute_has_comments,
+            } => {
                 let format_inner = format_with(|f| {
                     write!(
                         f,
@@ -86,6 +88,8 @@ impl Format<JsFormatContext> for AnyJsxOpeningElement {
 
                     if self.is_self_closing() {
                         write!(f, [soft_line_break_or_space(), format_close])
+                    } else if force_bracket_same_line && last_attribute_has_comments {
+                        write!(f, [soft_line_break(), format_close])
                     } else if force_bracket_same_line || wants_bracket_same_line {
                         write!(f, [format_close])
                     } else {
@@ -96,7 +100,6 @@ impl Format<JsFormatContext> for AnyJsxOpeningElement {
                 let has_multiline_string_attribute = attributes
                     .iter()
                     .any(|attribute| is_multiline_string_literal_attribute(&attribute));
-
                 write![
                     f,
                     [group(&format_inner).should_expand(has_multiline_string_attribute)]
@@ -149,6 +152,9 @@ impl AnyJsxOpeningElement {
     fn compute_layout(&self, comments: &JsComments) -> SyntaxResult<OpeningElementLayout> {
         let attributes = self.attributes();
         let name = self.name()?;
+        let last_attribute_has_comments = self.attributes().last().map_or(false, |attribute| {
+            comments.has_trailing_comments(attribute.syntax())
+        });
 
         let name_has_comments = comments.has_comments(name.syntax())
             || self
@@ -166,7 +172,10 @@ impl AnyJsxOpeningElement {
         {
             OpeningElementLayout::SingleStringAttribute
         } else {
-            OpeningElementLayout::IndentAttributes { name_has_comments }
+            OpeningElementLayout::IndentAttributes {
+                name_has_comments,
+                last_attribute_has_comments,
+            }
         };
 
         Ok(layout)
@@ -200,7 +209,10 @@ enum OpeningElementLayout {
     ///   moreAttributes={withSomeExpression}
     /// ></div>;
     /// ```
-    IndentAttributes { name_has_comments: bool },
+    IndentAttributes {
+        name_has_comments: bool,
+        last_attribute_has_comments: bool,
+    },
 }
 
 /// Returns `true` if this is an attribute with a [JsxString] initializer that does not contain any new line characters.

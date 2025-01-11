@@ -3,13 +3,13 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.ts
 ---
 # Input
-```js
+```ts
 let a!: number = 5;
 ```
 
 # Diagnostics
 ```
-invalid.ts:1:16 parse/noInitializerWithDefinite ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:1:16 syntax/correctness/noInitializerWithDefinite ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ! Declarations with initializers cannot also have definite assignment assertions.
   
@@ -18,5 +18,3 @@ invalid.ts:1:16 parse/noInitializerWithDefinite ━━━━━━━━━━�
   
 
 ```
-
-

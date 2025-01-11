@@ -1,17 +1,19 @@
 {
-  "name": "benchmark",
+  "name": "@biomejs/benchmark",
   "version": "1.0.0",
   "description": "",
+  "private": true,
   "main": "run.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
+  "author": "Biome Developers and Contributors",
   "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">20.0.0"
+  },
   "devDependencies": {
-    "@mixer/parallel-prettier": "^2.0.3",
-    "dprint": "^0.43.0",
-    "eslint": "^8.54.0",
-    "prettier": "^3.1.0"
+    "@typescript-eslint/eslint-plugin": "8.19.1",
+    "dprint": "0.48.0",
+    "eslint": "9.17.0",
+    "prettier": "3.3.3"
   }
 }

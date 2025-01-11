@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidObjectGetter.js
 ---
 # Input
-```js
+```jsx
 export default {
     get SpecialProperty() {},
 
@@ -25,8 +25,6 @@ invalidObjectGetter.js:2:9 lint/style/useNamingConvention ━━━━━━━�
     3 │ 
     4 │     get special_property() {},
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
@@ -42,8 +40,6 @@ invalidObjectGetter.js:4:9 lint/style/useNamingConvention ━━━━━━━�
     5 │ 
     6 │     get Unknown_Style() {},
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
@@ -58,9 +54,5 @@ invalidObjectGetter.js:6:9 lint/style/useNamingConvention ━━━━━━━�
       │         ^^^^^^^^^^^^^
     7 │ }
   
-  i The name could be renamed to `unknownStyle`.
-  
 
 ```
-
-

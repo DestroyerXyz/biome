@@ -1,10 +1,12 @@
 use crate::test_case::TestCase;
-use biome_analyze::{AnalysisFilter, AnalyzerOptions, ControlFlow, Never, RuleCategories};
+use biome_analyze::options::JsxRuntime;
+use biome_analyze::{AnalysisFilter, AnalyzerOptions, ControlFlow, Never, RuleCategoriesBuilder};
 use biome_css_formatter::context::{CssFormatContext, CssFormatOptions};
 use biome_css_parser::CssParserOptions;
-use biome_css_syntax::CssSyntaxNode;
+use biome_css_syntax::{CssRoot, CssSyntaxNode};
 use biome_formatter::{FormatResult, Formatted, PrintResult, Printed};
-use biome_js_analyze::analyze;
+use biome_graphql_formatter::context::{GraphqlFormatContext, GraphqlFormatOptions};
+use biome_graphql_syntax::GraphqlSyntaxNode;
 use biome_js_formatter::context::{JsFormatContext, JsFormatOptions};
 use biome_js_parser::JsParserOptions;
 use biome_js_syntax::{AnyJsRoot, JsFileSource, JsSyntaxNode};
@@ -19,6 +21,7 @@ pub enum Parse<'a> {
     JavaScript(JsFileSource, &'a str),
     Json(&'a str),
     Css(&'a str),
+    Graphql(&'a str),
 }
 
 impl<'a> Parse<'a> {
@@ -28,6 +31,7 @@ impl<'a> Parse<'a> {
             Err(_) => match case.extension() {
                 "json" => Some(Parse::Json(case.code())),
                 "css" => Some(Parse::Css(case.code())),
+                "graphql" => Some(Parse::Graphql(case.code())),
                 _ => None,
             },
         }
@@ -45,8 +49,11 @@ impl<'a> Parse<'a> {
             )),
             Parse::Css(code) => Parsed::Css(biome_css_parser::parse_css(
                 code,
-                CssParserOptions::default().allow_wrong_line_comments(),
+                CssParserOptions::default()
+                    .allow_wrong_line_comments()
+                    .allow_css_modules(),
             )),
+            Parse::Graphql(code) => Parsed::Graphql(biome_graphql_parser::parse_graphql(code)),
         }
     }
 
@@ -69,8 +76,13 @@ impl<'a> Parse<'a> {
             Parse::Css(code) => Parsed::Css(biome_css_parser::parse_css_with_cache(
                 code,
                 cache,
-                CssParserOptions::default().allow_wrong_line_comments(),
+                CssParserOptions::default()
+                    .allow_wrong_line_comments()
+                    .allow_css_modules(),
             )),
+            Parse::Graphql(code) => {
+                Parsed::Graphql(biome_graphql_parser::parse_graphql_with_cache(code, cache))
+            }
         }
     }
 }
@@ -79,6 +91,7 @@ pub enum Parsed {
     JavaScript(biome_js_parser::Parse<AnyJsRoot>, JsFileSource),
     Json(biome_json_parser::JsonParse),
     Css(biome_css_parser::CssParse),
+    Graphql(biome_graphql_parser::GraphqlParse),
 }
 
 impl Parsed {
@@ -88,7 +101,8 @@ impl Parsed {
                 Some(FormatNode::JavaScript(parse.syntax(), *source_type))
             }
             Parsed::Json(parse) => Some(FormatNode::Json(parse.syntax())),
-            Parsed::Css(_) => None,
+            Parsed::Css(parse) => Some(FormatNode::Css(parse.syntax())),
+            Parsed::Graphql(parse) => Some(FormatNode::Graphql(parse.syntax())),
         }
     }
 
@@ -96,7 +110,8 @@ impl Parsed {
         match self {
             Parsed::JavaScript(parse, _) => Some(Analyze::JavaScript(parse.tree())),
             Parsed::Json(_) => None,
-            Parsed::Css(_) => None,
+            Parsed::Graphql(_) => None,
+            Parsed::Css(parse) => Some(Analyze::Css(parse.tree())),
         }
     }
 
@@ -105,6 +120,7 @@ impl Parsed {
             Parsed::JavaScript(parse, _) => parse.into_diagnostics(),
             Parsed::Json(parse) => parse.into_diagnostics(),
             Parsed::Css(parse) => parse.into_diagnostics(),
+            Parsed::Graphql(parse) => parse.into_diagnostics(),
         }
     }
 }
@@ -113,6 +129,7 @@ pub enum FormatNode {
     JavaScript(JsSyntaxNode, JsFileSource),
     Json(JsonSyntaxNode),
     Css(CssSyntaxNode),
+    Graphql(GraphqlSyntaxNode),
 }
 
 impl FormatNode {
@@ -128,6 +145,10 @@ impl FormatNode {
             }
             Self::Css(root) => biome_css_formatter::format_node(CssFormatOptions::default(), root)
                 .map(FormattedNode::Css),
+            FormatNode::Graphql(root) => {
+                biome_graphql_formatter::format_node(GraphqlFormatOptions::default(), root)
+                    .map(FormattedNode::Graphql)
+            }
         }
     }
 }
@@ -136,6 +157,7 @@ pub enum FormattedNode {
     JavaScript(Formatted<JsFormatContext>),
     Json(Formatted<JsonFormatContext>),
     Css(Formatted<CssFormatContext>),
+    Graphql(Formatted<GraphqlFormatContext>),
 }
 
 impl FormattedNode {
@@ -144,12 +166,14 @@ impl FormattedNode {
             FormattedNode::JavaScript(formatted) => formatted.print(),
             FormattedNode::Json(formatted) => formatted.print(),
             FormattedNode::Css(formatted) => formatted.print(),
+            FormattedNode::Graphql(formatted) => formatted.print(),
         }
     }
 }
 
 pub enum Analyze {
     JavaScript(AnyJsRoot),
+    Css(CssRoot),
 }
 
 impl Analyze {
@@ -157,11 +181,37 @@ impl Analyze {
         match self {
             Analyze::JavaScript(root) => {
                 let filter = AnalysisFilter {
-                    categories: RuleCategories::SYNTAX | RuleCategories::LINT,
+                    categories: RuleCategoriesBuilder::default()
+                        .with_syntax()
+                        .with_lint()
+                        .build(),
+                    ..AnalysisFilter::default()
+                };
+                let mut options = AnalyzerOptions::default();
+                options.configuration.jsx_runtime = Some(JsxRuntime::default());
+                biome_js_analyze::analyze(
+                    root,
+                    filter,
+                    &options,
+                    JsFileSource::default(),
+                    None,
+                    |event| {
+                        black_box(event.diagnostic());
+                        black_box(event.actions());
+                        ControlFlow::<Never>::Continue(())
+                    },
+                );
+            }
+            Analyze::Css(root) => {
+                let filter = AnalysisFilter {
+                    categories: RuleCategoriesBuilder::default()
+                        .with_syntax()
+                        .with_lint()
+                        .build(),
                     ..AnalysisFilter::default()
                 };
                 let options = AnalyzerOptions::default();
-                analyze(root, filter, &options, JsFileSource::default(), |event| {
+                biome_css_analyze::analyze(root, filter, &options, |event| {
                     black_box(event.diagnostic());
                     black_box(event.actions());
                     ControlFlow::<Never>::Continue(())

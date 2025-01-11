@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidEnum.ts
 ---
 # Input
-```js
+```ts
 enum specialStatus {}
 
 enum special_status {}
@@ -21,8 +21,6 @@ invalidEnum.ts:1:6 lint/style/useNamingConvention  FIXABLE  ━━━━━━�
       │      ^^^^^^^^^^^^^
     2 │ 
     3 │ enum special_status {}
-  
-  i The name could be renamed to `SpecialStatus`.
   
   i Safe fix: Rename this symbol in PascalCase.
   
@@ -46,8 +44,6 @@ invalidEnum.ts:3:6 lint/style/useNamingConvention  FIXABLE  ━━━━━━�
     4 │ 
     5 │ enum SPECIAL_STATUS {}
   
-  i The name could be renamed to `SpecialStatus`.
-  
   i Safe fix: Rename this symbol in PascalCase.
   
     1 1 │   enum specialStatus {}
@@ -70,8 +66,6 @@ invalidEnum.ts:5:6 lint/style/useNamingConvention  FIXABLE  ━━━━━━�
   > 5 │ enum SPECIAL_STATUS {}
       │      ^^^^^^^^^^^^^^
   
-  i The name could be renamed to `SpecialStatus`.
-  
   i Safe fix: Rename this symbol in PascalCase.
   
     3 3 │   enum special_status {}
@@ -81,5 +75,3 @@ invalidEnum.ts:5:6 lint/style/useNamingConvention  FIXABLE  ━━━━━━�
   
 
 ```
-
-

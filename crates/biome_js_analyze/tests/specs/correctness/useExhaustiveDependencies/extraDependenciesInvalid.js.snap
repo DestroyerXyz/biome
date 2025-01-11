@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: extraDependenciesInvalid.js
 ---
 # Input
-```js
+```jsx
 import { useEffect } from "react";
 
 function MyComponent() {
@@ -50,7 +50,7 @@ function MyComponent3() {
 ```
 extraDependenciesInvalid.js:5:3 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook specifies more dependencies than necessary.
+  ! This hook specifies more dependencies than necessary: a
   
     3 │ function MyComponent() {
     4 │   let a = 1;
@@ -74,7 +74,7 @@ extraDependenciesInvalid.js:5:3 lint/correctness/useExhaustiveDependencies ━�
 ```
 extraDependenciesInvalid.js:12:3 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook specifies more dependencies than necessary.
+  ! This hook specifies more dependencies than necessary: a, b
   
     10 │ function MyComponent2() {
     11 │   let a = 1, b = 1;
@@ -107,7 +107,7 @@ extraDependenciesInvalid.js:12:3 lint/correctness/useExhaustiveDependencies ━�
 ```
 extraDependenciesInvalid.js:19:3 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook specifies more dependencies than necessary.
+  ! This hook specifies more dependencies than necessary: a
   
     17 │ function MyComponent2() {
     18 │   const a = 1;
@@ -131,7 +131,7 @@ extraDependenciesInvalid.js:19:3 lint/correctness/useExhaustiveDependencies ━�
 ```
 extraDependenciesInvalid.js:28:3 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook specifies a dependency more specific that its captures
+  ! This hook specifies a dependency more specific that its captures: someObj.id
   
     26 │ function MyComponent1() {
     27 │   let someObj = getObj();
@@ -164,7 +164,7 @@ extraDependenciesInvalid.js:28:3 lint/correctness/useExhaustiveDependencies ━�
 ```
 extraDependenciesInvalid.js:28:3 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook does not specify all of its dependencies.
+  ! This hook does not specify all of its dependencies: someObj
   
     26 │ function MyComponent1() {
     27 │   let someObj = getObj();
@@ -188,7 +188,7 @@ extraDependenciesInvalid.js:28:3 lint/correctness/useExhaustiveDependencies ━�
 ```
 extraDependenciesInvalid.js:36:3 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook specifies more dependencies than necessary.
+  ! This hook specifies more dependencies than necessary: outer
   
     34 │ // Dependencies from outer scope should not be valid
     35 │ function MyComponent3() {

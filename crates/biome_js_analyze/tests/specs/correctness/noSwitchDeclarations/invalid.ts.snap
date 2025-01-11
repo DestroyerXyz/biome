@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.ts
 ---
 # Input
-```js
+```ts
 switch (1) {
 	case 1:
 		enum E {}
@@ -75,7 +75,8 @@ invalid.ts:3:3 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━�
      2    │ - → case·1:
         2 │ + → case·1:·{
      3  3 │   		enum E {}
-     4  4 │   		break;
+     4    │ - → → break;
+        4 │ + → → break;
         5 │ + → }
      5  6 │   }
      6  7 │   
@@ -114,7 +115,8 @@ invalid.ts:9:3 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━�
      8    │ - → default:
         8 │ + → default:·{
      9  9 │   		enum E {}
-    10 10 │   		break;
+    10    │ - → → break;
+       10 │ + → → break;
        11 │ + → }
     11 12 │   }
     12 13 │   
@@ -153,7 +155,8 @@ invalid.ts:15:3 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━�
     14    │ - → case·1:
        14 │ + → case·1:·{
     15 15 │   		interface I {}
-    16 16 │   		break;
+    16    │ - → → break;
+       16 │ + → → break;
        17 │ + → }
     17 18 │   }
     18 19 │   
@@ -196,7 +199,8 @@ invalid.ts:21:3 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━�
     21 21 │   		interface I {}
     22 22 │   		{
     23 23 │   		}
-    24 24 │   		break;
+    24    │ - → → break;
+       24 │ + → → break;
        25 │ + → }
     25 26 │   }
     26 27 │   
@@ -235,7 +239,8 @@ invalid.ts:29:3 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━�
     28    │ - → case·1:
        28 │ + → case·1:·{
     29 29 │   		type N = number;
-    30 30 │   		break;
+    30    │ - → → break;
+       30 │ + → → break;
        31 │ + → }
     31 32 │   }
     32 33 │   
@@ -274,12 +279,11 @@ invalid.ts:35:3 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━�
     34    │ - → default:
        34 │ + → default:·{
     35 35 │   		type N = number;
-    36 36 │   		break;
+    36    │ - → → break;
+       36 │ + → → break;
        37 │ + → }
     37 38 │   }
     38 39 │   
   
 
 ```
-
-

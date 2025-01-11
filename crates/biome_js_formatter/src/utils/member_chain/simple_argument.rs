@@ -6,6 +6,7 @@ use biome_js_syntax::{
     JsStaticMemberExpressionFields, JsTemplateExpression, JsUnaryOperator,
 };
 use biome_rowan::{AstSeparatedList, SyntaxResult};
+use unicode_width::UnicodeWidthStr;
 
 /// This enum tracks the arguments inside a call expressions and checks if they are
 /// simple or not.
@@ -226,7 +227,7 @@ impl SimpleArgument {
         )) = self
         {
             if let Ok((pattern, _)) = regex.decompose() {
-                return pattern.text().len() <= 5;
+                return pattern.text().width() <= 5;
             }
         }
 
@@ -355,7 +356,7 @@ impl From<AnyJsCallArgument> for SimpleArgument {
 ///
 /// - all strings dont contain newlines
 /// - the expressions contained in the template are considered as `is_simple_call_argument`. Check
-/// [is_simple_call_argument].
+///     [is_simple_call_argument].
 pub fn is_simple_template_literal(
     template: &JsTemplateExpression,
     depth: u8,

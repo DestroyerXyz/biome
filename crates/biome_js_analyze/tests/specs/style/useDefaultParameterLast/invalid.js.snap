@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
 ---
 # Input
-```js
+```jsx
 export function f(a = 0, b) {}
 
 export function g(a, b = 0, c) {}
@@ -98,8 +98,13 @@ invalid.js:7:22 lint/style/useDefaultParameterLast  FIXABLE  ━━━━━━�
   
   i Unsafe fix: Turn the parameter into a required parameter.
   
-    7 │ export·function·g(a,·b·/*·before·*/·=·/*·mid·*/·0·/*·after·*/·/*·after·comma·*/,·c)·{}
-      │                                     --------------                                    
+     5  5 │   export function g(a, b /* before */ = /* mid */ 0/* after */) {}
+     6  6 │   
+     7    │ - export·function·g(a,·b·/*·before·*/·=·/*·mid·*/·0·/*·after·*/·/*·after·comma·*/,·c)·{}
+        7 │ + export·function·g(a,·b·/*·before·*/·/*·after·*/·/*·after·comma·*/,·c)·{}
+     8  8 │   
+     9  9 │   export function u(a=5, b, c) {}
+  
 
 ```
 
@@ -130,5 +135,3 @@ invalid.js:9:19 lint/style/useDefaultParameterLast  FIXABLE  ━━━━━━�
       │                    --          
 
 ```
-
-

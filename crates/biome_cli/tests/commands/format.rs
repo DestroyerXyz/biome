@@ -1,7 +1,7 @@
 use crate::configs::{
     CONFIG_DISABLED_FORMATTER, CONFIG_FILE_SIZE_LIMIT, CONFIG_FORMAT,
     CONFIG_FORMATTER_AND_FILES_IGNORE, CONFIG_FORMATTER_IGNORED_DIRECTORIES,
-    CONFIG_FORMATTER_IGNORED_FILES, CONFIG_ISSUE_3175_1, CONFIG_ISSUE_3175_2,
+    CONFIG_FORMATTER_IGNORED_FILES, CONFIG_FORMAT_JSONC, CONFIG_ISSUE_3175_1, CONFIG_ISSUE_3175_2,
 };
 use crate::snap_test::{assert_file_contents, markup_to_string, SnapshotPayload};
 use crate::{
@@ -37,7 +37,49 @@ let b = {
 const APPLY_QUOTE_STYLE_AFTER: &str = "let a = 'something';
 let b = {\n\t'hey': 'hello',\n};\n";
 
-const APPLY_TRAILING_COMMA_BEFORE: &str = r#"
+const APPLY_CSS_QUOTE_STYLE_BEFORE: &str =
+    r#"[class='foo'] { background-image: url("/path/to/file.jpg")}"#;
+
+const APPLY_CSS_QUOTE_STYLE_AFTER: &str =
+    "[class='foo'] {\n\tbackground-image: url('/path/to/file.jpg');\n}\n";
+
+const SVELTE_IMPLICIT_JS_FILE_UNFORMATTED: &str = r#"<script>
+import {    something } from "file.svelte";
+statement ( ) ;
+</script>
+<div></div>"#;
+
+const SVELTE_IMPLICIT_JS_FILE_FORMATTED: &str = r#"<script>
+import { something } from "file.svelte";
+statement();
+</script>
+<div></div>"#;
+
+const SVELTE_EXPLICIT_JS_FILE_UNFORMATTED: &str = r#"<script lang="js">
+import {    something } from "file.svelte";
+statement ( ) ;
+</script>
+<div></div>"#;
+
+const SVELTE_EXPLICIT_JS_FILE_FORMATTED: &str = r#"<script lang="js">
+import { something } from "file.svelte";
+statement();
+</script>
+<div></div>"#;
+
+const SVELTE_TS_FILE_UNFORMATTED: &str = r#"<script setup lang="ts">
+import     { type     something } from "file.svelte";
+const hello  :      string      = "world";
+</script>
+<div></div>"#;
+
+const SVELTE_TS_FILE_FORMATTED: &str = r#"<script setup lang="ts">
+import { type something } from "file.svelte";
+const hello: string = "world";
+</script>
+<div></div>"#;
+
+const APPLY_TRAILING_COMMAS_BEFORE: &str = r#"
 const a = [
 	longlonglonglongItem1longlonglonglongItem1,
 	longlonglonglongItem1longlonglonglongItem2,
@@ -45,7 +87,7 @@ const a = [
 ];
 "#;
 
-const APPLY_TRAILING_COMMA_AFTER: &str = r#"const a = [
+const APPLY_TRAILING_COMMAS_AFTER: &str = r#"const a = [
 	longlonglonglongItem1longlonglonglongItem1,
 	longlonglonglongItem1longlonglonglongItem2,
 	longlonglonglongItem1longlonglonglongItem3
@@ -79,6 +121,17 @@ let foo = {a, b};
 const {a, b} = foo;
 "#;
 
+const APPLY_BRACKET_SPACING_BEFORE_GRAPHQL: &str = r#"{
+	field_value(
+		object_value: {key: "value"}
+	)
+}"#;
+
+const APPLY_BRACKET_SPACING_AFTER_GRAPHQL: &str = r#"{
+	field_value(object_value: {key: "value"})
+}
+"#;
+
 const APPLY_BRACKET_SAME_LINE_BEFORE: &str = r#"<Foo
 	className={style}
 	reallyLongAttributeName1={longComplexValue}
@@ -108,14 +161,29 @@ const APPLY_BRACKET_SAME_LINE_AFTER: &str = r#"<Foo
 </Foo>;
 "#;
 
-// Without this, Test (windows-latest) fails with: `warning: constant `DEFAULT_CONFIGURATION_BEFORE` is never used`
-#[allow(dead_code)]
+const APPLY_ATTRIBUTE_POSITION_BEFORE: &str = r#"<Foo className={style}	reallyLongAttributeName1={longComplexValue}
+reallyLongAttributeName2={anotherLongValue} />;
+
+<Foo reallyLongAttributeName1={longComplexValue}reallyLongAttributeName2={anotherLongValue}>Hi</Foo>;"#;
+
+const APPLY_ATTRIBUTE_POSITION_AFTER: &str = r#"<Foo
+	className={style}
+	reallyLongAttributeName1={longComplexValue}
+	reallyLongAttributeName2={anotherLongValue}
+/>;
+
+<Foo
+	reallyLongAttributeName1={longComplexValue}
+	reallyLongAttributeName2={anotherLongValue}
+>
+	Hi
+</Foo>;
+"#;
+
 const DEFAULT_CONFIGURATION_BEFORE: &str = r#"function f() {
     return { a, b }
   }"#;
 
-// Without this, Test (windows-latest) fails with: `warning: constant `DEFAULT_CONFIGURATION_AFTER` is never used`
-#[allow(dead_code)]
 const DEFAULT_CONFIGURATION_AFTER: &str = "function f() {
       return { a, b };
 }
@@ -219,6 +287,31 @@ fn write() {
 }
 
 #[test]
+fn format_shows_parse_diagnostics() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("format.js");
+    fs.insert(file_path.into(), "while ) {}".as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), file_path.as_os_str().to_str().unwrap()].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_shows_parse_diagnostics",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn write_only_files_in_correct_base() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
@@ -235,7 +328,7 @@ fn write_only_files_in_correct_base() {
     let result = run_cli(
         DynRef::Borrowed(&mut fs),
         &mut console,
-        Args::from([("format"), ("--write"), ("./src")].as_slice()),
+        Args::from(&["format", "--write", "./src"]),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -274,7 +367,7 @@ fn lint_warning() {
 
     // The console buffer is expected to contain the following message:
     // 0: "Formatter would have printed the following content"
-    // 1: "Compared 1 files"
+    // 1: "Checked 1 files"
     assert_eq!(
         console.out_buffer.len(),
         2,
@@ -545,7 +638,7 @@ fn applies_custom_jsx_quote_style() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
-    let file_path = Path::new("file.js");
+    let file_path = Path::new("file.jsx");
     fs.insert(file_path.into(), APPLY_JSX_QUOTE_STYLE_BEFORE.as_bytes());
 
     let result = run_cli(
@@ -617,12 +710,88 @@ fn applies_custom_quote_style() {
 }
 
 #[test]
-fn applies_custom_trailing_comma() {
+#[ignore = "Enable when we are ready to handle CSS files"]
+fn applies_custom_css_quote_style() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let css_file_path = Path::new("file.css");
+    fs.insert(
+        css_file_path.into(),
+        APPLY_CSS_QUOTE_STYLE_BEFORE.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--css-formatter-quote-style"),
+                ("single"),
+                ("--write"),
+                css_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, css_file_path, APPLY_CSS_QUOTE_STYLE_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_css_quote_style",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_custom_trailing_commas() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
     let file_path = Path::new("file.js");
-    fs.insert(file_path.into(), APPLY_TRAILING_COMMA_BEFORE.as_bytes());
+    fs.insert(file_path.into(), APPLY_TRAILING_COMMAS_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--trailing-commas"),
+                ("none"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, APPLY_TRAILING_COMMAS_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_trailing_commas",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_custom_trailing_commas_using_the_deprecated_option() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), APPLY_TRAILING_COMMAS_BEFORE.as_bytes());
 
     let result = run_cli(
         DynRef::Borrowed(&mut fs),
@@ -641,11 +810,85 @@ fn applies_custom_trailing_comma() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    assert_file_contents(&fs, file_path, APPLY_TRAILING_COMMA_AFTER);
+    assert_file_contents(&fs, file_path, APPLY_TRAILING_COMMAS_AFTER);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
-        "applies_custom_trailing_comma",
+        "applies_custom_trailing_commas_using_the_deprecated_option",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_custom_trailing_commas_overriding_the_deprecated_option() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), APPLY_TRAILING_COMMAS_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--trailing-commas"),
+                ("none"),
+                ("--trailing-comma"),
+                ("all"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, APPLY_TRAILING_COMMAS_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_trailing_commas_overriding_the_deprecated_option",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_custom_attribute_position() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), APPLY_ATTRIBUTE_POSITION_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--attribute-position"),
+                ("multiline"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, APPLY_ATTRIBUTE_POSITION_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_attribute_position",
         fs,
         console,
         result,
@@ -713,17 +956,8 @@ fn applies_custom_bracket_spacing() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, APPLY_BRACKET_SPACING_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, APPLY_BRACKET_SPACING_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_bracket_spacing",
@@ -738,7 +972,7 @@ fn applies_custom_bracket_same_line() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
-    let file_path = Path::new("file.js");
+    let file_path = Path::new("file.jsx");
     fs.insert(file_path.into(), APPLY_BRACKET_SAME_LINE_BEFORE.as_bytes());
 
     let result = run_cli(
@@ -758,17 +992,8 @@ fn applies_custom_bracket_same_line() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, APPLY_BRACKET_SAME_LINE_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, APPLY_BRACKET_SAME_LINE_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_bracket_same_line",
@@ -779,21 +1004,21 @@ fn applies_custom_bracket_same_line() {
 }
 
 #[test]
-fn trailing_comma_parse_errors() {
+fn trailing_commas_parse_errors() {
     let mut console = BufferConsole::default();
     let mut fs = MemoryFileSystem::default();
 
     let result = run_cli(
         DynRef::Borrowed(&mut fs),
         &mut console,
-        Args::from([("format"), ("--trailing-comma"), ("NONE"), ("file.js")].as_slice()),
+        Args::from([("format"), ("--trailing-commas"), ("NONE"), ("file.js")].as_slice()),
     );
 
     assert!(result.is_err(), "run_cli returned {result:?}");
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
-        "trailing_comma_parse_errors",
+        "trailing_commas_parse_errors",
         fs,
         console,
         result,
@@ -1131,7 +1356,7 @@ fn does_not_format_if_disabled() {
         Args::from([("format"), ("--stdin-file-path"), ("mock.js")].as_slice()),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
     let message = console
         .out_buffer
@@ -1277,29 +1502,118 @@ fn does_not_format_ignored_directories() {
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
     for (file_path, expect_formatted) in FILES {
-        let mut file = fs
-            .open(Path::new(file_path))
-            .expect("formatting target file was removed by the CLI");
-
-        let mut content = String::new();
-        file.read_to_string(&mut content)
-            .expect("failed to read file from memory FS");
-
         let expected = if expect_formatted {
             FORMATTED
         } else {
             UNFORMATTED
         };
-
-        assert_eq!(
-            content, expected,
-            "content of {file_path} doesn't match the expected content"
-        );
+        assert_file_contents(&fs, Path::new(file_path), expected);
     }
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "does_not_format_ignored_directories",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_not_format_ignored_file_in_included_directory() {
+    let config = r#"{
+        "formatter": {
+          "include": ["src"],
+          "ignore": ["src/file2.js"]
+        }
+    }"#;
+    let files = [("src/file1.js", true), ("src/file2.js", false)];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_not_format_ignored_file_in_included_directory",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn include_ignore_cascade() {
+    // Only `file1.js` will be formatted:
+    // - `file2.js` is ignored at top-level
+    // - `file3.js` is ignored at formatter-level
+    // - `file4.js` is not included at top-level
+    let config = r#"{
+        "files": {
+          "include": ["file1.js", "file2.js", "file3.js"],
+          "ignore": ["file2.js"]
+        },
+        "formatter": {
+          "include": ["file1.js", "file2.js"],
+          "ignore": ["file3.js"]
+        }
+    }"#;
+    let files = [
+        ("file1.js", true),
+        ("file2.js", false),
+        ("file3.js", false),
+        ("file4.js", false),
+    ];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "include_ignore_cascade",
         fs,
         console,
         result,
@@ -1754,6 +2068,118 @@ file2.js
 }
 
 #[test]
+fn include_vcs_ignore_cascade() {
+    // Only `file1.js` will be formatted:
+    // - `file2.js` is ignored at top-level
+    // - `file3.js` is ignored at formatter-level
+    // - `file4.js` is ignored in `.gitignore`
+    let git_ignore = r#"file4.js"#;
+    let config = r#"{
+        "vcs": {
+            "enabled": true,
+            "clientKind": "git",
+            "useIgnoreFile": true
+        },
+        "files": {
+          "ignore": ["file2.js"]
+        },
+        "formatter": {
+          "include": ["file1.js", "file2.js", "file4.js"],
+          "ignore": ["file3.js"]
+        }
+    }"#;
+    let files = [
+        ("file1.js", true),
+        ("file2.js", false),
+        ("file3.js", false),
+        ("file4.js", false),
+    ];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let gitignore_file = Path::new(".gitignore");
+    fs.insert(gitignore_file.into(), git_ignore.as_bytes());
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "include_vcs_ignore_cascade",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn vcs_absolute_path() {
+    let git_ignore = r#"file.js"#;
+    let config = r#"{
+        "vcs": {
+            "enabled": true,
+            "clientKind": "git",
+            "useIgnoreFile": true
+        }
+    }"#;
+    let files = [("/symbolic/link/to/path.js", true)];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let gitignore_file = Path::new(".gitignore");
+    fs.insert(gitignore_file.into(), git_ignore.as_bytes());
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "vcs_absolute_path",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn ignores_unknown_file() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
@@ -1914,6 +2340,237 @@ fn format_json_when_allow_trailing_commas() {
 }
 
 #[test]
+fn format_json_when_allow_trailing_commas_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let config_json = r#"{
+    "json": {
+        "parser": { "allowTrailingCommas": true }
+    }
+}"#;
+    let biome_config = "biome.json";
+    let code = r#"{   "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar",
+}"#;
+    let file_path = Path::new("file.json");
+    fs.insert(file_path.into(), code.as_bytes());
+    fs.insert(biome_config.into(), config_json);
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--write",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, Path::new(file_path), "{\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\"\n}\n");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_json_when_allow_trailing_commas_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_json_trailing_commas_none() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let config_json = r#"{
+    "json": {
+        "parser": { "allowTrailingCommas": true },
+        "formatter": { "trailingCommas": "none" }
+    }
+}"#;
+    let biome_config = "biome.json";
+    let code = r#"{   "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar",
+}"#;
+    let file_path = Path::new("file.json");
+    fs.insert(file_path.into(), code.as_bytes());
+    fs.insert(biome_config.into(), config_json);
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--write",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, Path::new(file_path), "{\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\"\n}\n");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_json_trailing_commas_none",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_json_trailing_commas_all() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let config_json = r#"{
+    "json": {
+        "parser": { "allowTrailingCommas": true },
+        "formatter": { "trailingCommas": "all" }
+    }
+}"#;
+    let biome_config = "biome.json";
+    let code = r#"{   "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar",
+}"#;
+    let file_path = Path::new("file.json");
+    fs.insert(file_path.into(), code.as_bytes());
+    fs.insert(biome_config.into(), config_json);
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--write",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, Path::new(file_path), "{\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n}\n");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_json_trailing_commas_all",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_json_trailing_commas_overrides_all() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let config_json = r#"{
+    "json": {
+        "parser": { "allowTrailingCommas": true },
+        "formatter": { "trailingCommas": "none" }
+    },
+    "overrides": [{
+        "include": ["file.json"],
+        "json": {
+            "formatter": { "trailingCommas": "all" }
+        }
+    }]
+}"#;
+    let biome_config = "biome.json";
+    let code = r#"{   "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar",
+}"#;
+    let file_path = Path::new("file.json");
+    fs.insert(file_path.into(), code.as_bytes());
+    fs.insert(biome_config.into(), config_json);
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--write",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, Path::new(file_path), "{\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n}\n");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_json_trailing_commas_overrides_all",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_json_trailing_commas_overrides_none() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let config_json = r#"{
+    "json": {
+        "parser": { "allowTrailingCommas": true },
+        "formatter": { "trailingCommas": "all" }
+    },
+    "overrides": [{
+        "include": ["file.json"],
+        "json": {
+            "formatter": { "trailingCommas": "none" }
+        }
+    }]
+}"#;
+    let biome_config = "biome.json";
+    let code = r#"{   "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar", "loreum_ipsum_lorem_ipsum":   "bar",
+}"#;
+    let file_path = Path::new("file.json");
+    fs.insert(file_path.into(), code.as_bytes());
+    fs.insert(biome_config.into(), config_json);
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--write",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, Path::new(file_path), "{\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\",\n\t\"loreum_ipsum_lorem_ipsum\": \"bar\"\n}\n");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_json_trailing_commas_overrides_none",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn treat_known_json_files_as_jsonc_files() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
@@ -1982,7 +2639,7 @@ fn should_apply_different_formatting() {
         "css": {
             "formatter": {
                 "lineWidth": 40,
-                "indentSize": 6
+                "indentWidth": 6
             }
         }
     }"#,
@@ -2080,7 +2737,8 @@ const a = {
                 "--json-formatter-line-width=20",
                 "--json-formatter-indent-size=2",
                 "--css-formatter-line-width=40",
-                "--css-formatter-indent-size=6",
+                "--css-formatter-indent-width=6",
+                "--css-formatter-enabled=true",
                 json_file.as_os_str().to_str().unwrap(),
                 js_file.as_os_str().to_str().unwrap(),
                 css_file.as_os_str().to_str().unwrap(),
@@ -2394,6 +3052,762 @@ const a = {
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "should_apply_different_indent_style",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn override_don_t_affect_ignored_files() {
+    let config = r#"{
+        "overrides": [{
+            "ignore": ["file2.js"]
+        }]
+    }"#;
+    let files = [("file1.js", true), ("file2.js", true)];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "override_don_t_affect_ignored_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_with_configured_line_ending() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+
+    let config = r#"{
+        "formatter": {
+            "lineEnding": "crlf",
+            "lineWidth": 20
+        }
+    }"#;
+    let code_json = r#"{ "name": "mike", "surname": "ross" }"#;
+    let code_js = r#"const b = { "name": "mike", "surname": "ross" }"#;
+    let json_file = Path::new("input.json");
+    fs.insert(json_file.into(), code_json.as_bytes());
+
+    let js_file = Path::new("input.js");
+    fs.insert(js_file.into(), code_js.as_bytes());
+
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(&["format", ".", "--write"]),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(
+        &fs,
+        json_file,
+        "{\r\n\t\"name\": \"mike\",\r\n\t\"surname\": \"ross\"\r\n}\r\n",
+    );
+    assert_file_contents(
+        &fs,
+        js_file,
+        "const b = {\r\n\tname: \"mike\",\r\n\tsurname: \"ross\",\r\n};\r\n",
+    );
+}
+
+#[test]
+fn don_t_format_ignored_known_jsonc_files() {
+    let config = r#"{
+        "files": {
+            "ignoreUnknown": true,
+            "ignore": [".eslintrc"]
+        }
+    }"#;
+    let files = [(".eslintrc", false)];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "don_t_format_ignored_known_jsonc_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_configuration_from_biome_jsonc() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("biome.jsonc");
+    fs.insert(file_path.into(), CONFIG_FORMAT_JSONC.as_bytes());
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), CUSTOM_CONFIGURATION_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, CUSTOM_CONFIGURATION_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_configuration_from_biome_jsonc",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_package_json() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("package.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+
+    "name":       "@foo/package",
+    "dependencies": { "foo": "latest" }
+
+     }"#
+        .as_bytes(),
+    );
+
+    let expected = r#"{
+  "name": "@foo/package",
+  "dependencies": { "foo": "latest" }
+}
+"#;
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--write"),
+                "--indent-style=space",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, expected);
+
+    assert_eq!(console.out_buffer.len(), 1);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_package_json",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_svelte_implicit_js_files() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let svelte_file_path = Path::new("file.svelte");
+    fs.insert(
+        svelte_file_path.into(),
+        SVELTE_IMPLICIT_JS_FILE_UNFORMATTED.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), svelte_file_path.as_os_str().to_str().unwrap()].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, svelte_file_path, SVELTE_IMPLICIT_JS_FILE_UNFORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_svelte_implicit_js_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_svelte_implicit_js_files_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let svelte_file_path = Path::new("file.svelte");
+    fs.insert(
+        svelte_file_path.into(),
+        SVELTE_IMPLICIT_JS_FILE_UNFORMATTED.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                "format",
+                "--write",
+                svelte_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, svelte_file_path, SVELTE_IMPLICIT_JS_FILE_FORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_svelte_implicit_js_files_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_svelte_explicit_js_files() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let svelte_file_path = Path::new("file.svelte");
+    fs.insert(
+        svelte_file_path.into(),
+        SVELTE_EXPLICIT_JS_FILE_UNFORMATTED.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), svelte_file_path.as_os_str().to_str().unwrap()].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, svelte_file_path, SVELTE_EXPLICIT_JS_FILE_UNFORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_svelte_explicit_js_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_svelte_explicit_js_files_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let svelte_file_path = Path::new("file.svelte");
+    fs.insert(
+        svelte_file_path.into(),
+        SVELTE_EXPLICIT_JS_FILE_UNFORMATTED.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                "format",
+                "--write",
+                svelte_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, svelte_file_path, SVELTE_EXPLICIT_JS_FILE_FORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_svelte_explicit_js_files_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_empty_svelte_js_files_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let svelte_file_path = Path::new("file.svelte");
+    fs.insert(svelte_file_path.into(), "<div></div>".as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                "format",
+                "--write",
+                svelte_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, svelte_file_path, "<div></div>");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_empty_svelte_js_files_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_svelte_ts_files() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let svelte_file_path = Path::new("file.svelte");
+    fs.insert(
+        svelte_file_path.into(),
+        SVELTE_TS_FILE_UNFORMATTED.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), svelte_file_path.as_os_str().to_str().unwrap()].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, svelte_file_path, SVELTE_TS_FILE_UNFORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_svelte_ts_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_svelte_ts_files_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let svelte_file_path = Path::new("file.svelte");
+    fs.insert(
+        svelte_file_path.into(),
+        SVELTE_TS_FILE_UNFORMATTED.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                "format",
+                "--write",
+                svelte_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, svelte_file_path, SVELTE_TS_FILE_FORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_svelte_ts_files_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_empty_svelte_ts_files_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let svelte_file_path = Path::new("file.svelte");
+    fs.insert(svelte_file_path.into(), "<div></div>".as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                "format",
+                "--write",
+                svelte_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, svelte_file_path, "<div></div>");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_empty_svelte_ts_files_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_format_files_in_folders_ignored_by_linter() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("build/file.js");
+    fs.insert(
+        file_path.into(),
+        r#"
+	value['optimizelyService'] = optimizelyService;
+		"#,
+    );
+
+    let biome_json = Path::new("biome.json");
+    fs.insert(
+        biome_json.into(),
+        r#"{
+    "$schema": "https://biomejs.dev/schemas/1.6.1/schema.json",
+    "organizeImports": {
+        "enabled": true
+    },
+    "linter": {
+        "ignore": ["**/build"],
+        "enabled": true,
+        "rules": {
+            "recommended": true
+        }
+    }
+}
+        "#,
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--write",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_format_files_in_folders_ignored_by_linter",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn print_json() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("format.js");
+    fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--reporter=json",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, UNFORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "print_json",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn print_json_pretty() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("format.js");
+    fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--reporter=json-pretty",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, UNFORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "print_json_pretty",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_without_file_paths() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("format.js");
+    fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+
+    let result: Result<(), biome_cli::CliDiagnostic> = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ""].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, UNFORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_without_file_paths",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn fix() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    let file_path = Path::new("format.js");
+    fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--fix"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert_file_contents(&fs, file_path, FORMATTED);
+    assert_eq!(console.out_buffer.len(), 1);
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "formatter_fix",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_error_if_unstaged_files_only_with_staged_flag() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    // Unstaged
+    fs.insert(
+        Path::new("file1.js").into(),
+        r#"console.log('file1');"#.as_bytes(),
+    );
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), "--staged"].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_error_if_unstaged_files_only_with_staged_flag",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_error_if_unchanged_files_only_with_changed_flag() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    // Unchanged
+    fs.insert(
+        Path::new("file1.js").into(),
+        r#"console.log('file1');"#.as_bytes(),
+    );
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), "--changed", "--since=main"].as_slice()),
+    );
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_error_if_unchanged_files_only_with_changed_flag",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_custom_bracket_spacing_for_graphql() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("file.graphql");
+    fs.insert(
+        file_path.into(),
+        APPLY_BRACKET_SPACING_BEFORE_GRAPHQL.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--bracket-spacing"),
+                ("false"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, APPLY_BRACKET_SPACING_AFTER_GRAPHQL);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_bracket_spacing_graphql",
         fs,
         console,
         result,

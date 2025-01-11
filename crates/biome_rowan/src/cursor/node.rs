@@ -176,7 +176,7 @@ impl SyntaxNode {
     }
 
     #[inline]
-    pub fn tokens(&self) -> impl Iterator<Item = SyntaxToken> + DoubleEndedIterator + '_ {
+    pub fn tokens(&self) -> impl DoubleEndedIterator<Item = SyntaxToken> + '_ {
         self.green().children().filter_map(|child| {
             child.element().into_token().map(|token| {
                 SyntaxToken::new(
@@ -325,9 +325,7 @@ impl SyntaxNode {
         let range = self.text_range();
         assert!(
             range.start() <= offset && offset <= range.end(),
-            "Bad offset: range {:?} offset {:?}",
-            range,
-            offset
+            "Bad offset: range {range:?} offset {offset:?}"
         );
         if range.is_empty() {
             return TokenAtOffset::None;
@@ -478,9 +476,8 @@ impl SyntaxNodeChildren {
 impl Iterator for SyntaxNodeChildren {
     type Item = SyntaxNode;
     fn next(&mut self) -> Option<SyntaxNode> {
-        self.next.take().map(|next| {
+        self.next.take().inspect(|next| {
             self.next = next.next_sibling();
-            next
         })
     }
 }
@@ -503,9 +500,8 @@ impl SyntaxElementChildren {
 impl Iterator for SyntaxElementChildren {
     type Item = SyntaxElement;
     fn next(&mut self) -> Option<SyntaxElement> {
-        self.next.take().map(|next| {
+        self.next.take().inspect(|next| {
             self.next = next.next_sibling_or_token();
-            next
         })
     }
 }

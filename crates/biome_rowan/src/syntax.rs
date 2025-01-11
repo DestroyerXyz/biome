@@ -6,10 +6,9 @@ mod trivia;
 
 use crate::{AstNode, RawSyntaxKind};
 pub use element::{SyntaxElement, SyntaxElementKey};
-pub(crate) use node::SyntaxSlots;
 pub use node::{
     Preorder, PreorderWithTokens, SendNode, SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren,
-    SyntaxNodeOptionExt, SyntaxSlot,
+    SyntaxNodeOptionExt, SyntaxSlot, SyntaxSlots,
 };
 pub use rewriter::{SyntaxRewriter, VisitNodeSignal};
 use std::fmt;
@@ -44,6 +43,9 @@ pub trait SyntaxKind: fmt::Debug + PartialEq + Copy {
 
     /// Returns `true` if this kind is a list node.
     fn is_list(&self) -> bool;
+
+    /// Returns `true` if this kind is a trivia.
+    fn is_trivia(self) -> bool;
 
     /// Returns a string for keywords and punctuation tokens or `None` otherwise.
     fn to_string(&self) -> Option<&'static str>;

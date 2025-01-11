@@ -1,11 +1,10 @@
 use biome_analyze::context::RuleContext;
-use biome_analyze::{declare_rule, Ast, Rule, RuleDiagnostic};
+use biome_analyze::{declare_syntax_rule, Ast, Rule, RuleDiagnostic};
 use biome_console::markup;
-use biome_diagnostics::category;
-use biome_js_syntax::{JsClassDeclaration, JsSuperExpression};
+use biome_js_syntax::{JsClassDeclaration, JsClassExpression, JsSuperExpression};
 use biome_rowan::AstNode;
 
-declare_rule! {
+declare_syntax_rule! {
     /// Catch a `SyntaxError` when writing calling `super()` on a class that doesn't extends any class
     ///
     /// ## Examples
@@ -17,9 +16,10 @@ declare_rule! {
     //     }
     // }
     /// ```
-    pub(crate) NoSuperWithoutExtends {
+    pub NoSuperWithoutExtends {
         version: "1.0.0",
         name: "noSuperWithoutExtends",
+        language: "js",
     }
 }
 
@@ -32,11 +32,24 @@ impl Rule for NoSuperWithoutExtends {
     fn run(ctx: &RuleContext<Self>) -> Self::Signals {
         let node = ctx.query();
 
-        if let Some(class_declaration) =
-            node.syntax().ancestors().find_map(JsClassDeclaration::cast)
-        {
-            if class_declaration.extends_clause().is_none() {
-                return Some(());
+        for syntax in node.syntax().ancestors() {
+            match JsClassDeclaration::try_cast(syntax) {
+                Ok(class_declaration) => {
+                    // ancestor is class declaration
+                    if class_declaration.extends_clause().is_none() {
+                        return Some(());
+                    }
+                    return None;
+                }
+                Err(syntax) => {
+                    // ancestor is class expression
+                    if let Some(class_expression) = JsClassExpression::cast(syntax) {
+                        if class_expression.extends_clause().is_none() {
+                            return Some(());
+                        }
+                        return None;
+                    }
+                }
             }
         }
 
@@ -47,7 +60,7 @@ impl Rule for NoSuperWithoutExtends {
         let node = ctx.query();
 
         Some(RuleDiagnostic::new(
-            category!("parse/noSuperWithoutExtends"),
+            rule_category!(),
             node.syntax().text_trimmed_range(),
             markup! {
                 "super() is only valid in derived class constructors"

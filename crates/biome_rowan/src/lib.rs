@@ -1,27 +1,28 @@
 //! A generic library for lossless syntax trees.
 //! See `examples/s_expressions.rs` for a tutorial.
 #![forbid(
-    // missing_debug_implementations,
-    unconditional_recursion,
-    future_incompatible,
-    // missing_docs,
+// missing_debug_implementations,
+unconditional_recursion,
+future_incompatible,
+// missing_docs,
 )]
 #![deny(unsafe_code)]
 #![deny(rustdoc::broken_intra_doc_links)]
+#![expect(clippy::map_unwrap_or, clippy::mem_forget)]
 
 #[doc(hidden)]
 pub mod macros;
 
-#[allow(unsafe_code)]
+#[expect(unsafe_code)]
 pub mod cursor;
-#[allow(unsafe_code)]
+#[expect(unsafe_code)]
 mod green;
 
 pub mod syntax;
 mod syntax_node_text;
 mod utility_types;
 
-#[allow(unsafe_code)]
+#[expect(unsafe_code)]
 mod arc;
 mod ast;
 mod cow_mut;
@@ -37,14 +38,14 @@ pub use biome_text_size::{TextLen, TextRange, TextSize};
 
 pub use crate::{
     ast::*,
-    file_source::{AnyFileSource, FileSource, FileSourceError},
+    file_source::FileSourceError,
     green::{NodeCache, RawSyntaxKind},
     syntax::{
         chain_trivia_pieces, trim_leading_trivia_pieces, trim_trailing_trivia_pieces,
         ChainTriviaPiecesIterator, Language, SendNode, SyntaxElement, SyntaxElementChildren,
         SyntaxKind, SyntaxList, SyntaxNode, SyntaxNodeChildren, SyntaxNodeOptionExt,
-        SyntaxRewriter, SyntaxSlot, SyntaxToken, SyntaxTriviaPiece, SyntaxTriviaPieceComments,
-        TriviaPiece, TriviaPieceKind, VisitNodeSignal,
+        SyntaxRewriter, SyntaxSlot, SyntaxSlots, SyntaxToken, SyntaxTriviaPiece,
+        SyntaxTriviaPieceComments, TriviaPiece, TriviaPieceKind, VisitNodeSignal,
     },
     syntax_factory::*,
     syntax_node_text::SyntaxNodeText,

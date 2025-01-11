@@ -4,9 +4,10 @@ pub mod hooks;
 
 use biome_js_semantic::{Binding, SemanticModel};
 use biome_js_syntax::{
-    AnyJsCallArgument, AnyJsExpression, AnyJsMemberExpression, AnyJsNamedImportSpecifier,
-    AnyJsObjectMember, JsCallExpression, JsIdentifierBinding, JsImport, JsObjectExpression,
-    JsPropertyObjectMember, JsxMemberName, JsxReferenceIdentifier,
+    binding_ext::AnyJsBindingDeclaration, AnyJsCallArgument, AnyJsExpression,
+    AnyJsMemberExpression, AnyJsNamedImportSpecifier, AnyJsObjectMember, JsCallExpression,
+    JsIdentifierBinding, JsImport, JsObjectExpression, JsPropertyObjectMember, JsxMemberName,
+    JsxReferenceIdentifier,
 };
 use biome_rowan::{AstNode, AstSeparatedList};
 
@@ -19,7 +20,7 @@ pub(crate) trait ReactApiCall {
 /// A convenient data structure that returns the three arguments of the [React.createElement] call
 ///
 ///[React.createElement]: https://reactjs.org/docs/react-api.html#createelement
-pub(crate) struct ReactCreateElementCall {
+pub struct ReactCreateElementCall {
     /// The type of the react element
     pub(crate) element_type: AnyJsCallArgument,
     /// Optional props
@@ -53,9 +54,9 @@ impl ReactCreateElementCall {
         call_expression: &JsCallExpression,
         model: &SemanticModel,
     ) -> Option<Self> {
-        let callee = call_expression.callee().ok()?;
+        let callee = call_expression.callee().ok()?.omit_parentheses();
         let is_react_create_element =
-            is_react_call_api(callee, model, ReactLibrary::React, "createElement");
+            is_react_call_api(&callee, model, ReactLibrary::React, "createElement");
 
         if is_react_create_element {
             let arguments = call_expression.arguments().ok()?.args();
@@ -104,30 +105,23 @@ impl ReactApiCall for ReactCreateElementCall {
                 let AnyJsObjectMember::JsPropertyObjectMember(property) = member.ok()? else {
                     return None;
                 };
-                let property_name = property.name().ok()?;
-
-                let property_name = property_name.as_js_literal_member_name()?;
-                if property_name.name().ok()? == prop_name {
-                    Some(property)
-                } else {
-                    None
-                }
+                (property.name().ok()?.name()? == prop_name).then_some(property)
             })
         })
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum ReactLibrary {
+pub enum ReactLibrary {
     React,
     ReactDOM,
 }
 
 impl ReactLibrary {
-    pub const fn import_name(self) -> &'static str {
+    pub const fn import_names(self) -> &'static [&'static str] {
         match self {
-            ReactLibrary::React => "react",
-            ReactLibrary::ReactDOM => "react-dom",
+            ReactLibrary::React => &["react", "preact/compat", "preact/hooks"],
+            ReactLibrary::ReactDOM => &["react-dom"],
         }
     }
 
@@ -178,18 +172,20 @@ const VALID_REACT_API: [&str; 29] = [
 /// The function has accepts a `api_name` to check against
 ///
 /// [`React` API]: https://reactjs.org/docs/react-api.html
+///
+/// This also returns `true` for libraries that return React-compatible APIs,
+/// such as Preact.
 pub(crate) fn is_react_call_api(
-    expression: AnyJsExpression,
+    expr: &AnyJsExpression,
     model: &SemanticModel,
     lib: ReactLibrary,
     api_name: &str,
 ) -> bool {
     if matches!(lib, ReactLibrary::React) {
-        // we bail straight away if the API doesn't exists in React
+        // we bail straight away if the API doesn't exist in React
         debug_assert!(VALID_REACT_API.contains(&api_name));
     }
 
-    let expr = expression.omit_parentheses();
     if let Some(callee) = AnyJsMemberExpression::cast_ref(expr.syntax()) {
         let Some(object) = callee.object().ok() else {
             return false;
@@ -269,7 +265,7 @@ fn is_react_export(binding: &Binding, lib: ReactLibrary) -> bool {
         .syntax()
         .ancestors()
         .find_map(|ancestor| JsImport::cast(ancestor)?.source_text().ok())
-        .is_some_and(|source| source.text() == lib.import_name())
+        .is_some_and(|source| lib.import_names().contains(&source.text()))
 }
 
 fn is_named_react_export(binding: &Binding, lib: ReactLibrary, name: &str) -> Option<bool> {
@@ -290,5 +286,42 @@ fn is_named_react_export(binding: &Binding, lib: ReactLibrary, name: &str) -> Op
     }
 
     let import = import_specifier.import_clause()?.parent::<JsImport>()?;
-    Some(import.source_text().ok()?.text() == lib.import_name())
+    import
+        .source_text()
+        .ok()
+        .map(|import_name| lib.import_names().contains(&import_name.text()))
+}
+
+/// Checks if `binding` is an import of the global name of `lib`.
+pub(crate) fn is_global_react_import(binding: &JsIdentifierBinding, lib: ReactLibrary) -> bool {
+    if !binding
+        .name_token()
+        .is_ok_and(|name| name.text_trimmed() == lib.global_name())
+    {
+        return false;
+    };
+    let Some(decl) = binding.declaration() else {
+        return false;
+    };
+    // This must be a default import or a namespace import
+    let syntax = match decl {
+        AnyJsBindingDeclaration::JsNamedImportSpecifier(specifier) => {
+            if !specifier.name().is_ok_and(|name| name.is_default()) {
+                return false;
+            }
+            specifier.into_syntax()
+        }
+        AnyJsBindingDeclaration::JsDefaultImportSpecifier(specifier) => specifier.into_syntax(),
+        AnyJsBindingDeclaration::JsNamespaceImportSpecifier(specifier) => specifier.into_syntax(),
+        _ => {
+            return false;
+        }
+    };
+    // Check import source
+    syntax
+        .ancestors()
+        .skip(1)
+        .find_map(JsImport::cast)
+        .and_then(|import| import.source_text().ok())
+        .is_some_and(|source| lib.import_names().contains(&source.text()))
 }

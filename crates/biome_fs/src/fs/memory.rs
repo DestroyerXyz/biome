@@ -1,3 +1,4 @@
+use oxc_resolver::{Resolution, ResolveError};
 use rustc_hash::FxHashMap;
 use std::collections::hash_map::{Entry, IntoIter};
 use std::io;
@@ -10,7 +11,7 @@ use biome_diagnostics::{Error, Severity};
 use parking_lot::{lock_api::ArcMutexGuard, Mutex, RawMutex, RwLock};
 
 use crate::fs::OpenOptions;
-use crate::{FileSystem, RomePath, TraversalContext, TraversalScope};
+use crate::{BiomePath, FileSystem, TraversalContext, TraversalScope};
 
 use super::{BoxedTraversal, ErrorKind, File, FileSystemDiagnostic};
 
@@ -27,6 +28,7 @@ pub struct MemoryFileSystem {
     files: AssertUnwindSafe<RwLock<FxHashMap<PathBuf, FileEntry>>>,
     errors: FxHashMap<PathBuf, ErrorEntry>,
     allow_write: bool,
+    on_get_staged_files: OnGetChangedFiles,
     on_get_changed_files: OnGetChangedFiles,
 }
 
@@ -36,7 +38,12 @@ impl Default for MemoryFileSystem {
             files: Default::default(),
             errors: Default::default(),
             allow_write: true,
-            on_get_changed_files: None,
+            on_get_staged_files: Some(Arc::new(AssertUnwindSafe(Mutex::new(Some(Box::new(
+                Vec::new,
+            )))))),
+            on_get_changed_files: Some(Arc::new(AssertUnwindSafe(Mutex::new(Some(Box::new(
+                Vec::new,
+            )))))),
         }
     }
 }
@@ -107,6 +114,13 @@ impl MemoryFileSystem {
     ) {
         self.on_get_changed_files = Some(Arc::new(AssertUnwindSafe(Mutex::new(Some(cfn)))));
     }
+
+    pub fn set_on_get_staged_files(
+        &mut self,
+        cfn: Box<dyn FnOnce() -> Vec<String> + Send + RefUnwindSafe + 'static>,
+    ) {
+        self.on_get_staged_files = Some(Arc::new(AssertUnwindSafe(Mutex::new(Some(cfn)))));
+    }
 }
 
 impl FileSystem for MemoryFileSystem {
@@ -170,7 +184,6 @@ impl FileSystem for MemoryFileSystem {
             version: 0,
         }))
     }
-
     fn traversal<'scope>(&'scope self, func: BoxedTraversal<'_, 'scope>) {
         func(&MemoryTraversalScope { fs: self })
     }
@@ -180,8 +193,20 @@ impl FileSystem for MemoryFileSystem {
     }
 
     fn path_exists(&self, path: &Path) -> bool {
+        self.path_is_file(path)
+    }
+
+    fn path_is_file(&self, path: &Path) -> bool {
         let files = self.files.0.read();
         files.get(path).is_some()
+    }
+
+    fn path_is_dir(&self, path: &Path) -> bool {
+        !self.path_is_file(path)
+    }
+
+    fn path_is_symlink(&self, _path: &Path) -> bool {
+        false
     }
 
     fn get_changed_files(&self, _base: &str) -> io::Result<Vec<String>> {
@@ -192,6 +217,24 @@ impl FileSystem for MemoryFileSystem {
         let cb = cb_guard.take().unwrap();
 
         Ok(cb())
+    }
+
+    fn get_staged_files(&self) -> io::Result<Vec<String>> {
+        let cb_arc = self.on_get_staged_files.as_ref().unwrap().clone();
+
+        let mut cb_guard = cb_arc.lock();
+
+        let cb = cb_guard.take().unwrap();
+
+        Ok(cb())
+    }
+
+    fn resolve_configuration(
+        &self,
+        _specifier: &str,
+        _path: &Path,
+    ) -> Result<Resolution, ResolveError> {
+        todo!()
     }
 }
 
@@ -246,7 +289,7 @@ pub struct MemoryTraversalScope<'scope> {
 }
 
 impl<'scope> TraversalScope<'scope> for MemoryTraversalScope<'scope> {
-    fn spawn(&self, ctx: &'scope dyn TraversalContext, base: PathBuf) {
+    fn evaluate(&self, ctx: &'scope dyn TraversalContext, base: PathBuf) {
         // Traversal is implemented by iterating on all keys, and matching on
         // those that are prefixed with the provided `base` path
         {
@@ -263,11 +306,11 @@ impl<'scope> TraversalScope<'scope> for MemoryTraversalScope<'scope> {
 
                 if should_process_file {
                     let _ = ctx.interner().intern_path(path.into());
-                    let rome_path = RomePath::new(path);
-                    if !ctx.can_handle(&rome_path) {
+                    let biome_path = BiomePath::new(path);
+                    if !ctx.can_handle(&biome_path) {
                         continue;
                     }
-                    ctx.handle_file(path);
+                    ctx.store_path(biome_path);
                 }
             }
         }
@@ -292,10 +335,15 @@ impl<'scope> TraversalScope<'scope> for MemoryTraversalScope<'scope> {
             }
         }
     }
+
+    fn handle(&self, context: &'scope dyn TraversalContext, path: PathBuf) {
+        context.handle_path(BiomePath::new(path));
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
     use std::{
         io,
         mem::swap,
@@ -306,7 +354,7 @@ mod tests {
     use parking_lot::Mutex;
 
     use crate::{fs::FileSystemExt, OpenOptions};
-    use crate::{FileSystem, MemoryFileSystem, PathInterner, RomePath, TraversalContext};
+    use crate::{BiomePath, FileSystem, MemoryFileSystem, PathInterner, TraversalContext};
 
     #[test]
     fn fs_read_only() {
@@ -470,7 +518,7 @@ mod tests {
 
         struct TestContext {
             interner: PathInterner,
-            visited: Mutex<Vec<PathBuf>>,
+            visited: Mutex<BTreeSet<BiomePath>>,
         }
 
         impl TraversalContext for TestContext {
@@ -482,12 +530,21 @@ mod tests {
                 panic!("unexpected error {err:?}")
             }
 
-            fn can_handle(&self, _: &RomePath) -> bool {
+            fn can_handle(&self, _: &BiomePath) -> bool {
                 true
             }
 
-            fn handle_file(&self, path: &Path) {
-                self.visited.lock().push(path.into())
+            fn handle_path(&self, path: BiomePath) {
+                self.visited.lock().insert(path.to_written());
+            }
+
+            fn store_path(&self, path: BiomePath) {
+                self.visited.lock().insert(path);
+            }
+
+            fn evaluated_paths(&self) -> BTreeSet<BiomePath> {
+                let lock = self.visited.lock();
+                lock.clone()
             }
         }
 
@@ -499,25 +556,25 @@ mod tests {
 
         // Traverse a directory
         fs.traversal(Box::new(|scope| {
-            scope.spawn(&ctx, PathBuf::from("dir1"));
+            scope.evaluate(&ctx, PathBuf::from("dir1"));
         }));
 
-        let mut visited = Vec::new();
+        let mut visited = BTreeSet::default();
         swap(&mut visited, ctx.visited.get_mut());
 
         assert_eq!(visited.len(), 2);
-        assert!(visited.contains(&PathBuf::from("dir1/file1")));
-        assert!(visited.contains(&PathBuf::from("dir1/file2")));
+        assert!(visited.contains(&BiomePath::new("dir1/file1")));
+        assert!(visited.contains(&BiomePath::new("dir1/file2")));
 
         // Traverse a single file
         fs.traversal(Box::new(|scope| {
-            scope.spawn(&ctx, PathBuf::from("dir2/file2"));
+            scope.evaluate(&ctx, PathBuf::from("dir2/file2"));
         }));
 
-        let mut visited = Vec::new();
+        let mut visited = BTreeSet::default();
         swap(&mut visited, ctx.visited.get_mut());
 
         assert_eq!(visited.len(), 1);
-        assert!(visited.contains(&PathBuf::from("dir2/file2")));
+        assert!(visited.contains(&BiomePath::new("dir2/file2")));
     }
 }

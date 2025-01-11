@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.jsx
 ---
 # Input
-```js
+```jsx
 <>
 	<a />
 	<a href />
@@ -20,6 +20,9 @@ expression: invalid.jsx
 	<a href="#" onClick={() => void 0} />
 	<a href="javascript:void(0)" onClick={() => void 0} />
 	<a href={"javascript:void(0)"} onClick={() => void 0} />
+	<a href="" onClick="window.location.href=index.html"> Home </a>
+	<a href="class/html-css1/navigation/links#" onClick="window.location.href=index.html"> Home </a>
+	<a href="javascript:void(0)" onClick="myFunc();"> Annual Reports </a>
 </>;
 
 ```
@@ -281,7 +284,7 @@ invalid.jsx:15:2 lint/a11y/useValidAnchor ━━━━━━━━━━━━�
   > 15 │ 	<a href="javascript:void(0)" onClick={() => void 0} />
        │ 	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     16 │ 	<a href={"javascript:void(0)"} onClick={() => void 0} />
-    17 │ </>;
+    17 │ 	<a href="" onClick="window.location.href=index.html"> Home </a>
   
   i Anchor elements should only be used for default sections or page navigation
   
@@ -299,8 +302,65 @@ invalid.jsx:16:2 lint/a11y/useValidAnchor ━━━━━━━━━━━━�
     15 │ 	<a href="javascript:void(0)" onClick={() => void 0} />
   > 16 │ 	<a href={"javascript:void(0)"} onClick={() => void 0} />
        │ 	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    17 │ </>;
-    18 │ 
+    17 │ 	<a href="" onClick="window.location.href=index.html"> Home </a>
+    18 │ 	<a href="class/html-css1/navigation/links#" onClick="window.location.href=index.html"> Home </a>
+  
+  i Anchor elements should only be used for default sections or page navigation
+  
+  i Check this thorough explanation to better understand the context.
+  
+
+```
+
+```
+invalid.jsx:17:2 lint/a11y/useValidAnchor ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Use a button element instead of an a element.
+  
+    15 │ 	<a href="javascript:void(0)" onClick={() => void 0} />
+    16 │ 	<a href={"javascript:void(0)"} onClick={() => void 0} />
+  > 17 │ 	<a href="" onClick="window.location.href=index.html"> Home </a>
+       │ 	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    18 │ 	<a href="class/html-css1/navigation/links#" onClick="window.location.href=index.html"> Home </a>
+    19 │ 	<a href="javascript:void(0)" onClick="myFunc();"> Annual Reports </a>
+  
+  i Anchor elements should only be used for default sections or page navigation
+  
+  i Check this thorough explanation to better understand the context.
+  
+
+```
+
+```
+invalid.jsx:18:2 lint/a11y/useValidAnchor ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Use a button element instead of an a element.
+  
+    16 │ 	<a href={"javascript:void(0)"} onClick={() => void 0} />
+    17 │ 	<a href="" onClick="window.location.href=index.html"> Home </a>
+  > 18 │ 	<a href="class/html-css1/navigation/links#" onClick="window.location.href=index.html"> Home </a>
+       │ 	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    19 │ 	<a href="javascript:void(0)" onClick="myFunc();"> Annual Reports </a>
+    20 │ </>;
+  
+  i Anchor elements should only be used for default sections or page navigation
+  
+  i Check this thorough explanation to better understand the context.
+  
+
+```
+
+```
+invalid.jsx:19:2 lint/a11y/useValidAnchor ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Use a button element instead of an a element.
+  
+    17 │ 	<a href="" onClick="window.location.href=index.html"> Home </a>
+    18 │ 	<a href="class/html-css1/navigation/links#" onClick="window.location.href=index.html"> Home </a>
+  > 19 │ 	<a href="javascript:void(0)" onClick="myFunc();"> Annual Reports </a>
+       │ 	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    20 │ </>;
+    21 │ 
   
   i Anchor elements should only be used for default sections or page navigation
   

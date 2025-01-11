@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: customHook.js
 ---
 # Input
-```js
+```jsx
 function MyComponent() {
     // This is valid
     const { a } = useCustomHook();
@@ -11,6 +11,11 @@ function MyComponent() {
     // This is invalid
     if (a) {
         const { a } = useCustomHook();
+    }
+
+    // This is invalid
+    if (a) {
+        const { a } = foo.bar.useCustomHook();
     }
 }
 ```
@@ -26,7 +31,7 @@ customHook.js:7:23 lint/correctness/useHookAtTopLevel ━━━━━━━━�
   > 7 │         const { a } = useCustomHook();
       │                       ^^^^^^^^^^^^^
     8 │     }
-    9 │ }
+    9 │ 
   
   i For React to preserve state between calls, hooks needs to be called unconditionally and always in the same order.
   
@@ -35,4 +40,21 @@ customHook.js:7:23 lint/correctness/useHookAtTopLevel ━━━━━━━━�
 
 ```
 
+```
+customHook.js:12:23 lint/correctness/useHookAtTopLevel ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  ! This hook is being called conditionally, but all hooks must be called in the exact same order in every component render.
+  
+    10 │     // This is invalid
+    11 │     if (a) {
+  > 12 │         const { a } = foo.bar.useCustomHook();
+       │                       ^^^^^^^^^^^^^^^^^^^^^
+    13 │     }
+    14 │ }
+  
+  i For React to preserve state between calls, hooks needs to be called unconditionally and always in the same order.
+  
+  i See https://reactjs.org/docs/hooks-rules.html#only-call-hooks-at-the-top-level
+  
+
+```

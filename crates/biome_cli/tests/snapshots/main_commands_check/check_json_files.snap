@@ -8,8 +8,8 @@ expression: content
 {
   "linter": {
     "rules": {
-      "nursery": {
-        "noDuplicateJsonKeys": "error"
+      "suspicious": {
+        "noDuplicateObjectKeys": "error"
       }
     }
   }
@@ -36,7 +36,7 @@ check ━━━━━━━━━━━━━━━━━━━━━━━━�
 # Emitted Messages
 
 ```block
-test.json:1:3 lint/nursery/noDuplicateJsonKeys ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+test.json:1:3 lint/suspicious/noDuplicateObjectKeys ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   × The key foo was already declared.
   
@@ -54,17 +54,9 @@ test.json:1:3 lint/nursery/noDuplicateJsonKeys ━━━━━━━━━━━
 ```
 
 ```block
-test.json lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
-```
-
-```block
 test.json format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  i Formatter would have printed the following content:
+  × Formatter would have printed the following content:
   
     1   │ - {·"foo":·true,·"foo":·true·}
       1 │ + {·"foo":·true,·"foo":·true·}
@@ -74,15 +66,6 @@ test.json format ━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ```block
-test.json check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
+Checked 1 file in <TIME>. No fixes applied.
+Found 2 errors.
 ```
-
-```block
-Checked 1 file(s) in <TIME>
-```
-
-

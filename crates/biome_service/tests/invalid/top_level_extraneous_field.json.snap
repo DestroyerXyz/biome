@@ -12,19 +12,18 @@ top_level_extraneous_field.json:2:2 deserialize ━━━━━━━━━━�
     3 │ 		"maxSize": 45000
     4 │ 	}
   
-  i Accepted keys
+  i Known keys:
   
+  - $schema
+  - extends
   - vcs
   - files
-  - linter
   - formatter
+  - organizeImports
+  - linter
   - javascript
   - json
   - css
-  - $schema
-  - organizeImports
-  - extends
+  - graphql
   - overrides
-  
-
-
+  - assists

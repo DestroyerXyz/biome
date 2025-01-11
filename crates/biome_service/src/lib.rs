@@ -3,35 +3,26 @@ use biome_fs::{FileSystem, OsFileSystem};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
-pub mod configuration;
 pub mod documentation;
 pub mod file_handlers;
-pub mod project_handlers;
 
 pub mod matcher;
 pub mod settings;
 pub mod workspace;
 
+pub mod configuration;
 pub mod diagnostics;
+pub mod dome;
 #[cfg(feature = "schema")]
 pub mod workspace_types;
 
-pub use crate::configuration::{
-    create_config, Configuration, ConfigurationBasePath, ConfigurationDiagnostic,
-    JavascriptFormatter, MergeWith, RuleConfiguration, Rules,
-};
 pub use crate::matcher::Matcher;
 
 pub use crate::diagnostics::{TransportError, WorkspaceError};
 /// Exports only for this crate
 pub use crate::file_handlers::JsFormatterSettings;
-pub use crate::project_handlers::Manifests;
 pub use crate::workspace::Workspace;
 pub use diagnostics::extension_error;
-pub const VERSION: &str = match option_env!("BIOME_VERSION") {
-    Some(version) => version,
-    None => "0.0.0",
-};
 
 /// This is the main entrypoint of the application.
 pub struct App<'app> {
@@ -46,7 +37,7 @@ pub struct App<'app> {
 
 impl<'app> App<'app> {
     pub fn with_console(console: &'app mut dyn Console) -> Self {
-        Self::with_filesystem_and_console(DynRef::Owned(Box::new(OsFileSystem)), console)
+        Self::with_filesystem_and_console(DynRef::Owned(Box::<OsFileSystem>::default()), console)
     }
 
     /// Create a new instance of the app using the specified [FileSystem] and [Console] implementation
@@ -79,8 +70,6 @@ pub enum WorkspaceRef<'app> {
 impl<'app> Deref for WorkspaceRef<'app> {
     type Target = dyn Workspace + 'app;
 
-    // False positive
-    #[allow(clippy::explicit_auto_deref)]
     fn deref(&self) -> &Self::Target {
         match self {
             WorkspaceRef::Owned(inner) => &**inner,

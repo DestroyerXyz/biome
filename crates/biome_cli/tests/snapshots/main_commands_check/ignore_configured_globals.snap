@@ -34,7 +34,7 @@ check ━━━━━━━━━━━━━━━━━━━━━━━━�
 ```block
 fix.js format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  i Formatter would have printed the following content:
+  × Formatter would have printed the following content:
   
     1   │ - foo.call();·bar.call();
       1 │ + foo.call();
@@ -45,15 +45,6 @@ fix.js format ━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ```block
-fix.js check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
+Checked 1 file in <TIME>. No fixes applied.
+Found 1 error.
 ```
-
-```block
-Checked 1 file(s) in <TIME>
-```
-
-

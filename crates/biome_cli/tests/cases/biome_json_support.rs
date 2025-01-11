@@ -211,3 +211,83 @@ fn ci_biome_json() {
         result,
     ));
 }
+
+#[test]
+fn biome_json_is_not_ignored() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    fs.insert(
+        PathBuf::from("biome.json"),
+        r#"{
+        "files": { "ignore": ["*.json"] },
+  "formatter": {
+    "enabled": false
+  }
+}
+"#
+        .as_bytes(),
+    );
+
+    let input_file = Path::new("file.js");
+
+    fs.insert(input_file.into(), "  statement(  )  ".as_bytes());
+
+    let input_file = Path::new("file.json");
+
+    fs.insert(input_file.into(), "  statement(  )  ".as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("ci"), "./"].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "biome_json_is_not_ignored",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn always_disable_trailing_commas_biome_json() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("biome.json");
+    let config = r#"{
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4
+    },
+    "json": {
+        "formatter": {
+            "trailingCommas": "all"
+        }
+    }
+}
+"#;
+    fs.insert(file_path.into(), config);
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(["check", "--write", "."].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, config);
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "always_disable_trailing_commas_biome_json",
+        fs,
+        console,
+        result,
+    ));
+}

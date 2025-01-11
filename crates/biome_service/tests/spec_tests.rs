@@ -1,31 +1,32 @@
+use biome_configuration::PartialConfiguration;
 use biome_deserialize::json::deserialize_from_json_str;
 use biome_diagnostics::{print_diagnostic_to_string, DiagnosticExt};
 use biome_json_parser::JsonParserOptions;
-use biome_service::Configuration;
 use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-tests_macros::gen_tests! {"tests/invalid/**/*.{json}", crate::run_invalid_configurations, "module"}
-tests_macros::gen_tests! {"tests/valid/**/*.{json}", crate::run_valid_configurations, "module"}
+tests_macros::gen_tests! {"tests/invalid/**/*.{json,jsonc}", crate::run_invalid_configurations, "module"}
+tests_macros::gen_tests! {"tests/valid/**/*.{json,jsonc}", crate::run_valid_configurations, "module"}
 
 fn run_invalid_configurations(input: &'static str, _: &str, _: &str, _: &str) {
     let input_file = Path::new(input);
     let file_name = input_file.file_name().and_then(OsStr::to_str).unwrap();
-    let extension = input_file.extension().and_then(OsStr::to_str).unwrap();
     let input_code = read_to_string(input_file)
-        .unwrap_or_else(|err| panic!("failed to read {:?}: {:?}", input_file, err));
+        .unwrap_or_else(|err| panic!("failed to read {input_file:?}: {err:?}"));
 
-    let result = match extension {
-        "json" => deserialize_from_json_str::<Configuration>(
+    let result = match input_file.extension().map(OsStr::as_encoded_bytes) {
+        Some(b"json") => deserialize_from_json_str::<PartialConfiguration>(
             input_code.as_str(),
             JsonParserOptions::default(),
+            "",
         ),
-        "jsonc" => deserialize_from_json_str::<Configuration>(
+        Some(b"jsonc") => deserialize_from_json_str::<PartialConfiguration>(
             input_code.as_str(),
             JsonParserOptions::default()
                 .with_allow_comments()
                 .with_allow_trailing_commas(),
+            "",
         ),
         _ => {
             panic!("Extension not supported");
@@ -33,7 +34,7 @@ fn run_invalid_configurations(input: &'static str, _: &str, _: &str, _: &str) {
     };
 
     assert!(
-        result.has_errors(),
+        result.has_errors() || result.has_warnings(),
         "This test should have diagnostics, but it doesn't have any"
     );
 
@@ -61,18 +62,21 @@ fn run_invalid_configurations(input: &'static str, _: &str, _: &str, _: &str) {
 fn run_valid_configurations(input: &'static str, _: &str, _: &str, _: &str) {
     let input_file = Path::new(input);
     let file_name = input_file.file_name().and_then(OsStr::to_str).unwrap();
-    let extension = input_file.extension().and_then(OsStr::to_str).unwrap();
     let input_code = read_to_string(input_file)
-        .unwrap_or_else(|err| panic!("failed to read {:?}: {:?}", input_file, err));
+        .unwrap_or_else(|err| panic!("failed to read {input_file:?}: {err:?}"));
 
-    let result = match extension {
-        "json" => deserialize_from_json_str::<Configuration>(
+    let result = match input_file.extension().map(OsStr::as_encoded_bytes) {
+        Some(b"json") => deserialize_from_json_str::<PartialConfiguration>(
             input_code.as_str(),
             JsonParserOptions::default(),
+            "",
         ),
-        "jsonc" => deserialize_from_json_str::<Configuration>(
+        Some(b"jsonc") => deserialize_from_json_str::<PartialConfiguration>(
             input_code.as_str(),
-            JsonParserOptions::default().with_allow_comments(),
+            JsonParserOptions::default()
+                .with_allow_comments()
+                .with_allow_trailing_commas(),
+            "",
         ),
         _ => {
             panic!("Extension not supported");
@@ -96,8 +100,7 @@ fn run_valid_configurations(input: &'static str, _: &str, _: &str, _: &str) {
             .join("\n\n");
         if has_errors {
             panic!(
-                "This test should not have diagnostics, but some have been emitted.\n {}",
-                diagnostics
+                "This test should not have diagnostics, but some have been emitted.\n {diagnostics}"
             );
         }
     } else {
@@ -116,7 +119,8 @@ fn quick_test() {
             }
         }
     }"#;
-    let result = deserialize_from_json_str::<Configuration>(source, JsonParserOptions::default());
+    let result =
+        deserialize_from_json_str::<PartialConfiguration>(source, JsonParserOptions::default(), "");
 
     dbg!(result.diagnostics());
     assert!(!result.has_errors());

@@ -14,19 +14,12 @@ a = {
 a = {
 	[`b`]: d
 };
-a = {
-	"b": d
-};
 a.b[`$c`];
 a.b["_d"];
 class C { ["a"] = 0 }
-class C { "a" = 0 }
 class C { ["a"](){} }
-class C { "a"(){} }
 class C { get ["a"](){} }
-class C { get "a"(){} }
 class C { set ["a"](x){} }
-class C { set "a"(x){} }
 a = {
 	["1+1"]: 2
 }
@@ -39,3 +32,17 @@ a = {
 
 // optional chain
 a?.["b"]?.['c']?.d?.e?.["f"]
+a = {
+  ["line1\
+  line2"]: true,
+};
+a = {
+  [`line1\
+  line2`]: true,
+};
+a = {
+  ["line1\nline2"]: true,
+};
+a = {
+  [`line1\nline2`]: true,
+};

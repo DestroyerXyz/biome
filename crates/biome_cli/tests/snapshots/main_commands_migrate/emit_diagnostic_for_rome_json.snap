@@ -22,7 +22,5 @@ rome.json migrate ━━━━━━━━━━━━━━━━━━━━�
 ```
 
 ```block
-Run the command biome migrate --write to apply the changes.
+Run the command with the option --write to apply the changes.
 ```
-
-

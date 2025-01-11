@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use crate::configs::{
     CONFIG_FILE_SIZE_LIMIT, CONFIG_IGNORE_SYMLINK, CONFIG_LINTER_DISABLED,
-    CONFIG_LINTER_DOWNGRADE_DIAGNOSTIC, CONFIG_LINTER_IGNORED_FILES,
+    CONFIG_LINTER_DISABLED_JSONC, CONFIG_LINTER_DOWNGRADE_DIAGNOSTIC, CONFIG_LINTER_IGNORED_FILES,
     CONFIG_LINTER_SUPPRESSED_GROUP, CONFIG_LINTER_SUPPRESSED_RULE,
     CONFIG_LINTER_UPGRADE_DIAGNOSTIC, CONFIG_RECOMMENDED_GROUP,
 };
@@ -193,7 +193,7 @@ fn maximum_diagnostics() {
             let content = format!("{:?}", m.content);
             content.contains("The number of diagnostics exceeds the number allowed by Biome")
                 && content.contains("Diagnostics not shown")
-                && content.contains("79")
+                && content.contains("77")
         }));
 
     assert_cli_snapshot(SnapshotPayload::new(
@@ -438,6 +438,49 @@ fn no_lint_if_linter_is_disabled_when_run_apply() {
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "no_lint_if_linter_is_disabled_when_run_apply",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn no_lint_if_linter_is_disabled_when_run_apply_biome_jsonc() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), FIX_BEFORE.as_bytes());
+
+    let config_path = Path::new("biome.jsonc");
+    fs.insert(config_path.into(), CONFIG_LINTER_DISABLED_JSONC.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--apply"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    let mut buffer = String::new();
+    fs.open(file_path)
+        .unwrap()
+        .read_to_string(&mut buffer)
+        .unwrap();
+
+    assert_eq!(buffer, CHECK_FORMAT_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "no_lint_if_linter_is_disabled_when_run_apply_biome_jsonc",
         fs,
         console,
         result,
@@ -797,7 +840,7 @@ fn fs_error_dereferenced_symlink() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem::new(root_path.clone()))),
         &mut console,
         Args::from([("check"), root_path.display().to_string().as_str()].as_slice()),
     );
@@ -841,7 +884,7 @@ fn fs_error_infinite_symlink_expansion_to_dirs() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem::new(root_path.clone()))),
         &mut console,
         Args::from([("check"), (root_path.display().to_string().as_str())].as_slice()),
     );
@@ -887,7 +930,7 @@ fn fs_error_infinite_symlink_expansion_to_files() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem::new(root_path.clone()))),
         &mut console,
         Args::from([("check"), (root_path.display().to_string().as_str())].as_slice()),
     );
@@ -1067,7 +1110,7 @@ fn fs_files_ignore_symlink() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem::new(root_path.clone()))),
         &mut console,
         Args::from(
             [
@@ -1255,13 +1298,6 @@ fn max_diagnostics_default() {
 
     console.out_buffer = filtered_messages;
 
-    assert_cli_snapshot(SnapshotPayload::new(
-        module_path!(),
-        "max_diagnostics_default",
-        fs,
-        console,
-        result,
-    ));
     assert_eq!(diagnostic_count, 20);
 }
 
@@ -1313,14 +1349,6 @@ fn max_diagnostics() {
     }
 
     console.out_buffer = filtered_messages;
-
-    assert_cli_snapshot(SnapshotPayload::new(
-        module_path!(),
-        "max_diagnostics",
-        fs,
-        console,
-        result,
-    ));
 
     assert_eq!(diagnostic_count, 10);
 }
@@ -1409,6 +1437,39 @@ fn print_verbose() {
 }
 
 #[test]
+fn print_verbose_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("check.js");
+    fs.insert(file_path.into(), LINT_ERROR.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--verbose"),
+                "--write",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "print_verbose_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn unsupported_file() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
@@ -1426,6 +1487,37 @@ fn unsupported_file() {
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "unsupported_file",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn unsupported_file_verbose() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("check.txt");
+    fs.insert(file_path.into(), LINT_ERROR.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                "--verbose",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "unsupported_file_verbose",
         fs,
         console,
         result,
@@ -1529,14 +1621,7 @@ import * as something from "../something";
     let result = run_cli(
         DynRef::Borrowed(&mut fs),
         &mut console,
-        Args::from(
-            [
-                ("check"),
-                ("--apply"),
-                file_path.as_os_str().to_str().unwrap(),
-            ]
-            .as_slice(),
-        ),
+        Args::from(["check", "--apply", file_path.as_os_str().to_str().unwrap()].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -2107,7 +2192,7 @@ file2.js
 }
 
 #[test]
-fn check_stdin_apply_successfully() {
+fn check_stdin_write_successfully() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
@@ -2118,7 +2203,7 @@ fn check_stdin_apply_successfully() {
     let result = run_cli(
         DynRef::Borrowed(&mut fs),
         &mut console,
-        Args::from([("check"), "--apply", ("--stdin-file-path"), ("mock.js")].as_slice()),
+        Args::from([("check"), "--write", ("--stdin-file-path"), ("mock.js")].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -2139,7 +2224,7 @@ fn check_stdin_apply_successfully() {
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
-        "check_stdin_apply_successfully",
+        "check_stdin_write_successfully",
         fs,
         console,
         result,
@@ -2147,12 +2232,12 @@ fn check_stdin_apply_successfully() {
 }
 
 #[test]
-fn check_stdin_apply_unsafe_successfully() {
+fn check_stdin_write_unsafe_successfully() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
     console.in_buffer.push(
-        "import 'zod'; import 'lodash'; function f() {var x = 1; return{x}} class Foo {}"
+        "import zod from 'zod'; import _ from 'lodash'; function f() {var x = 1; return{x}} class Foo {}"
             .to_string(),
     );
 
@@ -2163,7 +2248,8 @@ fn check_stdin_apply_unsafe_successfully() {
             [
                 ("check"),
                 "--organize-imports-enabled=true",
-                "--apply-unsafe",
+                "--write",
+                "--unsafe",
                 ("--stdin-file-path"),
                 ("mock.js"),
             ]
@@ -2184,12 +2270,12 @@ fn check_stdin_apply_unsafe_successfully() {
 
     assert_eq!(
         content,
-        "import \"lodash\";\nimport \"zod\";\nfunction f() {\n\tconst x = 1;\n\treturn { x };\n}\nclass Foo {}\n"
+        "import _ from \"lodash\";\nimport zod from \"zod\";\nfunction f() {\n\tconst x = 1;\n\treturn { x };\n}\nclass Foo {}\n"
     );
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
-        "check_stdin_apply_unsafe_successfully",
+        "check_stdin_write_unsafe_successfully",
         fs,
         console,
         result,
@@ -2197,13 +2283,14 @@ fn check_stdin_apply_unsafe_successfully() {
 }
 
 #[test]
-fn check_stdin_apply_unsafe_only_organize_imports() {
+fn check_stdin_write_unsafe_only_organize_imports() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
-    console
-        .in_buffer
-        .push("import 'zod'; import 'lodash'; function f() {return{}} class Foo {}".to_string());
+    console.in_buffer.push(
+        "import zod from 'zod'; import _ from 'lodash'; function f() {return{}} class Foo {}"
+            .to_string(),
+    );
 
     let result = run_cli(
         DynRef::Borrowed(&mut fs),
@@ -2214,7 +2301,8 @@ fn check_stdin_apply_unsafe_only_organize_imports() {
                 "--organize-imports-enabled=true",
                 "--linter-enabled=false",
                 "--formatter-enabled=false",
-                "--apply-unsafe",
+                "--write",
+                "--unsafe",
                 ("--stdin-file-path"),
                 ("mock.js"),
             ]
@@ -2235,12 +2323,12 @@ fn check_stdin_apply_unsafe_only_organize_imports() {
 
     assert_eq!(
         content,
-        "import 'lodash'; import 'zod'; function f() {return{}} class Foo {}"
+        "import _ from 'lodash'; import zod from 'zod'; function f() {return{}} class Foo {}"
     );
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
-        "check_stdin_apply_unsafe_only_organize_imports",
+        "check_stdin_write_unsafe_only_organize_imports",
         fs,
         console,
         result,
@@ -2261,7 +2349,8 @@ fn check_stdin_returns_text_if_content_is_not_changed() {
             [
                 ("check"),
                 "--organize-imports-enabled=true",
-                "--apply-unsafe",
+                "--write",
+                "--unsafe",
                 ("--stdin-file-path"),
                 ("mock.js"),
             ]
@@ -2290,6 +2379,50 @@ fn check_stdin_returns_text_if_content_is_not_changed() {
         result,
     ));
 }
+
+#[test]
+fn check_stdin_returns_content_when_not_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    console.in_buffer.push("let b = 2;".to_string());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                "--organize-imports-enabled=true",
+                ("--stdin-file-path"),
+                ("mock.js"),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    let message = console
+        .out_buffer
+        .first()
+        .expect("Console should have written a message");
+
+    let content = markup_to_string(markup! {
+        {message.content}
+    });
+
+    assert_eq!(content, "let b = 2;");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "check_stdin_returns_content_when_not_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
 #[test]
 fn should_apply_correct_file_source() {
     let mut fs = MemoryFileSystem::default();
@@ -2532,8 +2665,8 @@ fn check_json_files() {
         r#"{
 	"linter": {
 		"rules": {
-			"nursery": {
-				"noDuplicateJsonKeys": "error"
+			"suspicious": {
+				"noDuplicateObjectKeys": "error"
 			}
 		}
 	}
@@ -2724,6 +2857,563 @@ fn use_literal_keys_should_emit_correct_ast_issue_266() {
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "use_literal_keys_should_emit_correct_ast_issue_266",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_show_formatter_diagnostics_for_files_ignored_by_linter() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("build/file.js");
+    fs.insert(
+        file_path.into(),
+        r#"
+	value['optimizelyService'] = optimizelyService;
+		"#,
+    );
+
+    let biome_json = Path::new("biome.json");
+    fs.insert(
+        biome_json.into(),
+        r#"{
+    "$schema": "https://biomejs.dev/schemas/1.6.1/schema.json",
+    "organizeImports": {
+        "enabled": true
+    },
+    "linter": {
+        "ignore": ["build/**"],
+        "enabled": true,
+        "rules": {
+            "recommended": true
+        }
+    }
+}
+        "#,
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("check"), file_path.as_os_str().to_str().unwrap()].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_show_formatter_diagnostics_for_files_ignored_by_linter",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn print_json() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), APPLY_SUGGESTED_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--apply-unsafe"),
+                "--reporter=json",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "print_json",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn print_json_pretty() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), APPLY_SUGGESTED_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--apply-unsafe"),
+                "--reporter=json-pretty",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "print_json_pretty",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn lint_error_without_file_paths() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("check.js");
+    fs.insert(file_path.into(), LINT_ERROR.as_bytes());
+
+    let result: Result<(), biome_cli::CliDiagnostic> = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("check"), ""].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "lint_error_without_file_paths",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn fix_ok() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), FIX_BEFORE.as_bytes());
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--fix"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    let mut buffer = String::new();
+    fs.open(file_path)
+        .unwrap()
+        .read_to_string(&mut buffer)
+        .unwrap();
+    assert_eq!(buffer, FIX_AFTER);
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "fix_ok",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn fix_unsafe_ok() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), FIX_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--fix"),
+                ("--unsafe"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    let mut buffer = String::new();
+    fs.open(file_path)
+        .unwrap()
+        .read_to_string(&mut buffer)
+        .unwrap();
+
+    assert_eq!(buffer, FIX_AFTER);
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "fix_unsafe_ok",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn fix_noop() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), FIX_AFTER.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--fix"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "fix_noop",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn fix_suggested_error() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), APPLY_SUGGESTED_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--fix"),
+                ("--apply"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "fix_suggested_error",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn fix_unsafe_with_error() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    // last line doesn't have code fix
+    let source = "let a = 4;
+debugger;
+console.log(a);
+function f() { arguments; }
+";
+
+    let expected = "const a = 4;
+console.log(a);
+function f() {\n\targuments;\n}
+";
+
+    let test1 = Path::new("test1.js");
+    fs.insert(test1.into(), source.as_bytes());
+    let test2 = Path::new("test2.js");
+    fs.insert(test2.into(), source.as_bytes());
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--fix"),
+                ("--unsafe"),
+                test1.as_os_str().to_str().unwrap(),
+                test2.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_file_contents(&fs, test1, expected);
+    assert_file_contents(&fs, test2, expected);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "fix_unsafe_with_error",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn write_ok() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), FIX_BEFORE.as_bytes());
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    let mut buffer = String::new();
+    fs.open(file_path)
+        .unwrap()
+        .read_to_string(&mut buffer)
+        .unwrap();
+    assert_eq!(buffer, FIX_AFTER);
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "write_ok",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn write_unsafe_ok() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), FIX_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--write"),
+                ("--unsafe"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    let mut buffer = String::new();
+    fs.open(file_path)
+        .unwrap()
+        .read_to_string(&mut buffer)
+        .unwrap();
+
+    assert_eq!(buffer, FIX_AFTER);
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "write_unsafe_ok",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn write_noop() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), FIX_AFTER.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "write_noop",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn write_suggested_error() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    let file_path = Path::new("fix.js");
+    fs.insert(file_path.into(), APPLY_SUGGESTED_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--write"),
+                ("--apply"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "write_suggested_error",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn write_unsafe_with_error() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    // last line doesn't have code fix
+    let source = "let a = 4;
+debugger;
+console.log(a);
+function f() { arguments; }
+";
+
+    let expected = "const a = 4;
+console.log(a);
+function f() {\n\targuments;\n}
+";
+
+    let test1 = Path::new("test1.js");
+    fs.insert(test1.into(), source.as_bytes());
+    let test2 = Path::new("test2.js");
+    fs.insert(test2.into(), source.as_bytes());
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                ("--write"),
+                ("--unsafe"),
+                test1.as_os_str().to_str().unwrap(),
+                test2.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_file_contents(&fs, test1, expected);
+    assert_file_contents(&fs, test2, expected);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "write_unsafe_with_error",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_error_if_unstaged_files_only_with_staged_flag() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    // Unstaged
+    fs.insert(
+        Path::new("file1.js").into(),
+        r#"console.log('file1');"#.as_bytes(),
+    );
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("check"), "--staged"].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_error_if_unstaged_files_only_with_staged_flag",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_error_if_unchanged_files_only_with_changed_flag() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    // Unchanged
+    fs.insert(
+        Path::new("file1.js").into(),
+        r#"console.log('file1');"#.as_bytes(),
+    );
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("check"), "--changed", "--since=main"].as_slice()),
+    );
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_error_if_unchanged_files_only_with_changed_flag",
         fs,
         console,
         result,

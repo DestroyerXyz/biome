@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidFunction.js
 ---
 # Input
-```js
+```jsx
 function test() {
 	"use strict";
 	"use strict";
@@ -29,10 +29,8 @@ invalidFunction.js:2:2 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━�
   
     1 1 │   function test() {
     2   │ - → "use·strict";
-    3   │ - → "use·strict";
-      2 │ + → → "use·strict";
+    3 2 │   	"use strict";
     4 3 │   }
-    5 4 │   
   
 
 ```
@@ -56,11 +54,8 @@ invalidFunction.js:3:2 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━�
     1 1 │   function test() {
     2 2 │   	"use strict";
     3   │ - → "use·strict";
-    4   │ - }
-      3 │ + → }
+    4 3 │   }
     5 4 │   
   
 
 ```
-
-

@@ -1,30 +1,44 @@
+mod assists;
 mod check;
 mod format;
 mod lint;
 mod organize_imports;
-mod workspace_file;
+mod search;
+pub(crate) mod workspace_file;
 
 use crate::execute::diagnostics::{ResultExt, UnhandledDiagnostic};
-use crate::execute::process_file::check::check_file;
-use crate::execute::process_file::format::format;
-use crate::execute::process_file::lint::lint;
 use crate::execute::traverse::TraversalOptions;
 use crate::execute::TraversalMode;
-use crate::CliDiagnostic;
-use biome_diagnostics::{category, DiagnosticExt, Error};
-use biome_fs::RomePath;
-use biome_service::workspace::{FeatureName, FeaturesBuilder, SupportKind, SupportsFeatureParams};
+use biome_diagnostics::{category, DiagnosticExt, DiagnosticTags, Error};
+use biome_fs::BiomePath;
+use biome_service::workspace::{FeatureKind, SupportKind, SupportsFeatureParams};
+use check::check_file;
+use format::format;
+use lint::lint;
+use search::search;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::path::Path;
 
 #[derive(Debug)]
 pub(crate) enum FileStatus {
-    Success,
+    /// File changed and it was a success
+    Changed,
+    /// File unchanged, and it was a success
+    Unchanged,
+    /// While handling the file, something happened
     Message(Message),
+    /// A match was found while searching a file
+    SearchResult(usize, Message),
+    /// File ignored, it should not be count as "handled"
     Ignored,
     /// Files that belong to other tools and shouldn't be touched
     Protected(String),
+}
+
+impl FileStatus {
+    pub const fn is_changed(&self) -> bool {
+        matches!(self, Self::Changed)
+    }
 }
 
 /// Wrapper type for messages that can be printed during the traversal process
@@ -34,13 +48,13 @@ pub(crate) enum Message {
         /// Suggested fixes skipped during the lint traversal
         skipped_suggested_fixes: u32,
     },
-    ApplyError(CliDiagnostic),
+    Failure,
     Error(Error),
     Diagnostics {
         name: String,
         content: String,
         diagnostics: Vec<Error>,
-        skipped_diagnostics: u64,
+        skipped_diagnostics: u32,
     },
     Diff {
         file_name: String,
@@ -51,8 +65,8 @@ pub(crate) enum Message {
 }
 
 impl Message {
-    pub(crate) const fn is_diagnostic(&self) -> bool {
-        matches!(self, Message::Diff { .. } | Message::Diagnostics { .. })
+    pub(crate) const fn is_failure(&self) -> bool {
+        matches!(self, Message::Failure)
     }
 }
 
@@ -60,6 +74,7 @@ impl Message {
 pub(crate) enum DiffKind {
     Format,
     OrganizeImports,
+    Assists,
 }
 
 impl<D> From<D> for Message
@@ -112,22 +127,18 @@ impl<'ctx, 'app> Deref for SharedTraversalOptions<'ctx, 'app> {
 /// diagnostics were emitted, or compare the formatted code with the original
 /// content of the file and emit a diff or write the new content to the disk if
 /// write mode is enabled
-pub(crate) fn process_file(ctx: &TraversalOptions, path: &Path) -> FileResult {
-    tracing::trace_span!("process_file", path = ?path).in_scope(move || {
-        let rome_path = RomePath::new(path);
+pub(crate) fn process_file(ctx: &TraversalOptions, biome_path: &BiomePath) -> FileResult {
+    tracing::trace_span!("process_file", path = ?biome_path).in_scope(move || {
         let file_features = ctx
             .workspace
             .file_features(SupportsFeatureParams {
-                path: rome_path,
-                feature: FeaturesBuilder::new()
-                    .with_formatter()
-                    .with_linter()
-                    .with_organize_imports()
-                    .build(),
+                path: biome_path.clone(),
+                features: ctx.execution.to_feature(),
             })
-            .with_file_path_and_code(
-                path.display().to_string(),
+            .with_file_path_and_code_and_tags(
+                biome_path.display().to_string(),
                 category!("files/missingHandler"),
+                DiagnosticTags::VERBOSE,
             )?;
 
         // first we stop if there are some files that don't have ALL features enabled, e.g. images, fonts, etc.
@@ -135,14 +146,14 @@ pub(crate) fn process_file(ctx: &TraversalOptions, path: &Path) -> FileResult {
             return Ok(FileStatus::Ignored);
         } else if file_features.is_not_supported() {
             return Err(Message::from(
-                UnhandledDiagnostic.with_file_path(path.display().to_string()),
+                UnhandledDiagnostic.with_file_path(biome_path.display().to_string()),
             ));
         }
 
         // then we pick the specific features for this file
         let unsupported_reason = match ctx.execution.traversal_mode() {
-            TraversalMode::Check { .. } => file_features
-                .support_kind_for(&FeatureName::Lint)
+            TraversalMode::Check { .. } | TraversalMode::CI { .. } => file_features
+                .support_kind_for(&FeatureKind::Lint)
                 .and_then(|support_kind| {
                     if support_kind.is_not_enabled() {
                         Some(support_kind)
@@ -152,7 +163,7 @@ pub(crate) fn process_file(ctx: &TraversalOptions, path: &Path) -> FileResult {
                 })
                 .and(
                     file_features
-                        .support_kind_for(&FeatureName::Format)
+                        .support_kind_for(&FeatureKind::Format)
                         .and_then(|support_kind| {
                             if support_kind.is_not_enabled() {
                                 Some(support_kind)
@@ -163,7 +174,7 @@ pub(crate) fn process_file(ctx: &TraversalOptions, path: &Path) -> FileResult {
                 )
                 .and(
                     file_features
-                        .support_kind_for(&FeatureName::OrganizeImports)
+                        .support_kind_for(&FeatureKind::OrganizeImports)
                         .and_then(|support_kind| {
                             if support_kind.is_not_enabled() {
                                 Some(support_kind)
@@ -172,79 +183,58 @@ pub(crate) fn process_file(ctx: &TraversalOptions, path: &Path) -> FileResult {
                             }
                         }),
                 ),
-            TraversalMode::CI { .. } => file_features
-                .support_kind_for(&FeatureName::Lint)
-                .and_then(|support_kind| {
-                    if support_kind.is_not_enabled() {
-                        Some(support_kind)
-                    } else {
-                        None
-                    }
-                })
-                .and(
-                    file_features
-                        .support_kind_for(&FeatureName::Format)
-                        .and_then(|support_kind| {
-                            if support_kind.is_not_enabled() {
-                                Some(support_kind)
-                            } else {
-                                None
-                            }
-                        }),
-                )
-                .and(
-                    file_features
-                        .support_kind_for(&FeatureName::OrganizeImports)
-                        .and_then(|support_kind| {
-                            if support_kind.is_not_enabled() {
-                                Some(support_kind)
-                            } else {
-                                None
-                            }
-                        }),
-                ),
-            TraversalMode::Format { .. } => file_features.support_kind_for(&FeatureName::Format),
-            TraversalMode::Lint { .. } => file_features.support_kind_for(&FeatureName::Lint),
+            TraversalMode::Format { .. } => file_features.support_kind_for(&FeatureKind::Format),
+            TraversalMode::Lint { .. } => file_features.support_kind_for(&FeatureKind::Lint),
             TraversalMode::Migrate { .. } => None,
+            TraversalMode::Search { .. } => file_features.support_kind_for(&FeatureKind::Search),
         };
 
         if let Some(reason) = unsupported_reason {
             match reason {
                 SupportKind::FileNotSupported => {
                     return Err(Message::from(
-                        UnhandledDiagnostic.with_file_path(path.display().to_string()),
-                    ))
+                        UnhandledDiagnostic.with_file_path(biome_path.display().to_string()),
+                    ));
                 }
                 SupportKind::FeatureNotEnabled | SupportKind::Ignored => {
-                    return Ok(FileStatus::Ignored)
+                    return Ok(FileStatus::Ignored);
                 }
                 SupportKind::Protected => {
-                    return Ok(FileStatus::Protected(path.display().to_string()))
+                    return Ok(FileStatus::Protected(biome_path.display().to_string()));
                 }
                 SupportKind::Supported => {}
             };
         }
 
         let shared_context = &SharedTraversalOptions::new(ctx);
-        ctx.increment_processed();
 
         match ctx.execution.traversal_mode {
-            TraversalMode::Lint { .. } => {
+            TraversalMode::Lint {
+                ref suppression_reason,
+                suppress,
+                ..
+            } => {
                 // the unsupported case should be handled already at this point
-                lint(shared_context, path)
+                lint(
+                    shared_context,
+                    biome_path,
+                    suppress,
+                    suppression_reason.as_deref(),
+                )
             }
             TraversalMode::Format { .. } => {
                 // the unsupported case should be handled already at this point
-                format(shared_context, path)
+                format(shared_context, biome_path)
             }
-            TraversalMode::Check { .. } => {
-                check_file(shared_context, path, &file_features, category!("check"))
-            }
-            TraversalMode::CI { .. } => {
-                check_file(shared_context, path, &file_features, category!("ci"))
+            TraversalMode::Check { .. } | TraversalMode::CI { .. } => {
+                check_file(shared_context, biome_path, &file_features)
             }
             TraversalMode::Migrate { .. } => {
                 unreachable!("The migration should not be called for this file")
+            }
+            TraversalMode::Search { ref pattern, .. } => {
+                // the unsupported case should be handled already at this point
+                search(shared_context, biome_path, pattern)
             }
         }
     })

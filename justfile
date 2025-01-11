@@ -11,52 +11,83 @@ alias qt := test-quick
 # Installs the tools needed to develop
 install-tools:
 	cargo install cargo-binstall
-	cargo binstall cargo-insta cargo-nextest taplo-cli wasm-pack wasm-tools cargo-workspaces
+	cargo binstall cargo-insta taplo-cli wasm-pack wasm-tools knope
 
 # Upgrades the tools needed to develop
 upgrade-tools:
 	cargo install cargo-binstall --force
-	cargo binstall cargo-insta cargo-nextest taplo-cli wasm-pack wasm-tools cargo-workspaces --force
+	cargo binstall cargo-insta taplo-cli wasm-pack wasm-tools knope --force
 
 # Generate all files across crates and tools. You rarely want to use it locally.
-codegen:
-  cargo codegen all
+gen-all:
+  cargo run -p xtask_codegen -- all
   cargo codegen-configuration
-  cargo lintdoc
-  just codegen-bindings
-  cargo codegen-website
-  cargo format
+  cargo codegen-migrate
+  just gen-bindings
+  just format
 
 # Generates TypeScript types and JSON schema of the configuration
-codegen-bindings:
+gen-bindings:
   cargo codegen-schema
   cargo codegen-bindings
 
 # Generates code generated files for the linter
 gen-lint:
-  cargo codegen analyzer
+  cargo run -p xtask_codegen -- analyzer
   cargo codegen-configuration
-  just codegen-bindings
-  cargo lintdoc
+  cargo codegen-migrate
+  just gen-bindings
+  cargo run -p rules_check
+  just format
 
-# Generates code generated files for the website
-gen-web:
-  cargo codegen-website
+# Generates the initial files for all formatter crates
+gen-formatter:
+  cargo run -p xtask_codegen -- formatter
+
+# Generates the Tailwind CSS preset for utility class sorting (requires Bun)
+gen-tw:
+  bun packages/tailwindcss-config-analyzer/src/generate-tailwind-preset.ts
+
+# Generates the code of the grammars available in Biome
+gen-grammar *args='':
+    cargo run -p xtask_codegen -- grammar {{args}}
 
 # Generates the linter documentation and Rust documentation
 documentation:
-  cargo lintdoc
-  cargo documentation
+  RUSTDOCFLAGS='-D warnings' cargo documentation
 
-# Creates a new lint rule in the given path, with the given name. Name has to be camel case.
-new-lintrule path rulename:
-  cargo run -p xtask_codegen -- newlintrule --path={{path}} --name={{rulename}}
+# Creates a new js lint rule with the given name. Name has to be camel case.
+new-js-lintrule rulename:
+  cargo run -p xtask_codegen -- new-lintrule --kind=js --category=lint --name={{rulename}}
   just gen-lint
   just documentation
 
+# Creates a new js assist rule with the given name. Name has to be camel case.
+new-js-assistrule rulename:
+  cargo run -p xtask_codegen -- new-lintrule --kind=js --category=assist --name={{rulename}}
+  just gen-lint
+  just documentation
+
+# Creates a new json assist rule with the given name. Name has to be camel case.
+new-json-assistrule rulename:
+  cargo run -p xtask_codegen -- new-lintrule --kind=json --category=assist --name={{rulename}}
+  just gen-lint
+  just documentation
+
+# Creates a new css lint rule with the given name. Name has to be camel case.
+new-css-lintrule rulename:
+  cargo run -p xtask_codegen -- new-lintrule --kind=css --category=lint --name={{rulename}}
+  just gen-lint
+
+# Creates a new graphql lint rule with the given name. Name has to be camel case.
+new-graphql-lintrule rulename:
+  cargo run -p xtask_codegen -- new-lintrule --kind=graphql --category=lint --name={{rulename}}
+  just gen-lint
+
+
 # Promotes a rule from the nursery group to a new group
 promote-rule rulename group:
-	cargo run -p xtask_codegen -- promoterule --rule={{rulename}} --group={{group}}
+	cargo run -p xtask_codegen -- promote-rule --name={{rulename}} --group={{group}}
 	just gen-lint
 	just documentation
 	-cargo test -p biome_js_analyze -- {{snakecase(rulename)}}
@@ -68,8 +99,6 @@ format:
 	cargo format
 	taplo format
 
-
-
 [unix]
 _touch file:
   touch {{file}}
@@ -80,11 +109,11 @@ _touch file:
 
 # Run tests of all crates
 test:
-	cargo nextest run --no-fail-fast
+	cargo test run --no-fail-fast
 
 # Run tests for the crate passed as argument e.g. just test-create biome_cli
 test-crate name:
-	cargo nextest run -E 'package({{name}})' --no-fail-fast
+	cargo test run -p {{name}} --no-fail-fast
 
 # Run doc tests
 test-doc:
@@ -94,8 +123,12 @@ test-doc:
 test-lintrule name:
   just _touch crates/biome_js_analyze/tests/spec_tests.rs
   just _touch crates/biome_json_analyze/tests/spec_tests.rs
+  just _touch crates/biome_css_analyze/tests/spec_tests.rs
+  just _touch crates/biome_graphql_analyze/tests/spec_tests.rs
   cargo test -p biome_js_analyze -- {{snakecase(name)}} --show-output
   cargo test -p biome_json_analyze -- {{snakecase(name)}} --show-output
+  cargo test -p biome_css_analyze -- {{snakecase(name)}} --show-output
+  cargo test -p biome_graphql_analyze -- {{snakecase(name)}} --show-output
 
 # Tests a lint rule. The name of the rule needs to be camel case
 test-transformation name:
@@ -109,15 +142,28 @@ test-quick package:
 
 # Alias for `cargo lint`, it runs clippy on the whole codebase
 lint:
-	cargo lint
+  cargo lint
 
 # When you finished coding, run this command to run the same commands in the CI.
 ready:
   git diff --exit-code --quiet
-  just codegen
+  just gen-all
   just documentation
-  just format
+  #just format # format is already run in `just gen-all`
   just lint
-  just t
-  cargo test --doc
+  just test
+  just test-doc
   git diff --exit-code --quiet
+
+# Creates a new crate
+new-crate name:
+  cargo new --lib crates/{{snakecase(name)}}
+  cargo run -p xtask_codegen -- new-crate --name={{snakecase(name)}}
+
+# Creates a new changeset for the final changelog
+new-changeset:
+    knope document-change
+
+# Dry-run of the release
+dry-run-release *args='':
+    knope release --dry-run {{args}}

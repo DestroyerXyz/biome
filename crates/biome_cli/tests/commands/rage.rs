@@ -84,6 +84,37 @@ fn with_configuration() {
 }
 
 #[test]
+fn with_jsonc_configuration() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    fs.insert(
+        Path::new("biome.jsonc").to_path_buf(),
+        r#"{
+  "formatter": {
+    // disable formatter
+    "enabled": false,
+  }
+}"#,
+    );
+
+    let result = run_rage(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("rage")].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_rage_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "with_jsonc_configuration",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn with_malformed_configuration() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
@@ -181,6 +212,121 @@ Not most recent log file
     ));
 }
 
+#[test]
+fn with_formatter_configuration() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    fs.insert(
+        Path::new("biome.json").to_path_buf(),
+        r#"{
+  "formatter": {
+    "attributePosition": "multiline",
+    "enabled": true,
+    "formatWithErrors": true,
+    "include": [
+      "**/*.html",
+      "**/*.css",
+      "**/*.js",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.jsx",
+      "**/*.json",
+      "**/*.md"
+    ],
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 120,
+    "ignore": ["configuration-schema.json"]
+  },
+  "javascript": {
+    "formatter": {
+        "enabled": true,
+        "arrowParentheses": "always",
+        "jsxQuoteStyle": "single",
+        "indentWidth": 2,
+        "indentStyle":"tab",
+        "lineEnding": "lf",
+        "lineWidth": 100
+    }
+  },
+  "json": {
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 2,
+        "lineEnding": "lf",
+        "lineWidth": 100
+    }
+  }
+}"#,
+    );
+
+    let result = run_rage(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("rage"), "--formatter"].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_rage_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "with_formatter_configuration",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn with_linter_configuration() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    fs.insert(
+        Path::new("biome.json").to_path_buf(),
+        r#"{
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "a11y": {
+        "noAccessKey": "off",
+        "noAutofocus": "off"
+      },
+      "complexity": {
+        "recommended": true
+      },
+      "suspicious": {
+        "noCommentText": {
+          "level": "warn"
+        }
+      },
+      "style": {
+        "noNonNullAssertion": "off"
+      }
+    }
+  }
+}"#,
+    );
+
+    let result = run_rage(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("rage"), "--linter"].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_rage_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "with_linter_configuration",
+        fs,
+        console,
+        result,
+    ));
+}
+
 /// Runs the `rage` command mocking out the log directory.
 fn run_rage<'app>(
     fs: DynRef<'app, dyn FileSystem>,
@@ -204,7 +350,7 @@ fn assert_rage_snapshot(payload: SnapshotPayload<'_>) {
             .map(|line| match line.trim_start().split_once(':') {
                 Some((
                     "CPU Architecture" | "OS" | "NO_COLOR" | "TERM" | "BIOME_LOG_DIR"
-                    | "Color support",
+                    | "BIOME_LOG_PATH" | "Color support",
                     value,
                 )) => line.replace(value.trim_start(), "**PLACEHOLDER**"),
                 _ => line.to_string(),
@@ -243,7 +389,7 @@ impl TestLogDir {
         let guard = RAGE_GUARD.lock().unwrap();
         let path = env::temp_dir().join(name);
 
-        env::set_var("BIOME_LOG_DIR", &path);
+        env::set_var("BIOME_LOG_PATH", &path);
 
         Self {
             path,
@@ -255,6 +401,6 @@ impl TestLogDir {
 impl Drop for TestLogDir {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.path).ok();
-        env::remove_var("BIOME_LOG_DIR");
+        env::remove_var("BIOME_LOG_PATH");
     }
 }

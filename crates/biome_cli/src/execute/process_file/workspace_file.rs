@@ -1,10 +1,10 @@
 use crate::execute::diagnostics::{ResultExt, ResultIoExt};
 use crate::execute::process_file::SharedTraversalOptions;
 use biome_diagnostics::{category, Error};
-use biome_fs::{File, OpenOptions, RomePath};
-use biome_service::file_handlers::Language;
+use biome_fs::{BiomePath, File, OpenOptions};
 use biome_service::workspace::{FileGuard, OpenFileParams};
 use biome_service::{Workspace, WorkspaceError};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 /// Small wrapper that holds information and operations around the current processed file
@@ -21,7 +21,7 @@ impl<'ctx, 'app> WorkspaceFile<'ctx, 'app> {
         ctx: &SharedTraversalOptions<'ctx, 'app>,
         path: &Path,
     ) -> Result<Self, Error> {
-        let rome_path = RomePath::new(path);
+        let biome_path = BiomePath::new(path);
         let open_options = OpenOptions::default()
             .read(true)
             .write(ctx.execution.requires_write_access());
@@ -37,10 +37,10 @@ impl<'ctx, 'app> WorkspaceFile<'ctx, 'app> {
         let guard = FileGuard::open(
             ctx.workspace,
             OpenFileParams {
-                path: rome_path,
+                document_file_source: None,
+                path: biome_path,
                 version: 0,
                 content: input.clone(),
-                language_hint: Language::default(),
             },
         )
         .with_file_path_and_code(path.display().to_string(), category!("internalError/fs"))?;
@@ -60,9 +60,14 @@ impl<'ctx, 'app> WorkspaceFile<'ctx, 'app> {
         self.guard().get_file_content()
     }
 
+    pub(crate) fn as_extension(&self) -> Option<&OsStr> {
+        self.path.extension()
+    }
+
     /// It updates the workspace file with `new_content`
     pub(crate) fn update_file(&mut self, new_content: impl Into<String>) -> Result<(), Error> {
         let new_content = new_content.into();
+
         self.file
             .set_content(new_content.as_bytes())
             .with_file_path(self.path.display().to_string())?;

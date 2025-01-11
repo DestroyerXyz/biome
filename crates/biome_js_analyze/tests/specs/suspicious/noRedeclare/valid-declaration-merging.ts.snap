@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: valid-declaration-merging.ts
 ---
 # Input
-```js
+```ts
 // Type and value merging
 export type Order = -1 | 0 | 1;
 export const Order = {
@@ -128,6 +128,22 @@ export default function(a: number | boolean): number | boolean {
 	return a;
 }
 
+function g(A, { B }) {
+	interface A {}
+	interface B {}
+}
+
+export function h<a>(a: a) {
+	return a;
+}
+
+// Issue https://github.com/biomejs/biome/issues/2608
+type Overloads = {
+	(e: "change-kind", { kind }: { kind: "a" }): void;
+	(e: "change-kind", { kind, extra }: { kind: "b"; extra: number }): void;
+};
+
+// Issue https://github.com/biomejs/biome/issues/2372
+type F = number
+export default function F() {}
 ```
-
-

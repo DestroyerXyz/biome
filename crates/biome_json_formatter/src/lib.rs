@@ -109,6 +109,8 @@ where
 }
 
 /// Formatting specific [Iterator] extensions
+// False positive
+#[expect(dead_code)]
 pub(crate) trait FormattedIterExt {
     /// Converts every item to an object that knows how to format it.
     fn formatted<Context>(self) -> FormattedIter<Self, Self::Item, Context>

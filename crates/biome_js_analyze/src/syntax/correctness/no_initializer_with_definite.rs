@@ -1,20 +1,19 @@
-use biome_analyze::{context::RuleContext, declare_rule, Ast, Rule, RuleDiagnostic};
-
-use biome_diagnostics::category;
+use biome_analyze::{context::RuleContext, declare_syntax_rule, Ast, Rule, RuleDiagnostic};
 use biome_js_syntax::{JsVariableDeclarator, TextRange, TsDefiniteVariableAnnotation};
 use biome_rowan::AstNode;
 
-declare_rule! {
+declare_syntax_rule! {
     /// Disallow initializing a variable with a definite assertion to prevent `SyntaxError`.
     ///
     /// ## Examples
     ///
-    /// ```js
+    /// ```ts
     /// let foo!: string = "bar";
     /// ```
-    pub(crate) NoInitializerWithDefinite {
+    pub NoInitializerWithDefinite {
         version: "1.4.0",
         name: "noInitializerWithDefinite",
+        language: "js",
     }
 }
 
@@ -33,7 +32,7 @@ impl Rule for NoInitializerWithDefinite {
 
     fn diagnostic(_: &RuleContext<Self>, state: &Self::State) -> Option<RuleDiagnostic> {
         let diagnostic = RuleDiagnostic::new(
-            category!("parse/noInitializerWithDefinite"),
+            rule_category!(),
             state,
             "Declarations with initializers cannot also have definite assignment assertions.",
         );

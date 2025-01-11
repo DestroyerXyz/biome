@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.ts
 ---
 # Input
-```js
+```ts
 /**
  * Doc
  */
@@ -46,8 +46,17 @@ invalid.ts:4:1 lint/suspicious/noConstEnum  FIXABLE  ━━━━━━━━━
   
   i Safe fix: Turn the const enum into a regular enum.
   
-    4 │ const·enum·/*·enum·*/·Port·{
-      │ ------                      
+     1    │ - /**
+     2    │ - ·*·Doc
+     3    │ - ·*/
+     4    │ - const·enum·/*·enum·*/·Port·{
+        1 │ + /**
+        2 │ + ·*·Doc
+        3 │ + ·*/
+        4 │ + enum·/*·enum·*/·Port·{
+     5  5 │   	In,
+     6  6 │   	Out,
+  
 
 ```
 
@@ -73,9 +82,12 @@ invalid.ts:9:20 lint/suspicious/noConstEnum  FIXABLE  ━━━━━━━━�
   
   i Safe fix: Turn the const enum into a regular enum.
   
-    9 │ export·/*·const·*/·const·/*·enum·*/·enum·Status·{
-      │                    ------                        
+     7  7 │   }
+     8  8 │   
+     9    │ - export·/*·const·*/·const·/*·enum·*/·enum·Status·{
+        9 │ + export·/*·const·*/·/*·enum·*/·enum·Status·{
+    10 10 │   	Open,
+    11 11 │   	Close,
+  
 
 ```
-
-

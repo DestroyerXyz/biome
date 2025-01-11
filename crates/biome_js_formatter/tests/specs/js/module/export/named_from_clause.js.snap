@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: js/module/export/named_from_clause.js
 ---
-
 # Input
 
 ```js
@@ -43,11 +42,12 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```js
@@ -58,9 +58,9 @@ export {
 	lorem_lorem_lorem_lorem_lorem_ as ipsum_ipsum_ipsum_ipsum_ipsum_ipsum_,
 } from "fancy" assert {
 	type: "json",
-	"type2": "json",
+	type2: "json",
 	type23: "json",
-	"type24": "json",
+	type24: "json",
 };
 
 export { loooooooooooooooooooooooooooooooooooooooooooooooooong } from "loooooooooooooooooooooooooooooooooooooooooooooong";
@@ -81,5 +81,3 @@ export { a as b } from "looooooooooooooooooooooooooooooooooooooooooooooooooooooo
    15: export { loooooooooooooooooooooooooooooooooooooooooooooooooong } from "loooooooooooooooooooooooooooooooooooooooooooooong";
    22: export { a as b } from "loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong";
 ```
-
-

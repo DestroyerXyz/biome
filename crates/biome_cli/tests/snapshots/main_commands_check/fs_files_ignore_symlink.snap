@@ -13,7 +13,13 @@ rome.json internalError/fs ━━━━━━━━━━━━━━━━━�
 ```
 
 ```block
-Fixed 4 file(s) in <TIME>
+internalError/fs  DEPRECATED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! The argument --apply-unsafe is deprecated, it will be removed in the next major release. Use --write --unsafe instead.
+  
+
 ```
 
-
+```block
+Checked 2 files in <TIME>. Fixed 2 files.
+```

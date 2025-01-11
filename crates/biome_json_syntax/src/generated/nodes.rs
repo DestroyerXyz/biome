@@ -1,7 +1,7 @@
 //! Generated file, do not edit by hand, see `xtask/codegen`
 
-#![allow(clippy::enum_variant_names)]
-#![allow(clippy::match_like_matches_macro)]
+#![allow(dead_code)]
+#![allow(unused)]
 use crate::{
     macros::map_syntax_node,
     JsonLanguage as Language, JsonSyntaxElement as SyntaxElement,
@@ -9,16 +9,16 @@ use crate::{
     JsonSyntaxKind::{self as SyntaxKind, *},
     JsonSyntaxList as SyntaxList, JsonSyntaxNode as SyntaxNode, JsonSyntaxToken as SyntaxToken,
 };
-use biome_rowan::{support, AstNode, RawSyntaxKind, SyntaxKindSet, SyntaxResult};
-#[allow(unused)]
 use biome_rowan::{
-    AstNodeList, AstNodeListIterator, AstSeparatedList, AstSeparatedListNodesIterator,
+    support, AstNode, AstNodeList, AstNodeListIterator, AstNodeSlotMap, AstSeparatedList,
+    AstSeparatedListNodesIterator, RawSyntaxKind, SyntaxKindSet, SyntaxResult,
 };
-#[cfg(feature = "serde")]
 use serde::ser::SerializeSeq;
-#[cfg(feature = "serde")]
 use serde::{Serialize, Serializer};
 use std::fmt::{Debug, Formatter};
+#[doc = r" Sentinel value indicating a missing element in a dynamic node, where"]
+#[doc = r" the slots are not statically known."]
+pub(crate) const SLOT_MAP_EMPTY_VALUE: u8 = u8::MAX;
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct JsonArrayValue {
     pub(crate) syntax: SyntaxNode,
@@ -50,7 +50,6 @@ impl JsonArrayValue {
         support::required_token(&self.syntax, 2usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonArrayValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -59,7 +58,7 @@ impl Serialize for JsonArrayValue {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonArrayValueFields {
     pub l_brack_token: SyntaxResult<SyntaxToken>,
     pub elements: JsonArrayElementList,
@@ -88,7 +87,6 @@ impl JsonBooleanValue {
         support::required_token(&self.syntax, 0usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonBooleanValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -97,7 +95,7 @@ impl Serialize for JsonBooleanValue {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonBooleanValueFields {
     pub value_token: SyntaxResult<SyntaxToken>,
 }
@@ -132,7 +130,6 @@ impl JsonMember {
         support::required_node(&self.syntax, 2usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonMember {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -141,7 +138,7 @@ impl Serialize for JsonMember {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonMemberFields {
     pub name: SyntaxResult<JsonMemberName>,
     pub colon_token: SyntaxResult<SyntaxToken>,
@@ -170,7 +167,6 @@ impl JsonMemberName {
         support::required_token(&self.syntax, 0usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonMemberName {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -179,7 +175,7 @@ impl Serialize for JsonMemberName {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonMemberNameFields {
     pub value_token: SyntaxResult<SyntaxToken>,
 }
@@ -206,7 +202,6 @@ impl JsonNullValue {
         support::required_token(&self.syntax, 0usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonNullValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -215,7 +210,7 @@ impl Serialize for JsonNullValue {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonNullValueFields {
     pub value_token: SyntaxResult<SyntaxToken>,
 }
@@ -242,7 +237,6 @@ impl JsonNumberValue {
         support::required_token(&self.syntax, 0usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonNumberValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -251,7 +245,7 @@ impl Serialize for JsonNumberValue {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonNumberValueFields {
     pub value_token: SyntaxResult<SyntaxToken>,
 }
@@ -286,7 +280,6 @@ impl JsonObjectValue {
         support::required_token(&self.syntax, 2usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonObjectValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -295,7 +288,7 @@ impl Serialize for JsonObjectValue {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonObjectValueFields {
     pub l_curly_token: SyntaxResult<SyntaxToken>,
     pub json_member_list: JsonMemberList,
@@ -332,7 +325,6 @@ impl JsonRoot {
         support::required_token(&self.syntax, 2usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonRoot {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -341,7 +333,7 @@ impl Serialize for JsonRoot {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonRootFields {
     pub bom_token: Option<SyntaxToken>,
     pub value: SyntaxResult<AnyJsonValue>,
@@ -370,7 +362,6 @@ impl JsonStringValue {
         support::required_token(&self.syntax, 0usize)
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonStringValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -379,12 +370,11 @@ impl Serialize for JsonStringValue {
         self.as_fields().serialize(serializer)
     }
 }
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Serialize)]
 pub struct JsonStringValueFields {
     pub value_token: SyntaxResult<SyntaxToken>,
 }
-#[derive(Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize)]
 pub enum AnyJsonValue {
     JsonArrayValue(JsonArrayValue),
     JsonBogusValue(JsonBogusValue),
@@ -995,8 +985,7 @@ impl std::fmt::Display for JsonStringValue {
         std::fmt::Display::fmt(self.syntax(), f)
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct JsonBogus {
     syntax: SyntaxNode,
 }
@@ -1052,8 +1041,7 @@ impl From<JsonBogus> for SyntaxElement {
         n.syntax.into()
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct JsonBogusValue {
     syntax: SyntaxNode,
 }
@@ -1149,7 +1137,6 @@ impl AstNode for JsonArrayElementList {
         self.syntax_list.into_node()
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonArrayElementList {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1232,7 +1219,6 @@ impl AstNode for JsonMemberList {
         self.syntax_list.into_node()
     }
 }
-#[cfg(feature = "serde")]
 impl Serialize for JsonMemberList {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

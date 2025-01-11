@@ -2,7 +2,6 @@
 source: crates/biome_css_parser/tests/spec_test.rs
 expression: snapshot
 ---
-
 ## Input
 
 ```css
@@ -19,10 +18,10 @@ foo|* {}
 CssRoot {
     bom_token: missing (optional),
     rules: CssRuleList [
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssUniversalSelector {
                         namespace: missing (optional),
                         star_token: STAR@0..2 "*" [] [Whitespace(" ")],
@@ -31,7 +30,7 @@ CssRoot {
                 },
                 COMMA@2..4 "," [] [Whitespace(" ")],
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssUniversalSelector {
                         namespace: missing (optional),
                         star_token: STAR@4..6 "*" [] [Whitespace(" ")],
@@ -39,16 +38,16 @@ CssRoot {
                     sub_selectors: CssSubSelectorList [],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@6..7 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@7..8 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssUniversalSelector {
                         namespace: CssNamespace {
                             prefix: CssUniversalNamespacePrefix {
@@ -61,16 +60,16 @@ CssRoot {
                     sub_selectors: CssSubSelectorList [],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@13..14 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@14..15 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssUniversalSelector {
                         namespace: CssNamespace {
                             prefix: CssNamedNamespacePrefix {
@@ -85,9 +84,9 @@ CssRoot {
                     sub_selectors: CssSubSelectorList [],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@22..23 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@23..24 "}" [] [],
             },
         },
@@ -102,29 +101,29 @@ CssRoot {
 0: CSS_ROOT@0..25
   0: (empty)
   1: CSS_RULE_LIST@0..24
-    0: CSS_RULE@0..8
+    0: CSS_QUALIFIED_RULE@0..8
       0: CSS_SELECTOR_LIST@0..6
         0: CSS_COMPOUND_SELECTOR@0..2
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@0..0
           1: CSS_UNIVERSAL_SELECTOR@0..2
             0: (empty)
             1: STAR@0..2 "*" [] [Whitespace(" ")]
           2: CSS_SUB_SELECTOR_LIST@2..2
         1: COMMA@2..4 "," [] [Whitespace(" ")]
         2: CSS_COMPOUND_SELECTOR@4..6
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@4..4
           1: CSS_UNIVERSAL_SELECTOR@4..6
             0: (empty)
             1: STAR@4..6 "*" [] [Whitespace(" ")]
           2: CSS_SUB_SELECTOR_LIST@6..6
-      1: CSS_DECLARATION_LIST_BLOCK@6..8
+      1: CSS_DECLARATION_OR_RULE_BLOCK@6..8
         0: L_CURLY@6..7 "{" [] []
-        1: CSS_DECLARATION_LIST@7..7
+        1: CSS_DECLARATION_OR_RULE_LIST@7..7
         2: R_CURLY@7..8 "}" [] []
-    1: CSS_RULE@8..15
+    1: CSS_QUALIFIED_RULE@8..15
       0: CSS_SELECTOR_LIST@8..13
         0: CSS_COMPOUND_SELECTOR@8..13
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@8..8
           1: CSS_UNIVERSAL_SELECTOR@8..13
             0: CSS_NAMESPACE@8..11
               0: CSS_UNIVERSAL_NAMESPACE_PREFIX@8..10
@@ -132,14 +131,14 @@ CssRoot {
               1: PIPE@10..11 "|" [] []
             1: STAR@11..13 "*" [] [Whitespace(" ")]
           2: CSS_SUB_SELECTOR_LIST@13..13
-      1: CSS_DECLARATION_LIST_BLOCK@13..15
+      1: CSS_DECLARATION_OR_RULE_BLOCK@13..15
         0: L_CURLY@13..14 "{" [] []
-        1: CSS_DECLARATION_LIST@14..14
+        1: CSS_DECLARATION_OR_RULE_LIST@14..14
         2: R_CURLY@14..15 "}" [] []
-    2: CSS_RULE@15..24
+    2: CSS_QUALIFIED_RULE@15..24
       0: CSS_SELECTOR_LIST@15..22
         0: CSS_COMPOUND_SELECTOR@15..22
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@15..15
           1: CSS_UNIVERSAL_SELECTOR@15..22
             0: CSS_NAMESPACE@15..20
               0: CSS_NAMED_NAMESPACE_PREFIX@15..19
@@ -148,12 +147,10 @@ CssRoot {
               1: PIPE@19..20 "|" [] []
             1: STAR@20..22 "*" [] [Whitespace(" ")]
           2: CSS_SUB_SELECTOR_LIST@22..22
-      1: CSS_DECLARATION_LIST_BLOCK@22..24
+      1: CSS_DECLARATION_OR_RULE_BLOCK@22..24
         0: L_CURLY@22..23 "{" [] []
-        1: CSS_DECLARATION_LIST@23..23
+        1: CSS_DECLARATION_OR_RULE_LIST@23..23
         2: R_CURLY@23..24 "}" [] []
   2: EOF@24..25 "" [Newline("\n")] []
 
 ```
-
-

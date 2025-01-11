@@ -23,11 +23,13 @@ use crate::syntax::typescript::{
 
 use crate::JsSyntaxFeature::TypeScript;
 use crate::ParsedSyntax::{Absent, Present};
-use crate::{JsParser, JsSyntaxFeature, ParseRecovery};
+use crate::{JsParser, JsSyntaxFeature, ParseRecoveryTokenSet};
 use biome_js_syntax::JsSyntaxKind::*;
 use biome_js_syntax::{JsSyntaxKind, TextRange, T};
 use biome_parser::ParserProgress;
 use biome_rowan::SyntaxKind;
+
+use super::metavariable::parse_metavariable;
 
 /// A function declaration, this could be async and or a generator. This takes a marker
 /// because you need to first advance over async or start a marker and feed it in.
@@ -1368,6 +1370,10 @@ pub(super) fn parse_parameters_list(
 
             progress.assert_progressing(p);
 
+            if parse_metavariable(p).is_present() {
+                continue;
+            }
+
             let parameter = parse_parameter(
                 p,
                 ExpressionContext::default().and_object_expression_allowed(!first || has_l_paren),
@@ -1384,9 +1390,9 @@ pub(super) fn parse_parameters_list(
 
             // test_err js formal_params_invalid
             // function (a++, c) {}
-            let recovered_result = parameter.or_recover(
+            let recovered_result = parameter.or_recover_with_token_set(
                 p,
-                &ParseRecovery::new(
+                &ParseRecoveryTokenSet::new(
                     JS_BOGUS_PARAMETER,
                     token_set![
                         T![ident],

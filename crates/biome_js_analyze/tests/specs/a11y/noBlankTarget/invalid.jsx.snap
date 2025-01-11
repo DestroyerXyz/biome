@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.jsx
 ---
 # Input
-```js
+```jsx
 <>
     <a target="_blank" href="https://example.com/1"></a>
     <a target="_blank" rel="" href="https://example.com/2"></a>
@@ -57,8 +57,8 @@ invalid.jsx:3:8 lint/a11y/noBlankTarget  FIXABLE  ━━━━━━━━━━
   
   i Safe fix: Add the "noreferrer" to the existing attribute.
   
-    3 │ ····<a·target="_blank"·rel="noreferrer·"·href="https://example.com/2"></a>
-      │                             +++++++++++                                   
+    3 │ ····<a·target="_blank"·rel="noreferrer"·href="https://example.com/2"></a>
+      │                             ++++++++++                                   
 
 ```
 
@@ -230,5 +230,3 @@ invalid.jsx:12:8 lint/a11y/noBlankTarget  FIXABLE  ━━━━━━━━━�
        │                                                 +++++++++++++++++     
 
 ```
-
-

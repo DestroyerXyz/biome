@@ -3,16 +3,22 @@ use biome_console::fmt::{Formatter, Termcolor};
 use biome_console::{markup, BufferConsole, Markup};
 use biome_diagnostics::termcolor::NoColor;
 use biome_diagnostics::{print_diagnostic_to_string, Error};
-use biome_formatter::IndentStyle;
-use biome_fs::{FileSystemExt, MemoryFileSystem};
+use biome_formatter::{IndentStyle, IndentWidth};
+use biome_fs::{ConfigName, FileSystemExt, MemoryFileSystem};
 use biome_json_formatter::context::JsonFormatOptions;
 use biome_json_formatter::format_node;
 use biome_json_parser::{parse_json, JsonParserOptions};
+use regex::Regex;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env::{current_exe, temp_dir};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::sync::LazyLock;
+
+static TIME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new("\\s[0-9]+[mµn]?s\\.").unwrap());
+static TIME_JUNIT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("time=\\\"[.0-9]+\\\"").unwrap());
 
 #[derive(Default)]
 struct InMessages {
@@ -23,7 +29,9 @@ pub(crate) struct CliSnapshot {
     /// input messages, coming from different sources
     in_messages: InMessages,
     /// the configuration, if set
-    pub configuration: Option<String>,
+    /// First string is the content
+    /// Second string is the name
+    pub configuration: Option<(String, &'static str)>,
     /// file name -> content
     pub files: BTreeMap<String, String>,
     /// messages written in console
@@ -48,21 +56,26 @@ impl CliSnapshot {
     pub fn emit_content_snapshot(&self) -> String {
         let mut content = String::new();
 
-        if let Some(configuration) = &self.configuration {
+        if let Some((configuration, file_name)) = &self.configuration {
             let redacted = redact_snapshot(configuration).unwrap_or(String::new().into());
 
-            let parsed = parse_json(&redacted, JsonParserOptions::default());
+            let parsed = parse_json(
+                &redacted,
+                JsonParserOptions::default()
+                    .with_allow_comments()
+                    .with_allow_trailing_commas(),
+            );
             let formatted = format_node(
                 JsonFormatOptions::default()
                     .with_indent_style(IndentStyle::Space)
-                    .with_indent_width(2.into()),
+                    .with_indent_width(IndentWidth::default()),
                 &parsed.syntax(),
             )
             .expect("formatted JSON")
             .print()
             .expect("printed JSON");
 
-            content.push_str("## `biome.json`\n\n");
+            content.push_str(&format!("## `{file_name}`\n\n"));
             content.push_str("```json");
             content.push('\n');
             content.push_str(formatted.as_code());
@@ -78,7 +91,7 @@ impl CliSnapshot {
                 let redacted_content =
                     redact_snapshot(file_content).unwrap_or(String::new().into());
 
-                let _ = write!(content, "## `{}`\n\n", redacted_name);
+                let _ = write!(content, "## `{redacted_name}`\n\n");
                 let _ = write!(content, "```{extension}");
                 content.push('\n');
                 content.push_str(&redacted_content);
@@ -140,11 +153,16 @@ fn redact_snapshot(input: &str) -> Option<Cow<'_, str>> {
     // otherwise at each run we invalid the previous snapshot.
     //
     // This is a workaround, and it might not work for all cases.
-    const PATTERN: &str = "file(s) in ";
-    if let Some(start) = output.find(PATTERN) {
-        output
-            .to_mut()
-            .replace_range(start + PATTERN.len().., "<TIME>");
+    let the_match = TIME_REGEX.find(output.as_ref()).map(|f| f.start()..f.end());
+    if let Some(found) = the_match {
+        output.to_mut().replace_range(found, " <TIME>.");
+    }
+
+    let the_match = TIME_JUNIT_REGEX
+        .find(output.as_ref())
+        .map(|f| f.start()..f.end());
+    if let Some(found) = the_match {
+        output.to_mut().replace_range(found, "time=\"<TIME>\"");
     }
 
     // Normalize the name of the current executable to "biome"
@@ -157,33 +175,7 @@ fn redact_snapshot(input: &str) -> Option<Cow<'_, str>> {
     }
 
     output = replace_temp_dir(output);
-
-    // Ref: https://docs.github.com/actions/learn-github-actions/variables#default-environment-variables
-    let is_github = std::env::var("GITHUB_ACTIONS")
-        .ok()
-        .map(|value| value == "true")
-        .unwrap_or(false);
-
-    if is_github {
-        // GitHub actions sets the env var GITHUB_ACTIONS=true in CI
-        // Based on that, biome also has a feature that detects if it's running on GH Actions and
-        // emits additional information in the output (workflow commands, see PR + discussion at #681)
-        // To avoid polluting snapshots with that, we filter out those lines
-
-        let lines: Vec<_> = output
-            .split('\n')
-            .filter(|line| {
-                !line.starts_with("::notice ")
-                    && !line.starts_with("::warning ")
-                    && !line.starts_with("::error ")
-            })
-            .collect();
-
-        output = Cow::Owned(lines.join("\n"));
-        if output.is_empty() {
-            return None;
-        }
-    }
+    output = replace_biome_dir(output);
 
     // Normalize Windows-specific path separators to "/"
     if cfg!(windows) {
@@ -265,6 +257,46 @@ fn replace_temp_dir(input: Cow<str>) -> Cow<str> {
     }
 }
 
+/// Replace the path to the temporary directory with "<TEMP_DIR>"
+/// And normalizes the count of `-` at the end of the diagnostic
+fn replace_biome_dir(input: Cow<str>) -> Cow<str> {
+    let mut result = String::new();
+    let mut rest = input.as_ref();
+
+    let temp_dir = biome_fs::ensure_cache_dir().display().to_string();
+    let temp_dir = temp_dir.trim_end_matches(MAIN_SEPARATOR);
+
+    while let Some(index) = rest.find(temp_dir) {
+        let (before, after) = rest.split_at(index);
+
+        result.push_str(before);
+        result.push_str("<BIOME_DIR>");
+
+        let after = after.split_at(temp_dir.len()).1;
+        let header_line = after.lines().next().unwrap();
+
+        match header_line.split_once('\u{2501}') {
+            Some((between_temp_and_line, _)) => {
+                // Diagnostic header line, normalize the horizontal line
+                result.push_str(between_temp_and_line);
+                result.push_str(&"\u{2501}".repeat(20));
+                rest = after.split_at(header_line.len()).1;
+            }
+            None => {
+                // Not a header line, only replace tempdir
+                rest = after;
+            }
+        }
+    }
+
+    if result.is_empty() {
+        input
+    } else {
+        result.push_str(rest);
+        Cow::Owned(result)
+    }
+}
+
 fn replace(input: &mut Cow<str>, from: &str, to: &str) {
     let mut rest = &**input;
     let mut result = String::new();
@@ -295,12 +327,15 @@ impl From<SnapshotPayload<'_>> for CliSnapshot {
             module_path: _,
         } = payload;
         let mut cli_snapshot = CliSnapshot::from_result(result);
-        let config_path = PathBuf::from("biome.json");
-        let configuration = fs.open(&config_path).ok();
-        if let Some(mut configuration) = configuration {
-            let mut buffer = String::new();
-            if configuration.read_to_string(&mut buffer).is_ok() {
-                cli_snapshot.configuration = Some(buffer);
+
+        for file_name in ConfigName::file_names() {
+            let config_path = PathBuf::from(file_name);
+            let configuration = fs.open(&config_path).ok();
+            if let Some(mut configuration) = configuration {
+                let mut buffer = String::new();
+                if configuration.read_to_string(&mut buffer).is_ok() {
+                    cli_snapshot.configuration = Some((buffer, file_name));
+                }
             }
         }
 

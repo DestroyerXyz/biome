@@ -528,11 +528,10 @@ check.js:5:13 lint/style/useWhile  FIXABLE  ━━━━━━━━━━━━
 
 ```block
 The number of diagnostics exceeds the number allowed by Biome.
-Diagnostics not shown: 79.
+Diagnostics not shown: 77.
 ```
 
 ```block
-Checked 1 file(s) in <TIME>
+Checked 1 file in <TIME>. No fixes applied.
+Found 21 errors.
 ```
-
-

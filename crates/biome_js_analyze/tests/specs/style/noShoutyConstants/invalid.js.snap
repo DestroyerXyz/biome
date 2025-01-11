@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
 ---
 # Input
-```js
+```jsx
 const FOO = "FOO";
 console.log(FOO, FOO2);
 
@@ -140,10 +140,11 @@ invalid.js:20:7 lint/style/noShoutyConstants  FIXABLE  ━━━━━━━━�
   
   i Unsafe fix: Use the constant value directly
   
+    17 17 │   	bar: BAR,
     18 18 │   };
-    19 19 │   
+    19    │ - 
     20    │ - const·C·=·"C";
-    21    │ - 
+    21 19 │   
     22 20 │   export const d = {
     23    │ - → foo:·C
        21 │ + → foo:·"C"
@@ -191,5 +192,3 @@ invalid.js:26:7 lint/style/noShoutyConstants  FIXABLE  ━━━━━━━━�
   
 
 ```
-
-

@@ -6,13 +6,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::ast::load_ast;
+use crate::language_kind::{LanguageKind, ALL_LANGUAGE_KIND};
 use git2::{Repository, Status, StatusOptions};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use xtask::project_root;
-
-use crate::ast::load_ast;
-use crate::{LanguageKind, ALL_LANGUAGE_KIND};
 
 struct GitRepo {
     repo: Repository,
@@ -84,10 +83,10 @@ impl GitRepo {
 
     fn check_path(&self, path: &Path) {
         if self.dirty.contains(path) {
-            panic!("Codegen would overwrite '{}' but it has uncommited changes. Commit the file to git, or pass --allow-dirty to the command to proceed anyway", path.display());
+            panic!("Codegen would overwrite '{}' but it has uncommitted changes. Commit the file to git, or pass --allow-dirty to the command to proceed anyway", path.display());
         }
         if self.staged.contains(path) {
-            panic!("Codegen would overwrite '{}' but it has uncommited changes. Commit the file to git, or pass --allow-staged to the command to proceed anyway", path.display());
+            panic!("Codegen would overwrite '{}' but it has uncommitted changes. Commit the file to git, or pass --allow-staged to the command to proceed anyway", path.display());
         }
     }
 
@@ -154,9 +153,7 @@ impl ModuleIndex {
                     continue;
                 }
 
-                if file_type.is_file() {
-                    unused_files.insert(path);
-                }
+                unused_files.insert(path);
             }
         }
 
@@ -203,7 +200,7 @@ impl ModuleIndex {
                 // Clippy complains about child modules having the same
                 // names as their parent, eg. js/name/name.rs
                 if import == stem {
-                    content.push_str("#[allow(clippy::module_inception)]\n");
+                    content.push_str("#[expect(clippy::module_inception)]\n");
                 }
 
                 content.push_str("pub(crate) mod ");
@@ -295,6 +292,7 @@ fn generate_formatter(repo: &GitRepo, language_kind: LanguageKind) {
         modules.insert(repo, &path);
 
         let node_id = Ident::new(&name, Span::call_site());
+        let node_fields_id = Ident::new(&format!("{name}Fields"), Span::call_site());
         let format_id = Ident::new(&format!("Format{name}"), Span::call_site());
 
         let qualified_format_id = {
@@ -358,18 +356,49 @@ fn generate_formatter(repo: &GitRepo, language_kind: LanguageKind) {
                 }
             },
             NodeKind::Node => {
-                quote! {
-                    use crate::prelude::*;
+                // TODO: This is CSS-specific and would be nice to handle in a
+                // per-language generator somehow.
+                if language_kind == LanguageKind::Css
+                    && matches!(
+                        get_node_concept(&kind, &module.dialect, &language_kind, &name),
+                        NodeConcept::Property
+                    )
+                {
+                    quote! {
+                        use crate::prelude::*;
 
-                    use biome_rowan::AstNode;
-                    use #syntax_crate_ident::#node_id;
+                        use #syntax_crate_ident::{#node_id, #node_fields_id};
+                        use biome_formatter::write;
 
-                    #[derive(Debug, Clone, Default)]
-                    pub(crate) struct #format_id;
+                        #[derive(Debug, Clone, Default)]
+                        pub(crate) struct #format_id;
 
-                    impl FormatNodeRule<#node_id> for #format_id {
-                        fn fmt_fields(&self, node: &#node_id, f: &mut #formatter_ident) -> FormatResult<()> {
-                            format_verbatim_node(node.syntax()).fmt(f)
+                        impl FormatNodeRule<#node_id> for #format_id {
+                            fn fmt_fields(&self, node: &#node_id, f: &mut #formatter_ident) -> FormatResult<()> {
+                                let #node_fields_id {
+                                    name,
+                                    colon_token,
+                                    value
+                                } = node.as_fields();
+
+                                write!(f, [name.format(), colon_token.format(), space(), value.format()])
+                            }
+                        }
+                    }
+                } else {
+                    quote! {
+                        use crate::prelude::*;
+
+                        use biome_rowan::AstNode;
+                        use #syntax_crate_ident::#node_id;
+
+                        #[derive(Debug, Clone, Default)]
+                        pub(crate) struct #format_id;
+
+                        impl FormatNodeRule<#node_id> for #format_id {
+                            fn fmt_fields(&self, node: &#node_id, f: &mut #formatter_ident) -> FormatResult<()> {
+                                format_verbatim_node(node.syntax()).fmt(f)
+                            }
                         }
                     }
                 }
@@ -483,7 +512,6 @@ impl BoilerplateImpls {
                 type Format<'a> = FormatRefWithRule<'a, #syntax_crate_ident::#node_id, #format_id>;
 
                 fn format(&self) -> Self::Format<'_> {
-                    #![allow(clippy::default_constructed_unit_structs)]
                     FormatRefWithRule::new(self, #format_id::default())
                 }
             }
@@ -492,7 +520,6 @@ impl BoilerplateImpls {
                 type Format = FormatOwnedWithRule<#syntax_crate_ident::#node_id, #format_id>;
 
                 fn into_format(self) -> Self::Format {
-                    #![allow(clippy::default_constructed_unit_structs)]
                     FormatOwnedWithRule::new(self, #format_id::default())
                 }
             }
@@ -506,6 +533,7 @@ impl BoilerplateImpls {
         let formatter_context_ident = self.language.format_context_ident();
 
         let tokens = quote! {
+            #![expect(clippy::default_constructed_unit_structs)]
             use crate::{AsFormat, IntoFormat, FormatNodeRule, FormatBogusNodeRule, #formatter_ident, #formatter_context_ident};
             use biome_formatter::{FormatRefWithRule, FormatOwnedWithRule, FormatRule, FormatResult};
 
@@ -526,6 +554,9 @@ enum NodeDialect {
     Jsx,
     Json,
     Css,
+    Grit,
+    Graphql,
+    Html,
 }
 
 impl NodeDialect {
@@ -536,6 +567,9 @@ impl NodeDialect {
             NodeDialect::Jsx,
             NodeDialect::Json,
             NodeDialect::Css,
+            NodeDialect::Grit,
+            NodeDialect::Graphql,
+            NodeDialect::Html,
         ]
     }
 
@@ -550,6 +584,9 @@ impl NodeDialect {
             NodeDialect::Jsx => "jsx",
             NodeDialect::Json => "json",
             NodeDialect::Css => "css",
+            NodeDialect::Grit => "grit",
+            NodeDialect::Graphql => "graphql",
+            NodeDialect::Html => "html",
         }
     }
 
@@ -560,8 +597,11 @@ impl NodeDialect {
             "Ts" => NodeDialect::Ts,
             "Json" => NodeDialect::Json,
             "Css" => NodeDialect::Css,
+            "Grit" => NodeDialect::Grit,
+            "Graphql" => NodeDialect::Graphql,
+            "Html" => NodeDialect::Html,
             _ => {
-                eprintln!("missing prefix {}", name);
+                eprintln!("missing prefix {name}");
                 NodeDialect::Js
             }
         }
@@ -588,10 +628,21 @@ enum NodeConcept {
     Tag,
     Attribute,
 
-    // JSON / CSS
+    // JSON
     Value,
+
+    // CSS
     Pseudo,
     Selector,
+    Property,
+
+    // GritQL
+    Pattern,
+    Predicate,
+
+    // GraphQL
+    Definition,
+    Extension,
 }
 
 impl NodeConcept {
@@ -615,6 +666,11 @@ impl NodeConcept {
             NodeConcept::Value => "value",
             NodeConcept::Pseudo => "pseudo",
             NodeConcept::Selector => "selectors",
+            NodeConcept::Property => "properties",
+            NodeConcept::Pattern => "patterns",
+            NodeConcept::Predicate => "predicates",
+            NodeConcept::Definition => "definitions",
+            NodeConcept::Extension => "extensions",
         }
     }
 }
@@ -638,25 +694,13 @@ impl NodeModuleInformation {
     }
 }
 
-/// Convert an AstNode name to a path / Rust module name
-fn name_to_module(kind: &NodeKind, in_name: &str, language: LanguageKind) -> NodeModuleInformation {
-    let mut upper_case_indices = in_name.match_indices(|c: char| c.is_uppercase());
-
-    assert!(matches!(upper_case_indices.next(), Some((0, _))));
-
-    let (second_upper_start, _) = upper_case_indices.next().expect("Node name malformed");
-    let (mut dialect_prefix, mut name) = in_name.split_at(second_upper_start);
-
-    // AnyJsX
-    if dialect_prefix == "Any" {
-        let (third_upper_start, _) = upper_case_indices.next().expect("Node name malformed");
-        (dialect_prefix, name) = name.split_at(third_upper_start - dialect_prefix.len());
-    }
-
-    let dialect = NodeDialect::from_str(dialect_prefix);
-
-    // Classify nodes by concept
-    let concept = if matches!(kind, NodeKind::Bogus) {
+fn get_node_concept(
+    kind: &NodeKind,
+    dialect: &NodeDialect,
+    language: &LanguageKind,
+    name: &str,
+) -> NodeConcept {
+    if matches!(kind, NodeKind::Bogus) {
         NodeConcept::Bogus
     } else if matches!(kind, NodeKind::List { .. }) {
         NodeConcept::List
@@ -735,19 +779,74 @@ fn name_to_module(kind: &NodeKind, in_name: &str, language: LanguageKind) -> Nod
                 _ if name.ends_with("Value") => NodeConcept::Value,
                 _ => NodeConcept::Auxiliary,
             },
+            LanguageKind::Markdown => NodeConcept::Auxiliary,
             LanguageKind::Css => match name {
                 _ if name.ends_with("AtRule") => NodeConcept::Statement,
                 _ if name.ends_with("Selector") => NodeConcept::Selector,
-                _ if name.starts_with("Pseudo") => NodeConcept::Pseudo,
-                _ if matches!(name, "Number" | "Percentage" | "Ratio" | "String")
-                    || name.ends_with("Dimension") =>
+                _ if name.contains("Pseudo") => NodeConcept::Pseudo,
+                _ if name.ends_with("Property") => NodeConcept::Property,
+                _ if matches!(
+                    name,
+                    "Number"
+                        | "Percentage"
+                        | "Ratio"
+                        | "String"
+                        | "Color"
+                        | "Length"
+                        | "UrlValueRaw"
+                ) || name.ends_with("Dimension")
+                    || name.ends_with("Identifier") =>
                 {
                     NodeConcept::Value
                 }
                 _ => NodeConcept::Auxiliary,
             },
+
+            LanguageKind::Graphql => match name {
+                _ if name.contains("Extension") => NodeConcept::Extension,
+                _ if name.ends_with("Definition") => NodeConcept::Definition,
+                _ if name.ends_with("Value") => NodeConcept::Value,
+                _ => NodeConcept::Auxiliary,
+            },
+
+            LanguageKind::Grit => match name {
+                _ if name.contains("Operation") || name.contains("Pattern") => NodeConcept::Pattern,
+                _ if name.contains("Predicate") => NodeConcept::Predicate,
+                _ if name.ends_with("Definition") => NodeConcept::Declaration,
+                _ if name == "CodeSnippet" || name.ends_with("Literal") => NodeConcept::Value,
+                _ => NodeConcept::Auxiliary,
+            },
+
+            LanguageKind::Html => match name {
+                _ if name.ends_with("Value") => NodeConcept::Value,
+                _ => NodeConcept::Auxiliary,
+            },
+
+            // TODO: implement formatter
+            LanguageKind::Yaml => NodeConcept::Auxiliary,
         }
-    };
+    }
+}
+
+/// Convert an AstNode name to a path / Rust module name
+fn name_to_module(kind: &NodeKind, in_name: &str, language: LanguageKind) -> NodeModuleInformation {
+    let mut upper_case_indices = in_name.match_indices(|c: char| c.is_uppercase());
+
+    assert!(matches!(upper_case_indices.next(), Some((0, _))));
+
+    let (second_upper_start, _) = upper_case_indices.next().expect("Node name malformed");
+    let (mut dialect_prefix, mut name) = in_name.split_at(second_upper_start);
+
+    // AnyJsX
+    if dialect_prefix == "Any" {
+        let (third_upper_start, _) = upper_case_indices.next().expect("Node name malformed");
+        (dialect_prefix, name) = name.split_at(third_upper_start - dialect_prefix.len());
+    }
+
+    let dialect = NodeDialect::from_str(dialect_prefix);
+
+    // Classify nodes by concept
+    let concept = get_node_concept(kind, &dialect, &language, name);
 
     // Convert the names from CamelCase to snake_case
     let mut stem = String::new();
@@ -786,6 +885,11 @@ impl LanguageKind {
             LanguageKind::Js => "JsFormatter",
             LanguageKind::Css => "CssFormatter",
             LanguageKind::Json => "JsonFormatter",
+            LanguageKind::Graphql => "GraphqlFormatter",
+            LanguageKind::Grit => "GritFormatter",
+            LanguageKind::Html => "HtmlFormatter",
+            LanguageKind::Yaml => "YamlFormatter",
+            LanguageKind::Markdown => "DemoFormatter",
         };
 
         Ident::new(name, Span::call_site())
@@ -796,6 +900,11 @@ impl LanguageKind {
             LanguageKind::Js => "JsFormatContext",
             LanguageKind::Css => "CssFormatContext",
             LanguageKind::Json => "JsonFormatContext",
+            LanguageKind::Graphql => "GraphqlFormatContext",
+            LanguageKind::Grit => "GritFormatContext",
+            LanguageKind::Html => "HtmlFormatContext",
+            LanguageKind::Yaml => "YamlFormatContext",
+            LanguageKind::Markdown => "DemoFormatterContext",
         };
 
         Ident::new(name, Span::call_site())

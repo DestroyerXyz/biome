@@ -9,6 +9,8 @@ use regex::Regex;
 use serde::Deserialize;
 use std::io;
 use std::path::Path;
+use std::process::Command;
+use xtask::project_root;
 
 const BASE_PATH: &str = "xtask/coverage/test262/test";
 
@@ -160,6 +162,25 @@ impl TestSuite for Test262TestSuite {
         BASE_PATH
     }
 
+    fn checkout(&self) -> io::Result<()> {
+        let base_path = project_root().join(BASE_PATH);
+        let mut command = Command::new("git");
+        command
+            .arg("clone")
+            .arg("https://github.com/tc39/test262.git")
+            .arg("--depth")
+            .arg("1")
+            .arg(base_path.display().to_string());
+        command.output()?;
+        let mut command = Command::new("git");
+        command
+            .arg("reset")
+            .arg("--hard")
+            .arg("715dd1073bc060f4ee221e2e74770f5728e7b8a0");
+        command.output()?;
+        Ok(())
+    }
+
     fn is_test(&self, path: &Path) -> bool {
         match path.extension() {
             None => false,
@@ -185,15 +206,11 @@ impl TestSuite for Test262TestSuite {
 }
 
 fn read_metadata(code: &str) -> io::Result<MetaData> {
-    use once_cell::sync::Lazy;
+    // Regular expression to retrieve the metadata of a test.
+    let meta_regex = Regex::new(r"/\*\-{3}((?:.|\n)*)\-{3}\*/")
+        .expect("could not compile metadata regular expression");
 
-    /// Regular expression to retrieve the metadata of a test.
-    static META_REGEX: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"/\*\-{3}((?:.|\n)*)\-{3}\*/")
-            .expect("could not compile metadata regular expression")
-    });
-
-    let yaml = META_REGEX
+    let yaml = meta_regex
         .captures(code)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no metadata found"))?
         .get(1)

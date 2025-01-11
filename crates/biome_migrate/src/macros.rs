@@ -10,7 +10,7 @@ macro_rules! declare_migration {
         impl biome_analyze::RuleMeta for $id {
             type Group = $crate::analyzers::MigrationGroup;
             const METADATA: biome_analyze::RuleMetadata =
-                biome_analyze::RuleMetadata::new($version, $name, "") $( .$key($value) )*;
+                biome_analyze::RuleMetadata::new($version, $name, "", "") $( .$key($value) )*;
         }
 
         // Declare a new `rule_category!` macro in the module context that
@@ -18,7 +18,7 @@ macro_rules! declare_migration {
         // This is implemented by calling the `group_category!` macro from the
         // parent module (that should be declared by a call to `declare_group!`)
         // and providing it with the name of this rule as a string literal token
-        #[allow(unused_macros)]
+        #[expect(unused_macros)]
         macro_rules! rule_category {
             () => { super::group_category!( $name ) };
         }

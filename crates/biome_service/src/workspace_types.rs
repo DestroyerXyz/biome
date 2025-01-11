@@ -64,7 +64,7 @@ fn instance_type<'a>(
 
                     let mut property = make::ident(property);
                     if let Some(description) = description {
-                        let comment = format!("/**\n\t* {} \n\t */", description);
+                        let comment = format!("/**\n\t* {description} \n\t */");
                         let trivia = vec![
                             (TriviaPieceKind::Newline, "\n"),
                             (TriviaPieceKind::MultiLineComment, comment.as_str()),
@@ -259,8 +259,7 @@ fn schema_object_type<'a>(
     let has_defaults = schema
         .metadata
         .as_ref()
-        .map(|metadata| metadata.default.is_some())
-        .unwrap_or(false);
+        .map_or(false, |metadata| metadata.default.is_some());
 
     (ts_type, is_nullable || has_defaults, description)
 }
@@ -320,17 +319,16 @@ pub fn generate_type<'a>(
     while let Some((name, schema)) = queue.pop_front() {
         // Detect if the type being emitted is an object, emit it as an
         // interface definition if that's the case
-        let is_interface = schema
-            .instance_type
-            .as_ref()
-            .map(|instance_type| {
+        let is_interface = schema.instance_type.as_ref().map_or_else(
+            || schema.object.is_some(),
+            |instance_type| {
                 if let SingleOrVec::Single(instance_type) = instance_type {
                     matches!(**instance_type, InstanceType::Object)
                 } else {
                     false
                 }
-            })
-            .unwrap_or_else(|| schema.object.is_some());
+            },
+        );
 
         if is_interface {
             let mut members = Vec::new();
@@ -343,7 +341,7 @@ pub fn generate_type<'a>(
 
                 let mut property = make::ident(property);
                 if let Some(description) = description {
-                    let comment = format!("/**\n\t* {} \n\t */", description);
+                    let comment = format!("/**\n\t* {description} \n\t */");
                     let trivia = vec![
                         (TriviaPieceKind::Newline, "\n"),
                         (TriviaPieceKind::MultiLineComment, comment.as_str()),
@@ -371,7 +369,7 @@ pub fn generate_type<'a>(
             let current_module = AnyJsDeclaration::from(
                 make::ts_interface_declaration(
                     make::token(T![interface]),
-                    make::ts_identifier_binding(make::ident(name)),
+                    make::ts_identifier_binding(make::ident(name)).into(),
                     make::token(T!['{']),
                     make::ts_type_member_list(members),
                     make::token(T!['}']),
@@ -388,7 +386,7 @@ pub fn generate_type<'a>(
             let current_module = AnyJsDeclaration::from(
                 make::ts_type_alias_declaration(
                     make::token(T![type]),
-                    make::ts_identifier_binding(make::ident(name)),
+                    make::ts_identifier_binding(make::ident(name)).into(),
                     make::token(T![=]),
                     ts_type,
                 )
@@ -453,11 +451,12 @@ macro_rules! workspace_method {
 }
 
 /// Returns a list of signature for all the methods in the [Workspace] trait
-pub fn methods() -> [WorkspaceMethod; 18] {
+pub fn methods() -> [WorkspaceMethod; 19] {
     [
-        WorkspaceMethod::of::<SupportsFeatureParams, SupportsFeatureResult>("file_features"),
+        workspace_method!(file_features),
         workspace_method!(update_settings),
-        workspace_method!(project_features),
+        workspace_method!(register_project_folder),
+        workspace_method!(set_manifest_for_project),
         workspace_method!(open_file),
         workspace_method!(change_file),
         workspace_method!(close_file),

@@ -2,12 +2,12 @@ use crate::parser::CssParser;
 use crate::syntax::parse_error::{
     expected_any_attribute_matcher_name, expected_any_attribute_modifier, expected_identifier,
 };
-use crate::syntax::selector::{is_at_namespace, parse_namespace, selector_lex_context};
+use crate::syntax::selector::{is_nth_at_namespace, parse_namespace, selector_lex_context};
 use crate::syntax::{is_at_identifier, parse_regular_identifier, parse_string};
 use biome_css_syntax::CssSyntaxKind::*;
 use biome_css_syntax::{CssSyntaxKind, T};
 use biome_parser::diagnostic::expected_token;
-use biome_parser::parse_recovery::ParseRecovery;
+use biome_parser::parse_recovery::ParseRecoveryTokenSet;
 use biome_parser::prelude::ParsedSyntax;
 use biome_parser::prelude::ParsedSyntax::{Absent, Present};
 use biome_parser::{token_set, Parser, TokenSet};
@@ -31,7 +31,7 @@ pub(crate) fn parse_attribute_selector(p: &mut CssParser) -> ParsedSyntax {
 
     let context = selector_lex_context(p);
     if !p.eat_with_context(T![']'], context)
-        && ParseRecovery::new(CSS_BOGUS, ATTRIBUTE_SELECTOR_RECOVERY_SET)
+        && ParseRecoveryTokenSet::new(CSS_BOGUS, ATTRIBUTE_SELECTOR_RECOVERY_SET)
             .recover(p)
             .is_err()
     {
@@ -42,7 +42,7 @@ pub(crate) fn parse_attribute_selector(p: &mut CssParser) -> ParsedSyntax {
 }
 
 fn is_at_attribute_name(p: &mut CssParser) -> bool {
-    is_at_identifier(p) || is_at_namespace(p)
+    is_at_identifier(p) || is_nth_at_namespace(p, 0)
 }
 
 #[inline]

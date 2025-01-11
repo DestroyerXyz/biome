@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: noDoubleEquals.jsx
 ---
 # Input
-```js
+```jsx
 let a = <button
     className="SomeManyClasses"
     onClick={(event) => console.log(event.ctrlKey == true)}
@@ -35,7 +35,7 @@ noDoubleEquals.jsx:3:51 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━
     4 │     style="color: red"
     5 │ >
   
-  i Using === may be unsafe if you are relying on type coercion
+  i Using == may be unsafe if you are relying on type coercion
   
   i Safe fix: Suppress rule lint/suspicious/noDoubleEquals
   
@@ -43,11 +43,9 @@ noDoubleEquals.jsx:3:51 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━
     2 2 │       className="SomeManyClasses"
     3   │ - ····onClick={(event)·=>·console.log(event.ctrlKey·==·true)}
       3 │ + ····//·biome-ignore·lint/suspicious/noDoubleEquals:·<explanation>
-      4 │ + onClick={(event)·=>·console.log(event.ctrlKey·==·true)}
+      4 │ + ····onClick={(event)·=>·console.log(event.ctrlKey·==·true)}
     4 5 │       style="color: red"
     5 6 │   >
   
 
 ```
-
-

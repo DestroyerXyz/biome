@@ -5,7 +5,7 @@ use biome_service::workspace::{
     self, ChangeFileParams, CloseFileParams, FixFileParams, FormatFileParams, FormatOnTypeParams,
     FormatRangeParams, GetControlFlowGraphParams, GetFileContentParams, GetFormatterIRParams,
     GetSyntaxTreeParams, OrganizeImportsParams, PullActionsParams, PullDiagnosticsParams,
-    RenameParams, UpdateSettingsParams,
+    RegisterProjectFolderParams, RenameParams, UpdateSettingsParams,
 };
 use biome_service::workspace::{OpenFileParams, SupportsFeatureParams};
 
@@ -29,7 +29,6 @@ pub struct Workspace {
 #[wasm_bindgen]
 impl Workspace {
     #[wasm_bindgen(constructor)]
-    #[allow(clippy::new_without_default)]
     pub fn new() -> Workspace {
         Workspace {
             inner: workspace::server(),
@@ -40,12 +39,12 @@ impl Workspace {
     pub fn file_features(
         &self,
         params: ISupportsFeatureParams,
-    ) -> Result<ISupportsFeatureResult, Error> {
+    ) -> Result<IFileFeaturesResult, Error> {
         let params: SupportsFeatureParams =
             serde_wasm_bindgen::from_value(params.into()).map_err(into_error)?;
         let result = self.inner.file_features(params).map_err(into_error)?;
         to_value(&result)
-            .map(ISupportsFeatureResult::from)
+            .map(IFileFeaturesResult::from)
             .map_err(into_error)
     }
 
@@ -54,6 +53,21 @@ impl Workspace {
         let params: UpdateSettingsParams =
             serde_wasm_bindgen::from_value(params.into()).map_err(into_error)?;
         self.inner.update_settings(params).map_err(into_error)
+    }
+
+    #[wasm_bindgen(js_name = registerProjectFolder)]
+    pub fn register_workspace_folder(
+        &self,
+        params: IRegisterProjectFolderParams,
+    ) -> Result<IProjectKey, Error> {
+        let params: RegisterProjectFolderParams =
+            serde_wasm_bindgen::from_value(params.into()).map_err(into_error)?;
+        let result = self
+            .inner
+            .register_project_folder(params)
+            .map_err(into_error)?;
+
+        to_value(&result).map(IProjectKey::from).map_err(into_error)
     }
 
     #[wasm_bindgen(js_name = openFile)]
@@ -193,6 +207,12 @@ impl Workspace {
         to_value(&result)
             .map(IRenameResult::from)
             .map_err(into_error)
+    }
+}
+
+impl Default for Workspace {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -1,7 +1,7 @@
 //! Common functionality between different fuzzers. Look here if you need to inspect implementation
 //! details for the fuzzer harnesses!
 
-#![allow(dead_code)]
+#![expect(dead_code)]
 
 use biome_analyze::{AnalysisFilter, AnalyzerOptions, ControlFlow, RuleFilter};
 use biome_diagnostics::Diagnostic;
@@ -9,7 +9,6 @@ use biome_formatter::format_node;
 use biome_js_analyze::analyze;
 use biome_js_formatter::context::JsFormatOptions;
 use biome_js_formatter::JsFormatLanguage;
-use biome_js_parser::parse;
 use biome_js_parser::parse;
 use biome_js_syntax::JsFileSource;
 use biome_json_formatter::context::JsonFormatOptions;

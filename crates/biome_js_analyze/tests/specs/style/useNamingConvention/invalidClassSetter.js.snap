@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidClassSetter.js
 ---
 # Input
-```js
+```jsx
 export default class {
     set X(x) {}
 
@@ -39,8 +39,6 @@ invalidClassSetter.js:2:9 lint/style/useNamingConvention ━━━━━━━�
     3 │ 
     4 │     set PROPERTY(x) {}
   
-  i The name could be renamed to `x`.
-  
 
 ```
 
@@ -55,8 +53,6 @@ invalidClassSetter.js:4:9 lint/style/useNamingConvention ━━━━━━━�
       │         ^^^^^^^^
     5 │ 
     6 │     set SpecialProperty(x) {}
-  
-  i The name could be renamed to `property`.
   
 
 ```
@@ -73,8 +69,6 @@ invalidClassSetter.js:6:9 lint/style/useNamingConvention ━━━━━━━�
     7 │ 
     8 │     set special_property(x) {}
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
@@ -89,8 +83,6 @@ invalidClassSetter.js:8:9 lint/style/useNamingConvention ━━━━━━━�
        │         ^^^^^^^^^^^^^^^^
      9 │ 
     10 │     set Unknown_Style(x) {}
-  
-  i The name could be renamed to `specialProperty`.
   
 
 ```
@@ -107,93 +99,79 @@ invalidClassSetter.js:10:9 lint/style/useNamingConvention ━━━━━━━�
     11 │ 
     12 │     set #X(x) {}
   
-  i The name could be renamed to `unknownStyle`.
-  
 
 ```
 
 ```
-invalidClassSetter.js:12:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalidClassSetter.js:12:10 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ! This class setter name should be in camelCase.
   
     10 │     set Unknown_Style(x) {}
     11 │ 
   > 12 │     set #X(x) {}
-       │         ^^
+       │          ^
     13 │ 
     14 │     set #PROPERTY(x) {}
   
-  i The name could be renamed to `x`.
-  
 
 ```
 
 ```
-invalidClassSetter.js:14:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalidClassSetter.js:14:10 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ! This class setter name should be in camelCase.
   
     12 │     set #X(x) {}
     13 │ 
   > 14 │     set #PROPERTY(x) {}
-       │         ^^^^^^^^^
+       │          ^^^^^^^^
     15 │ 
     16 │     set #SpecialProperty(x) {}
   
-  i The name could be renamed to `property`.
-  
 
 ```
 
 ```
-invalidClassSetter.js:16:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalidClassSetter.js:16:10 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ! This class setter name should be in camelCase.
   
     14 │     set #PROPERTY(x) {}
     15 │ 
   > 16 │     set #SpecialProperty(x) {}
-       │         ^^^^^^^^^^^^^^^^
+       │          ^^^^^^^^^^^^^^^
     17 │ 
     18 │     set #special_property(x) {}
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
 ```
-invalidClassSetter.js:18:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalidClassSetter.js:18:10 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ! This class setter name should be in camelCase.
   
     16 │     set #SpecialProperty(x) {}
     17 │ 
   > 18 │     set #special_property(x) {}
-       │         ^^^^^^^^^^^^^^^^^
+       │          ^^^^^^^^^^^^^^^^
     19 │ 
     20 │     set #Unknown_Style(x) {}
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
 ```
-invalidClassSetter.js:20:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalidClassSetter.js:20:10 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ! This class setter name should be in camelCase.
   
     18 │     set #special_property(x) {}
     19 │ 
   > 20 │     set #Unknown_Style(x) {}
-       │         ^^^^^^^^^^^^^^
+       │          ^^^^^^^^^^^^^
     21 │ }
-  
-  i The name could be renamed to `unknownStyle`.
   
 
 ```
-
-

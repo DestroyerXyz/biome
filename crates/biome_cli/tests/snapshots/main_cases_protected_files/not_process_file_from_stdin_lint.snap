@@ -8,14 +8,19 @@ expression: content
 { "name": "test" }
 ```
 
-# Emitted Messages
+# Termination Message
 
 ```block
-package.json project ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+stdin ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  i The file package.json is protected because is handled by another tool. Biome won't process it.
+  × The contents aren't fixed. Use the `--fix` flag to fix them.
   
+
 
 ```
 
+# Emitted Messages
 
+```block
+{ "name": "test" }
+```

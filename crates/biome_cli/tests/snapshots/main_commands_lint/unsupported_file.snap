@@ -23,15 +23,5 @@ internalError/io ━━━━━━━━━━━━━━━━━━━━━
 # Emitted Messages
 
 ```block
-check.txt files/missingHandler ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ! Biome could not determine the language for the file extension txt
-  
-
+Checked 0 files in <TIME>. No fixes applied.
 ```
-
-```block
-Checked 0 file(s) in <TIME>
-```
-
-

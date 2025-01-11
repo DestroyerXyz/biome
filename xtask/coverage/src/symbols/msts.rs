@@ -8,8 +8,11 @@ use crate::runner::{TestCase, TestCaseFiles, TestRunOutcome, TestSuite};
 use biome_js_parser::JsParserOptions;
 use std::collections::HashSet;
 use std::fmt::Write;
+use std::io;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::str::FromStr;
+use xtask::project_root;
 
 const CASES_PATH: &str = "xtask/coverage/Typescript/tests/baselines/reference";
 const BASE_PATH: &str = "xtask/coverage/Typescript";
@@ -90,23 +93,21 @@ impl TestCase for SymbolsMicrosoftTestCase {
                 // We do the same below because TS classifies some string literals as symbols and we also
                 // filter them below.
                 match x {
-                    SemanticEvent::DeclarationFound { .. }
-                    | SemanticEvent::Read { .. }
-                    | SemanticEvent::HoistedRead { .. }
-                    | SemanticEvent::Write { .. }
-                    | SemanticEvent::HoistedWrite { .. }
-                    | SemanticEvent::UnresolvedReference { .. } => {
-                        let name = &code[x.range()];
-                        !name.contains('\"') && !name.contains('\'')
+                    SemanticEvent::DeclarationFound { range, .. }
+                    | SemanticEvent::Read { range, .. }
+                    | SemanticEvent::HoistedRead { range, .. }
+                    | SemanticEvent::Write { range, .. }
+                    | SemanticEvent::HoistedWrite { range, .. }
+                    | SemanticEvent::UnresolvedReference { range, .. } => {
+                        let name = &code[*range];
+                        !name.contains('\"') && !name.contains('\'') &&
+                        // Ignore the current event if one was already processed for the same range.
+                        prev_starts.insert(range.start())
                     }
                     SemanticEvent::ScopeStarted { .. }
                     | SemanticEvent::ScopeEnded { .. }
-                    | SemanticEvent::Exported { .. } => false,
+                    | SemanticEvent::Export { .. } => false,
                 }
-            })
-            .filter(|x| {
-                // Ignore the current event if one was already processed for the same range.
-                prev_starts.insert(x.range().start())
             })
             .collect();
         actual.sort_by_key(|x| x.range().start());
@@ -136,7 +137,7 @@ impl TestCase for SymbolsMicrosoftTestCase {
 
             if let Some(actual) = actual {
                 let name = &code[actual.range()].trim();
-                write!(debug_text, "[{}]", name).unwrap();
+                write!(debug_text, "[{name}]").unwrap();
             }
 
             match (expected, actual) {
@@ -193,20 +194,40 @@ impl TestSuite for SymbolsMicrosoftTestSuite {
         }
     }
 
+    fn checkout(&self) -> io::Result<()> {
+        let base_path = project_root().join(BASE_PATH);
+        let mut command = Command::new("git");
+        command
+            .arg("clone")
+            .arg("https://github.com/microsoft/Typescript.git")
+            .arg("--depth")
+            .arg("1")
+            .arg(base_path.display().to_string());
+        command.output()?;
+        let mut command = Command::new("git");
+        command
+            .arg("reset")
+            .arg("--hard")
+            .arg("61a96b1641abe24c4adc3633eb936df89eb991f2");
+        command.output()?;
+
+        Ok(())
+    }
+
     fn load_test(&self, path: &Path) -> Option<Box<dyn TestCase>> {
         Some(Box::new(SymbolsMicrosoftTestCase::new(path)))
     }
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
+#[expect(dead_code)]
 struct Decl {
     file: String,
     row_start: Option<usize>,
     col_start: Option<usize>,
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 #[derive(Debug)]
 struct Symbol {
     name: String,
@@ -221,12 +242,16 @@ struct SymbolsFile {
 }
 
 /// This function parses lines like:
+///
+/// ```ignore
 /// >Cell : Symbol(Cell, Decl(2dArrays.ts, 0, 0))
 ///   |              |     |     |         \--+---> line and column ofthe first char of the leading trivia where the declaration
 ///   |              |     |     \--> File where the declaration of this symbol is
 ///   |              |     \--> States that this Symbol is a declaration
 ///   |              \--> Complete Path of the Symbol
 ///   \--> text of the symbol
+/// ```
+///
 /// To understand how the Typescript codebase generate this line
 /// see xtask\coverage\Typescript\src\harness\typeWriter.ts
 fn parse_symbol(input: &str) -> Option<Symbol> {
@@ -250,7 +275,7 @@ fn parse_symbol(input: &str) -> Option<Symbol> {
         let (_, decls) = parse_separated_list(
             input,
             parse_decl,
-            |s| parse_str(s, ",").map(|x| x.0).unwrap_or(s),
+            |s| parse_str(s, ",").map_or(s, |x| x.0),
             |s| parse_whitespace0(s).0,
         );
         decls

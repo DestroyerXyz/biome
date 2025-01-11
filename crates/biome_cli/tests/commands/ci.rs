@@ -1,4 +1,7 @@
-use crate::configs::{CONFIG_DISABLED_FORMATTER, CONFIG_FILE_SIZE_LIMIT, CONFIG_LINTER_DISABLED};
+use crate::configs::{
+    CONFIG_DISABLED_FORMATTER, CONFIG_DISABLED_FORMATTER_JSONC, CONFIG_FILE_SIZE_LIMIT,
+    CONFIG_LINTER_DISABLED,
+};
 use crate::snap_test::{assert_file_contents, SnapshotPayload};
 use crate::{
     assert_cli_snapshot, run_cli, CUSTOM_FORMAT_BEFORE, FORMATTED, LINT_ERROR, PARSE_ERROR,
@@ -182,6 +185,39 @@ fn ci_does_not_run_formatter() {
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "ci_does_not_run_formatter",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn ci_does_not_run_formatter_biome_jsonc() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    fs.insert(
+        PathBuf::from("biome.jsonc"),
+        CONFIG_DISABLED_FORMATTER_JSONC.as_bytes(),
+    );
+
+    let input_file = Path::new("file.js");
+
+    fs.insert(input_file.into(), UNFORMATTED.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("ci"), input_file.as_os_str().to_str().unwrap()].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, input_file, UNFORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "ci_does_not_run_formatter_biome_jsonc",
         fs,
         console,
         result,
@@ -859,6 +895,59 @@ fn ignores_unknown_file() {
 }
 
 #[test]
+fn correctly_handles_ignored_and_not_ignored_files() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let configuration = Path::new("biome.json");
+    fs.insert(
+        configuration.into(),
+        r#"{
+        "linter": {
+                "ignore": ["/linter-ignored/**"]
+        },
+        "formatter": {
+                "ignore": ["/formatter-ignored/**"]
+        },
+        "files": {
+                "ignore": ["/globally-ignored/**"]
+        }
+    }"#,
+    );
+
+    let file_path1 = Path::new("/formatter-ignored/test.js");
+    fs.insert(file_path1.into(), UNFORMATTED_AND_INCORRECT.as_bytes());
+
+    let file_path2 = Path::new("/linter-ignored/test.js");
+    fs.insert(file_path2.into(), INCORRECT_CODE.as_bytes());
+
+    let file_path3 = Path::new("/globally-ignored/test.js");
+    fs.insert(file_path3.into(), UNFORMATTED_AND_INCORRECT.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("ci"),
+                file_path1.as_os_str().to_str().unwrap(),
+                file_path2.as_os_str().to_str().unwrap(),
+                file_path3.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "correctly_handles_ignored_and_not_ignored_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn doesnt_error_if_no_files_were_processed() {
     let mut console = BufferConsole::default();
     let mut fs = MemoryFileSystem::default();
@@ -931,6 +1020,55 @@ A = 0;
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "does_error_with_only_warnings",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_formatting_error_without_file_paths() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("ci.js");
+    fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("ci"), ""].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_formatting_error_without_file_paths",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_error_if_unchanged_files_only_with_changed_flag() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    // Unchanged
+    fs.insert(
+        Path::new("file1.js").into(),
+        r#"console.log('file1');"#.as_bytes(),
+    );
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("check"), "--changed", "--since=main"].as_slice()),
+    );
+    assert!(result.is_err(), "run_cli returned {result:?}");
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_error_if_unchanged_files_only_with_changed_flag",
         fs,
         console,
         result,

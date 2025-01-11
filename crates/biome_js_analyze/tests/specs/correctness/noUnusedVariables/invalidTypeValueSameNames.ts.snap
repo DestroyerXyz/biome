@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidTypeValueSameNames.ts
 ---
 # Input
-```js
+```ts
 
 type a = number
 export const a = 5;
@@ -11,9 +11,6 @@ export const a = 5;
 function f() {}
 export type f = () => {}
 
-const b = true
-type b = boolean
-export { type b }
 
 ```
 
@@ -49,31 +46,3 @@ invalidTypeValueSameNames.ts:5:10 lint/correctness/noUnusedVariables ━━━�
   
 
 ```
-
-```
-invalidTypeValueSameNames.ts:8:7 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━
-
-  ! This variable is unused.
-  
-     6 │ export type f = () => {}
-     7 │ 
-   > 8 │ const b = true
-       │       ^
-     9 │ type b = boolean
-    10 │ export { type b }
-  
-  i Unused variables usually are result of incomplete refactoring, typos and other source of bugs.
-  
-  i Unsafe fix: If this is intentional, prepend b with an underscore.
-  
-     6  6 │   export type f = () => {}
-     7  7 │   
-     8    │ - const·b·=·true
-        8 │ + const·_b·=·true
-     9  9 │   type b = boolean
-    10 10 │   export { type b }
-  
-
-```
-
-

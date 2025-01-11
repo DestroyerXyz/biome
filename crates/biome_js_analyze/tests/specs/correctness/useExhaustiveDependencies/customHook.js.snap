@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: customHook.js
 ---
 # Input
-```js
+```jsx
 import { useEffect } from "react";
 
 function MyComponent() {
@@ -27,7 +27,7 @@ function MyComponent() {
 ```
 customHook.js:5:5 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook does not specify all of its dependencies.
+  ! This hook does not specify all of its dependencies: a
   
     3 │ function MyComponent() {
     4 │     let a = 1;
@@ -53,7 +53,7 @@ customHook.js:5:5 lint/correctness/useExhaustiveDependencies ━━━━━━�
 ```
 customHook.js:9:5 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook does not specify all of its dependencies.
+  ! This hook does not specify all of its dependencies: a
   
      7 │     }, []);
      8 │ 

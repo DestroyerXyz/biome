@@ -1,7 +1,7 @@
 use crate::workspace::{
     FileFeaturesResult, GetFileContentParams, IsPathIgnoredParams, OrganizeImportsParams,
-    OrganizeImportsResult, ProjectFeaturesParams, ProjectFeaturesResult, RageParams, RageResult,
-    ServerInfo,
+    OrganizeImportsResult, ProjectKey, RageParams, RageResult, RegisterProjectFolderParams,
+    ServerInfo, SetManifestForProjectParams, UnregisterProjectFolderParams,
 };
 use crate::{TransportError, Workspace, WorkspaceError};
 use biome_formatter::Printed;
@@ -16,8 +16,8 @@ use super::{
     ChangeFileParams, CloseFileParams, FixFileParams, FixFileResult, FormatFileParams,
     FormatOnTypeParams, FormatRangeParams, GetControlFlowGraphParams, GetFormatterIRParams,
     GetSyntaxTreeParams, GetSyntaxTreeResult, OpenFileParams, PullActionsParams, PullActionsResult,
-    PullDiagnosticsParams, PullDiagnosticsResult, RenameParams, RenameResult,
-    SupportsFeatureParams, UpdateSettingsParams,
+    PullDiagnosticsParams, PullDiagnosticsResult, RenameParams, RenameResult, SearchPatternParams,
+    SearchResults, SupportsFeatureParams, UpdateSettingsParams,
 };
 
 pub struct WorkspaceClient<T> {
@@ -69,7 +69,7 @@ where
                 "capabilities": {},
                 "clientInfo": {
                     "name": env!("CARGO_PKG_NAME"),
-                    "version": crate::VERSION
+                    "version": biome_configuration::VERSION
                 },
             }),
         )?;
@@ -107,24 +107,36 @@ where
     ) -> Result<FileFeaturesResult, WorkspaceError> {
         self.request("biome/file_features", params)
     }
-
     fn is_path_ignored(&self, params: IsPathIgnoredParams) -> Result<bool, WorkspaceError> {
         self.request("biome/is_path_ignored", params)
     }
-
     fn update_settings(&self, params: UpdateSettingsParams) -> Result<(), WorkspaceError> {
         self.request("biome/update_settings", params)
     }
 
-    fn project_features(
-        &self,
-        params: ProjectFeaturesParams,
-    ) -> Result<ProjectFeaturesResult, WorkspaceError> {
-        self.request("rome/project_features", params)
-    }
-
     fn open_file(&self, params: OpenFileParams) -> Result<(), WorkspaceError> {
         self.request("biome/open_file", params)
+    }
+
+    fn set_manifest_for_project(
+        &self,
+        params: SetManifestForProjectParams,
+    ) -> Result<(), WorkspaceError> {
+        self.request("biome/set_manifest_for_project", params)
+    }
+
+    fn register_project_folder(
+        &self,
+        params: RegisterProjectFolderParams,
+    ) -> Result<ProjectKey, WorkspaceError> {
+        self.request("biome/register_project_folder", params)
+    }
+
+    fn unregister_project_folder(
+        &self,
+        params: UnregisterProjectFolderParams,
+    ) -> Result<(), WorkspaceError> {
+        self.request("biome/unregister_project_folder", params)
     }
 
     fn get_syntax_tree(
@@ -190,6 +202,21 @@ where
 
     fn rage(&self, params: RageParams) -> Result<RageResult, WorkspaceError> {
         self.request("biome/rage", params)
+    }
+
+    fn parse_pattern(
+        &self,
+        params: super::ParsePatternParams,
+    ) -> Result<super::ParsePatternResult, WorkspaceError> {
+        self.request("biome/parse_pattern", params)
+    }
+
+    fn search_pattern(&self, params: SearchPatternParams) -> Result<SearchResults, WorkspaceError> {
+        self.request("biome/search_pattern", params)
+    }
+
+    fn drop_pattern(&self, params: super::DropPatternParams) -> Result<(), WorkspaceError> {
+        self.request("biome/drop_pattern", params)
     }
 
     fn server_info(&self) -> Option<&ServerInfo> {

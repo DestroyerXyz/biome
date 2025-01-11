@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: ts/no-semi/class.ts
 ---
-
 # Input
 
 ```ts
@@ -47,6 +46,7 @@ declare module test {
 		[computed]
 
 		set setter(a: string)
+		set setter(a: string, )
 		[computed]
 
 		method()
@@ -75,11 +75,12 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```ts
@@ -124,6 +125,7 @@ declare module test {
 		[computed];
 
 		set setter(a: string);
+		set setter(a: string,);
 		[computed];
 
 		method();
@@ -136,7 +138,7 @@ declare module test {
 }
 ```
 
-## Output 2
+## Output 1
 
 -----
 Indent style: Tab
@@ -146,11 +148,12 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: As needed
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```ts
@@ -195,6 +198,7 @@ declare module test {
 		[computed]
 
 		set setter(a: string)
+		set setter(a: string,)
 		[computed]
 
 		method()
@@ -206,5 +210,3 @@ declare module test {
 	}
 }
 ```
-
-

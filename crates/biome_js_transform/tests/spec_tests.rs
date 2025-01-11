@@ -10,6 +10,7 @@ use biome_test_utils::{
     write_transformation_snapshot,
 };
 
+use std::ops::Deref;
 use std::{ffi::OsStr, fs::read_to_string, path::Path, slice};
 
 tests_macros::gen_tests! {"tests/specs/**/*.{cjs,js,jsx,tsx,ts,json,jsonc}", crate::run_test, "module"}
@@ -26,7 +27,8 @@ fn run_test(input: &'static str, _: &str, _: &str, _: &str) {
     if rule == "specs" {
         panic!("the test file must be placed in the {rule}/<group-name>/<rule-name>/ directory");
     }
-    if biome_js_transform::metadata()
+    if biome_js_transform::METADATA
+        .deref()
         .find_rule("transformations", rule)
         .is_none()
     {
@@ -43,7 +45,7 @@ fn run_test(input: &'static str, _: &str, _: &str, _: &str) {
     let extension = input_file.extension().unwrap_or_default();
 
     let input_code = read_to_string(input_file)
-        .unwrap_or_else(|err| panic!("failed to read {:?}: {:?}", input_file, err));
+        .unwrap_or_else(|err| panic!("failed to read {input_file:?}: {err:?}"));
     let quantity_diagnostics = if let Some(scripts) = scripts_from_json(extension, &input_code) {
         for script in scripts {
             analyze_and_snap(
@@ -85,7 +87,6 @@ fn run_test(input: &'static str, _: &str, _: &str, _: &str) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn analyze_and_snap(
     snapshot: &mut String,
     input_code: &str,
@@ -142,21 +143,23 @@ fn check_transformation(
     transformation: &AnalyzerTransformation<JsLanguage>,
     options: JsParserOptions,
 ) {
-    let (_, text_edit) = transformation.mutation.as_text_edits().unwrap_or_default();
+    let (new_tree, text_edit) = match transformation
+        .mutation
+        .clone()
+        .commit_with_text_range_and_edit(true)
+    {
+        (new_tree, Some((_, text_edit))) => (new_tree, text_edit),
+        (new_tree, None) => (new_tree, Default::default()),
+    };
 
     let output = text_edit.new_string(source);
-
-    let new_tree = transformation.mutation.clone().commit();
 
     // Checks that applying the text edits returned by the BatchMutation
     // returns the same code as printing the modified syntax tree
     assert_eq!(new_tree.to_string(), output);
 
     if has_bogus_nodes_or_empty_slots(&new_tree) {
-        panic!(
-            "modified tree has bogus nodes or empty slots:\n{new_tree:#?} \n\n {}",
-            new_tree
-        )
+        panic!("modified tree has bogus nodes or empty slots:\n{new_tree:#?} \n\n {new_tree}")
     }
 
     // Checks the returned tree contains no missing children node

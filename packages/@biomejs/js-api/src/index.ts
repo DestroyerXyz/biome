@@ -1,14 +1,15 @@
 import type {
-	Configuration,
+	BiomePath,
 	Diagnostic,
-	PullDiagnosticsResult,
-	RomePath,
+	FixFileMode,
+	PartialConfiguration,
 	Workspace,
 } from "@biomejs/wasm-nodejs";
-import { Distribution, WasmModule, loadModule, wrapError } from "./wasm";
+import { Distribution, type WasmModule, loadModule, wrapError } from "./wasm";
 
 // Re-export of some useful types for users
-export type { Configuration, Diagnostic };
+export type Configuration = PartialConfiguration;
+export type { Diagnostic };
 export { Distribution };
 
 export interface FormatContentDebugOptions extends FormatContentOptions {
@@ -41,15 +42,7 @@ export interface FormatResult {
 	diagnostics: Diagnostic[];
 }
 
-export interface FormatDebugResult {
-	/**
-	 * The new formatted content
-	 */
-	content: string;
-	/**
-	 * A series of errors encountered while executing an operation
-	 */
-	diagnostics: Diagnostic[];
+export interface FormatDebugResult extends FormatResult {
 	/**
 	 * The IR emitted by the formatter
 	 */
@@ -62,6 +55,12 @@ export interface LintContentOptions {
 	 * so Biome knows how to parse the content
 	 */
 	filePath: string;
+	fixFileMode?: FixFileMode;
+}
+
+export interface LintResult {
+	content: string;
+	diagnostics: Diagnostic[];
 }
 
 function isFormatContentDebug(
@@ -98,10 +97,12 @@ export class Biome {
 	/**
 	 * It creates a new instance of the class {Biome}.
 	 */
-	public static async create(options: BiomeCreate): Promise<Biome> {
+	static async create(options: BiomeCreate): Promise<Biome> {
 		const module = await loadModule(options.distribution);
 		const workspace = new module.Workspace();
-		return new Biome(module, workspace);
+		const biome = new Biome(module, workspace);
+		biome.registerProjectFolder();
+		return biome;
 	}
 
 	/**
@@ -110,7 +111,7 @@ export class Biome {
 	 * After calling `shutdown()` on this object, it should be considered
 	 * unusable as calling any method on it will fail
 	 */
-	public shutdown() {
+	shutdown() {
 		this.workspace.free();
 	}
 
@@ -121,25 +122,44 @@ export class Biome {
 	 *
 	 * @param configuration
 	 */
-	public applyConfiguration(configuration: Configuration): void {
+	applyConfiguration(configuration: Configuration): void {
 		try {
 			this.workspace.updateSettings({
 				configuration,
 				gitignore_matches: [],
+				workspace_directory: "./",
 			});
 		} catch (e) {
 			throw wrapError(e);
 		}
 	}
 
+	registerProjectFolder(): void;
+	registerProjectFolder(path?: string): void {
+		this.workspace.registerProjectFolder({
+			path,
+			setAsCurrentWorkspace: true,
+		});
+	}
+
+	private tryCatchWrapper<T>(func: () => T): T {
+		try {
+			return func();
+		} catch (err) {
+			throw wrapError(err);
+		}
+	}
+
 	private withFile<T>(
 		path: string,
 		content: string,
-		func: (path: RomePath) => T,
+		func: (path: BiomePath) => T,
 	): T {
-		try {
-			const biomePath: RomePath = {
+		return this.tryCatchWrapper(() => {
+			const biomePath: BiomePath = {
 				path,
+				was_written: false,
+				kind: ["Handleable"],
 			};
 
 			this.workspace.openFile({
@@ -155,9 +175,7 @@ export class Biome {
 					path: biomePath,
 				});
 			}
-		} catch (err) {
-			throw wrapError(err);
-		}
+		});
 	}
 
 	formatContent(content: string, options: FormatContentOptions): FormatResult;
@@ -183,6 +201,8 @@ export class Biome {
 				path,
 				categories: ["Syntax"],
 				max_diagnostics: Number.MAX_SAFE_INTEGER,
+				only: [],
+				skip: [],
 			});
 
 			const hasErrors = diagnostics.some(
@@ -230,14 +250,40 @@ export class Biome {
 	 */
 	lintContent(
 		content: string,
-		options: LintContentOptions,
-	): PullDiagnosticsResult {
-		return this.withFile(options.filePath, content, (path) => {
-			return this.workspace.pullDiagnostics({
+		{ filePath, fixFileMode }: LintContentOptions,
+	): LintResult {
+		const maybeFixedContent = fixFileMode
+			? this.withFile(filePath, content, (path) => {
+					let code = content;
+
+					const result = this.workspace.fixFile({
+						path,
+						fix_file_mode: fixFileMode,
+						should_format: false,
+						only: [],
+						skip: [],
+						rule_categories: ["Syntax", "Lint"],
+					});
+
+					code = result.code;
+
+					return code;
+				})
+			: content;
+
+		return this.withFile(filePath, maybeFixedContent, (path) => {
+			const { diagnostics } = this.workspace.pullDiagnostics({
 				path,
 				categories: ["Syntax", "Lint"],
 				max_diagnostics: Number.MAX_SAFE_INTEGER,
+				only: [],
+				skip: [],
 			});
+
+			return {
+				content: maybeFixedContent,
+				diagnostics,
+			};
 		});
 	}
 
@@ -251,7 +297,7 @@ export class Biome {
 		diagnostics: Diagnostic[],
 		options: PrintDiagnosticsOptions,
 	): string {
-		try {
+		return this.tryCatchWrapper(() => {
 			const printer = new this.module.DiagnosticPrinter(
 				options.filePath,
 				options.fileSource,
@@ -265,16 +311,13 @@ export class Biome {
 						printer.print_simple(diag);
 					}
 				}
+				return printer.finish();
 			} catch (err) {
 				// Only call `free` if the `print` method throws, `finish` will
 				// take care of deallocating the printer even if it fails
 				printer.free();
 				throw err;
 			}
-
-			return printer.finish();
-		} catch (err) {
-			throw wrapError(err);
-		}
+		});
 	}
 }
