@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
+use std::fs;
 use std::path::{Path, PathBuf};
 use xtask::project_root;
 
@@ -34,17 +33,11 @@ pub fn coverage_compare(
     };
 
     if !base_result_dir.exists() {
-        panic!(
-            "The path to the base results doesn't exist: {:?}",
-            base_result_dir
-        );
+        panic!("The path to the base results doesn't exist: {base_result_dir:?}");
     }
 
     if !&new_result_dir.exists() {
-        panic!(
-            "The path to the new results doesn't exist: {:?}",
-            new_result_dir
-        );
+        panic!("The path to the new results doesn't exist: {new_result_dir:?}");
     }
 
     let mut base_results = read_test_results(base_result_dir.as_path(), "base")
@@ -68,20 +61,12 @@ pub fn coverage_compare(
 }
 
 fn read_test_results(path: &Path, name: &'static str) -> HashMap<String, TestResults> {
-    let mut file = File::open(path)
-        .unwrap_or_else(|err| panic!("Can't read the file of the {} results: {:?}", name, err));
-
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)
-        .unwrap_or_else(|err| panic!("Can't read the file of the {} results: {:?}", name, err));
+    let buffer = fs::read(path)
+        .unwrap_or_else(|err| panic!("Can't read the file of the {name} results: {err:?}"));
 
     let content = decode_maybe_utf16_string(&buffer)
-        .unwrap_or_else(|err| panic!("Can't read the file of the {} results: {:?}", name, err));
+        .unwrap_or_else(|err| panic!("Can't read the file of the {name} results: {err:?}"));
 
-    serde_json::from_str(&content).unwrap_or_else(|err| {
-        panic!(
-            "Can't parse the JSON file of the {} results: {:?}",
-            name, err
-        )
-    })
+    serde_json::from_str(&content)
+        .unwrap_or_else(|err| panic!("Can't parse the JSON file of the {name} results: {err:?}"))
 }

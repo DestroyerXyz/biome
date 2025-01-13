@@ -3,9 +3,9 @@
 #[rustfmt::skip]
 mod tests;
 
-use biome_js_unicode_table::{is_js_id_continue, is_js_id_start, lookup_byte, Dispatch::*};
 use biome_json_syntax::{JsonSyntaxKind, JsonSyntaxKind::*, TextLen, TextRange, TextSize, T};
 use biome_parser::diagnostic::ParseDiagnostic;
+use biome_unicode_table::{is_js_id_continue, is_js_id_start, lookup_byte, Dispatch::*};
 use std::iter::FusedIterator;
 use std::ops::Add;
 use unicode_bom::Bom;
@@ -307,7 +307,7 @@ impl<'src> Lexer<'src> {
         match dispatched {
             WHS => self.consume_newline_or_whitespaces(),
             QOT => self.lex_string_literal(current),
-            IDT => self.lex_identifier(current),
+            IDT | DOL => self.lex_identifier(current),
             COM => self.eat_byte(T![,]),
             MIN | DIG | ZER => self.lex_number(current),
             COL => self.eat_byte(T![:]),
@@ -343,7 +343,7 @@ impl<'src> Lexer<'src> {
 
         let char = self.current_char_unchecked();
         let err = ParseDiagnostic::new(
-            format!("unexpected character `{}`", char),
+            format!("unexpected character `{char}`"),
             self.text_position()..self.text_position() + char.text_len(),
         );
         self.diagnostics.push(err);
@@ -572,11 +572,9 @@ impl<'src> Lexer<'src> {
                 WHS if matches!(chr, b'\n' | b'\r') => {
                     let unterminated =
                         ParseDiagnostic::new("Missing closing quote", start..self.text_position())
-                            .with_detail(self.position..self.position + 1, "line breaks here");
-
+                            .with_hint("The closing quote must be on the same line.");
                     self.diagnostics.push(unterminated);
-
-                    return JSON_STRING_LITERAL;
+                    return ERROR_TOKEN;
                 }
                 UNI => self.advance_char_unchecked(),
 
@@ -624,8 +622,7 @@ impl<'src> Lexer<'src> {
                             "file ends here",
                         );
                 self.diagnostics.push(unterminated);
-
-                JSON_STRING_LITERAL
+                ERROR_TOKEN
             }
             LexStringState::InvalidEscapeSequence => ERROR_TOKEN,
         }
@@ -692,7 +689,7 @@ impl<'src> Lexer<'src> {
         while let Some(byte) = self.current_byte() {
             self.current_char_unchecked();
             match lookup_byte(byte) {
-                IDT | DIG | ZER => {
+                IDT | DOL | DIG | ZER => {
                     keyword = keyword.next_character(byte);
                     self.advance(1)
                 }

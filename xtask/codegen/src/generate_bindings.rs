@@ -9,8 +9,9 @@ use biome_js_syntax::{
 };
 use biome_rowan::AstNode;
 use biome_service::workspace_types::{generate_type, methods, ModuleQueue};
+use biome_string_case::Case;
 use xtask::{project_root, Mode, Result};
-use xtask_codegen::{to_camel_case, update};
+use xtask_codegen::update;
 
 pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
     let bindings_path = project_root().join("packages/@biomejs/backend-jsonrpc/src/workspace.ts");
@@ -25,7 +26,7 @@ pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
         let params = generate_type(&mut declarations, &mut queue, &method.params);
         let result = generate_type(&mut declarations, &mut queue, &method.result);
 
-        let camel_case = to_camel_case(method.name);
+        let camel_case = Case::Camel.convert(method.name);
 
         member_definitions.push(AnyTsTypeMember::TsMethodSignatureTypeMember(
             make::ts_method_signature_type_member(
@@ -182,7 +183,7 @@ pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
                         make::token(T!['}']),
                     ),
                     make::token(T![from]),
-                    make::js_module_source(make::js_string_literal("./transport")),
+                    make::js_module_source(make::js_string_literal("./transport")).into(),
                 )
                 .with_type_token(make::token(T![type]))
                 .build(),
@@ -308,13 +309,33 @@ pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
         .build(),
     ));
 
+    // Export `PartialConfiguration` as `Configuration` for backwards compatibility.
+    items.push(AnyJsModuleItem::JsExport(make::js_export(
+        make::js_decorator_list([]),
+        make::token(T![export]),
+        AnyJsExportClause::AnyJsDeclarationClause(AnyJsDeclarationClause::TsTypeAliasDeclaration(
+            make::ts_type_alias_declaration(
+                make::token(T![type]),
+                make::ts_identifier_binding(make::ident("Configuration")).into(),
+                make::token(T![=]),
+                AnyTsType::TsReferenceType(
+                    make::ts_reference_type(AnyTsName::JsReferenceIdentifier(
+                        make::js_reference_identifier(make::ident("PartialConfiguration")),
+                    ))
+                    .build(),
+                ),
+            )
+            .build(),
+        )),
+    )));
+
     items.push(AnyJsModuleItem::JsExport(make::js_export(
         make::js_decorator_list([]),
         make::token(T![export]),
         AnyJsExportClause::AnyJsDeclarationClause(AnyJsDeclarationClause::TsInterfaceDeclaration(
             make::ts_interface_declaration(
                 make::token(T![interface]),
-                make::ts_identifier_binding(make::ident("Workspace")),
+                make::ts_identifier_binding(make::ident("Workspace")).into(),
                 make::token(T!['{']),
                 make::ts_type_member_list(member_definitions),
                 make::token(T!['}']),

@@ -447,7 +447,7 @@ impl<L: Language> DecoratedComment<L> {
     /// and the token.
     ///
     /// ```ignore
-    /// a /* comment */ /* other b */
+    /// a /* comment */ /* other */ b
     /// ```
     ///
     /// The `following_token` for both comments is `b` because it's the token coming after the comments.
@@ -902,7 +902,7 @@ impl<L: Language> Comments<L> {
     pub fn leading_dangling_trailing_comments<'a>(
         &'a self,
         node: &'a SyntaxNode<L>,
-    ) -> impl Iterator<Item = &SourceComment<L>> + 'a {
+    ) -> impl Iterator<Item = &'a SourceComment<L>> + 'a {
         self.data.comments.parts(&node.key())
     }
 

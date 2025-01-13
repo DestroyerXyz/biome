@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
 ---
 # Input
-```js
+```jsx
 const self = this, v = 0, /*u*/ u = 2, self2 = this;
 
 function f() {
@@ -29,6 +29,34 @@ function f() {
         self.g();
     }
 }
+
+
+// https://github.com/biomejs/biome/issues/1633
+class FetchServersMetrics extends React.Component {
+    _fetchServersMetrics() {
+      const { onStatusChange, appIds, filters, time } = this.props;
+      const component = this;
+
+      fetchServers(appIds, time)
+        .then(servers => {
+          const data = isEmpty(filters) ? servers : applyFilters(servers, filters);
+          component.setState({
+            timestamp: new Date().getTime(),
+            isLoading: false,
+            data: data.filter(identity),
+          });
+        })
+        .catch((err) => {
+          component.setState({ serverError: throwOrResolve(err) });
+        })
+        .then(() => component.setState({ isLoading: false }));
+    }
+
+    render() {
+      const { children } = this.props;
+      return children(this._fetchServerMetrics);
+    }
+  }
 
 ```
 
@@ -87,12 +115,10 @@ invalid.js:5:11 lint/complexity/noUselessThisAlias  FIXABLE  ━━━━━━�
   
   i Safe fix: Use this instead of an alias.
   
-     1  1 │   const self = this, v = 0, /*u*/ u = 2, self2 = this;
      2  2 │   
-     3    │ - function·f()·{
+     3  3 │   function f() {
      4    │ - ····//·assignment·comment
      5    │ - ····const·self·=·this;
-        3 │ + function·f()·{;
      6  4 │       return () => {
      7    │ - ········/*a*/self/*b*/.g();
         5 │ + ········/*a*/this/*b*/.g();
@@ -117,11 +143,9 @@ invalid.js:12:9 lint/complexity/noUselessThisAlias  FIXABLE  ━━━━━━�
   
   i Safe fix: Use this instead of an alias.
   
-     9  9 │   }
     10 10 │   
-    11    │ - function·f()·{
+    11 11 │   function f() {
     12    │ - ····let·self·=·this;
-       11 │ + function·f()·{;
     13 12 │       return () => {
     14    │ - ········self.g();
        13 │ + ········this.g();
@@ -146,16 +170,13 @@ invalid.js:19:9 lint/complexity/noUselessThisAlias  FIXABLE  ━━━━━━�
   
   i Safe fix: Use this instead of an alias.
   
-    16 16 │   }
     17 17 │   
-    18    │ - function·f()·{
+    18 18 │   function f() {
     19    │ - ····var·self;
     20    │ - ····self·=·this;
     21    │ - ····self·=·this;
-    22    │ - ····return·()·=>·{
+    22 19 │       return () => {
     23    │ - ········self.g();
-       18 │ + function·f()·{;
-       19 │ + ····return·()·=>·{
        20 │ + ········this.g();
     24 21 │       }
     25 22 │   }
@@ -163,4 +184,43 @@ invalid.js:19:9 lint/complexity/noUselessThisAlias  FIXABLE  ━━━━━━�
 
 ```
 
+```
+invalid.js:32:13 lint/complexity/noUselessThisAlias  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  ! This aliasing of this is unnecessary.
+  
+    30 │     _fetchServersMetrics() {
+    31 │       const { onStatusChange, appIds, filters, time } = this.props;
+  > 32 │       const component = this;
+       │             ^^^^^^^^^^^^^^^^
+    33 │ 
+    34 │       fetchServers(appIds, time)
+  
+  i Arrow functions inherits `this` from their enclosing scope.
+  
+  i Safe fix: Use this instead of an alias.
+  
+    30 30 │       _fetchServersMetrics() {
+    31 31 │         const { onStatusChange, appIds, filters, time } = this.props;
+    32    │ - ······const·component·=·this;
+    33 32 │   
+    34 33 │         fetchServers(appIds, time)
+    35 34 │           .then(servers => {
+    36 35 │             const data = isEmpty(filters) ? servers : applyFilters(servers, filters);
+    37    │ - ··········component.setState({
+       36 │ + ··········this.setState({
+    38 37 │               timestamp: new Date().getTime(),
+    39 38 │               isLoading: false,
+    ····· │ 
+    42 41 │           })
+    43 42 │           .catch((err) => {
+    44    │ - ··········component.setState({·serverError:·throwOrResolve(err)·});
+       43 │ + ··········this.setState({·serverError:·throwOrResolve(err)·});
+    45 44 │           })
+    46    │ - ········.then(()·=>·component.setState({·isLoading:·false·}));
+       45 │ + ········.then(()·=>·this.setState({·isLoading:·false·}));
+    47 46 │       }
+    48 47 │   
+  
+
+```

@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.jsonc
 ---
 # Input
-```js
+```cjs
 const isZero = a == 0;
 ```
 
@@ -21,7 +21,7 @@ invalid.jsonc:1:18 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━�
   > 1 │ const isZero = a == 0;
       │                  ^^
   
-  i Using === may be unsafe if you are relying on type coercion
+  i Using == may be unsafe if you are relying on type coercion
   
   i Unsafe fix: Use ===
   
@@ -31,7 +31,7 @@ invalid.jsonc:1:18 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━�
 ```
 
 # Input
-```js
+```cjs
 const isNonZero = a != 0;
 ```
 
@@ -49,7 +49,7 @@ invalid.jsonc:1:21 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━�
   > 1 │ const isNonZero = a != 0;
       │                     ^^
   
-  i Using !== may be unsafe if you are relying on type coercion
+  i Using != may be unsafe if you are relying on type coercion
   
   i Unsafe fix: Use !==
   
@@ -57,5 +57,3 @@ invalid.jsonc:1:21 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━�
       │                       +   
 
 ```
-
-

@@ -2,7 +2,6 @@
 source: crates/biome_css_parser/tests/spec_test.rs
 expression: snapshot
 ---
-
 ## Input
 
 ```css
@@ -20,16 +19,17 @@ CssRoot {
     rules: CssRuleList [
         CssAtRule {
             at_token: AT@0..1 "@" [] [],
-            rule: CssBogusAtRule {
-                items: [
-                    FONT_FACE_KW@1..11 "font-face" [] [Whitespace(" ")],
-                ],
+            rule: CssFontFaceAtRule {
+                font_face_token: FONT_FACE_KW@1..11 "font-face" [] [Whitespace(" ")],
+                block: CssBogusBlock {
+                    items: [],
+                },
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssTypeSelector {
                         namespace: missing (optional),
                         ident: CssIdentifier {
@@ -39,40 +39,41 @@ CssRoot {
                     sub_selectors: CssSubSelectorList [],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@15..16 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@16..17 "}" [] [],
             },
         },
         CssAtRule {
             at_token: AT@17..19 "@" [Newline("\n")] [],
-            rule: CssBogusAtRule {
-                items: [
-                    FONT_FACE_KW@19..29 "font-face" [] [Whitespace(" ")],
-                ],
+            rule: CssFontFaceAtRule {
+                font_face_token: FONT_FACE_KW@19..29 "font-face" [] [Whitespace(" ")],
+                block: CssBogusBlock {
+                    items: [],
+                },
+            },
+        },
+        CssQualifiedRule {
+            prelude: CssSelectorList [
+                CssCompoundSelector {
+                    nesting_selectors: CssNestedSelectorList [],
+                    simple_selector: CssTypeSelector {
+                        namespace: missing (optional),
+                        ident: CssIdentifier {
+                            value_token: IDENT@29..32 "foo" [] [],
+                        },
+                    },
+                    sub_selectors: CssSubSelectorList [],
+                },
+            ],
+            block: CssBogusBlock {
+                items: [],
             },
         },
         CssBogusRule {
             items: [
-                CssSelectorList [
-                    CssCompoundSelector {
-                        nesting_selector_token: missing (optional),
-                        simple_selector: CssTypeSelector {
-                            namespace: missing (optional),
-                            ident: CssIdentifier {
-                                value_token: IDENT@29..32 "foo" [] [],
-                            },
-                        },
-                        sub_selectors: CssSubSelectorList [],
-                    },
-                    missing separator,
-                    CssBogusSelector {
-                        items: [
-                            SEMICOLON@32..33 ";" [] [],
-                        ],
-                    },
-                ],
+                SEMICOLON@32..33 ";" [] [],
             ],
         },
         CssAtRule {
@@ -80,11 +81,14 @@ CssRoot {
             rule: CssFontFaceAtRule {
                 font_face_token: FONT_FACE_KW@35..45 "font-face" [] [Whitespace(" ")],
                 block: CssBogusBlock {
-                    items: [
-                        SEMICOLON@45..46 ";" [] [],
-                    ],
+                    items: [],
                 },
             },
+        },
+        CssBogusRule {
+            items: [
+                SEMICOLON@45..46 ";" [] [],
+            ],
         },
     ],
     eof_token: EOF@46..46 "" [] [],
@@ -99,43 +103,46 @@ CssRoot {
   1: CSS_RULE_LIST@0..46
     0: CSS_AT_RULE@0..11
       0: AT@0..1 "@" [] []
-      1: CSS_BOGUS_AT_RULE@1..11
+      1: CSS_FONT_FACE_AT_RULE@1..11
         0: FONT_FACE_KW@1..11 "font-face" [] [Whitespace(" ")]
-    1: CSS_RULE@11..17
+        1: CSS_BOGUS_BLOCK@11..11
+    1: CSS_QUALIFIED_RULE@11..17
       0: CSS_SELECTOR_LIST@11..15
         0: CSS_COMPOUND_SELECTOR@11..15
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@11..11
           1: CSS_TYPE_SELECTOR@11..15
             0: (empty)
             1: CSS_IDENTIFIER@11..15
               0: IDENT@11..15 "foo" [] [Whitespace(" ")]
           2: CSS_SUB_SELECTOR_LIST@15..15
-      1: CSS_DECLARATION_LIST_BLOCK@15..17
+      1: CSS_DECLARATION_OR_RULE_BLOCK@15..17
         0: L_CURLY@15..16 "{" [] []
-        1: CSS_DECLARATION_LIST@16..16
+        1: CSS_DECLARATION_OR_RULE_LIST@16..16
         2: R_CURLY@16..17 "}" [] []
     2: CSS_AT_RULE@17..29
       0: AT@17..19 "@" [Newline("\n")] []
-      1: CSS_BOGUS_AT_RULE@19..29
+      1: CSS_FONT_FACE_AT_RULE@19..29
         0: FONT_FACE_KW@19..29 "font-face" [] [Whitespace(" ")]
-    3: CSS_BOGUS_RULE@29..33
-      0: CSS_SELECTOR_LIST@29..33
+        1: CSS_BOGUS_BLOCK@29..29
+    3: CSS_QUALIFIED_RULE@29..32
+      0: CSS_SELECTOR_LIST@29..32
         0: CSS_COMPOUND_SELECTOR@29..32
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@29..29
           1: CSS_TYPE_SELECTOR@29..32
             0: (empty)
             1: CSS_IDENTIFIER@29..32
               0: IDENT@29..32 "foo" [] []
           2: CSS_SUB_SELECTOR_LIST@32..32
-        1: (empty)
-        2: CSS_BOGUS_SELECTOR@32..33
-          0: SEMICOLON@32..33 ";" [] []
-    4: CSS_AT_RULE@33..46
+      1: CSS_BOGUS_BLOCK@32..32
+    4: CSS_BOGUS_RULE@32..33
+      0: SEMICOLON@32..33 ";" [] []
+    5: CSS_AT_RULE@33..45
       0: AT@33..35 "@" [Newline("\n")] []
-      1: CSS_FONT_FACE_AT_RULE@35..46
+      1: CSS_FONT_FACE_AT_RULE@35..45
         0: FONT_FACE_KW@35..45 "font-face" [] [Whitespace(" ")]
-        1: CSS_BOGUS_BLOCK@45..46
-          0: SEMICOLON@45..46 ";" [] []
+        1: CSS_BOGUS_BLOCK@45..45
+    6: CSS_BOGUS_RULE@45..46
+      0: SEMICOLON@45..46 ";" [] []
   2: EOF@46..46 "" [] []
 
 ```
@@ -145,35 +152,25 @@ CssRoot {
 ```
 at_rule_font_face_error.css:1:12 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Expected a body but instead found 'foo'.
+  × expected `{` but instead found `foo`
   
   > 1 │ @font-face foo {}
       │            ^^^
     2 │ @font-face foo;
     3 │ @font-face ;
   
-  i Expected a body here.
-  
-  > 1 │ @font-face foo {}
-      │            ^^^
-    2 │ @font-face foo;
-    3 │ @font-face ;
+  i Remove foo
   
 at_rule_font_face_error.css:2:12 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Expected a body but instead found 'foo'.
+  × expected `{` but instead found `foo`
   
     1 │ @font-face foo {}
   > 2 │ @font-face foo;
       │            ^^^
     3 │ @font-face ;
   
-  i Expected a body here.
-  
-    1 │ @font-face foo {}
-  > 2 │ @font-face foo;
-      │            ^^^
-    3 │ @font-face ;
+  i Remove foo
   
 at_rule_font_face_error.css:2:15 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -186,33 +183,15 @@ at_rule_font_face_error.css:2:15 parse ━━━━━━━━━━━━━�
   
   i Remove ;
   
-at_rule_font_face_error.css:3:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × expected `,` but instead found `@`
-  
-    1 │ @font-face foo {}
-    2 │ @font-face foo;
-  > 3 │ @font-face ;
-      │ ^
-  
-  i Remove @
-  
 at_rule_font_face_error.css:3:12 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Expected a body but instead found ';'.
+  × expected `{` but instead found `;`
   
     1 │ @font-face foo {}
     2 │ @font-face foo;
   > 3 │ @font-face ;
       │            ^
   
-  i Expected a body here.
-  
-    1 │ @font-face foo {}
-    2 │ @font-face foo;
-  > 3 │ @font-face ;
-      │            ^
+  i Remove ;
   
 ```
-
-

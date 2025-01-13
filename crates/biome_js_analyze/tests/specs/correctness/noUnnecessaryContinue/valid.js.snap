@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: valid.js
 ---
 # Input
-```js
+```jsx
 test3: do {
 	if (i < 2) {
 		continue test3;
@@ -98,12 +98,8 @@ valid.js:53:3 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━�
     51 51 │   	if (x) {
     52    │ - → → //·before
     53    │ - → → continue;·//·statement
-    54    │ - → → //·after
-       52 │ + → → //·after
+    54 52 │   		// after
     55 53 │   	} else {
-    56 54 │   		doSomeStuff();
   
 
 ```
-
-

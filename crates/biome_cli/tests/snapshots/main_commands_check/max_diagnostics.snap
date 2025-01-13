@@ -157,11 +157,10 @@ check ━━━━━━━━━━━━━━━━━━━━━━━━�
 
 ```block
 The number of diagnostics exceeds the number allowed by Biome.
-Diagnostics not shown: 90.
+Diagnostics not shown: 50.
 ```
 
 ```block
-Checked 20 file(s) in <TIME>
+Checked 20 files in <TIME>. No fixes needed.
+Found 60 errors.
 ```
-
-

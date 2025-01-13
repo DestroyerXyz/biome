@@ -1,12 +1,15 @@
 use super::parse_error::expected_media_query;
 use crate::parser::CssParser;
 use crate::syntax::at_rule::feature::parse_any_query_feature;
-use crate::syntax::blocks::parse_or_recover_rule_list_block;
-use crate::syntax::{is_at_identifier, is_nth_at_identifier, parse_regular_identifier};
+use crate::syntax::block::parse_conditional_block;
+use crate::syntax::{
+    is_at_identifier, is_at_metavariable, is_nth_at_identifier, parse_metavariable,
+    parse_regular_identifier,
+};
 use biome_css_syntax::CssSyntaxKind::*;
 use biome_css_syntax::{CssSyntaxKind, T};
 use biome_parser::parse_lists::ParseSeparatedList;
-use biome_parser::parse_recovery::{ParseRecovery, RecoveryResult};
+use biome_parser::parse_recovery::{ParseRecoveryTokenSet, RecoveryResult};
 use biome_parser::parsed_syntax::ParsedSyntax::Present;
 use biome_parser::prelude::ParsedSyntax::Absent;
 use biome_parser::prelude::*;
@@ -26,19 +29,24 @@ pub(crate) fn parse_media_at_rule(p: &mut CssParser) -> ParsedSyntax {
 
     p.bump(T![media]);
 
-    CssMediaQueryList.parse_list(p);
+    MediaQueryList::new(T!['{']).parse_list(p);
 
-    if parse_or_recover_rule_list_block(p).is_err() {
-        return Present(m.complete(p, CSS_BOGUS_AT_RULE));
-    }
+    parse_conditional_block(p);
 
     Present(m.complete(p, CSS_MEDIA_AT_RULE))
 }
 
-#[derive(Default)]
-pub(crate) struct CssMediaQueryList;
+pub(crate) struct MediaQueryList {
+    end_kind: CssSyntaxKind,
+}
 
-impl ParseSeparatedList for CssMediaQueryList {
+impl MediaQueryList {
+    pub(crate) fn new(end_kind: CssSyntaxKind) -> Self {
+        Self { end_kind }
+    }
+}
+
+impl ParseSeparatedList for MediaQueryList {
     type Kind = CssSyntaxKind;
     type Parser<'source> = CssParser<'source>;
     const LIST_KIND: Self::Kind = CSS_MEDIA_QUERY_LIST;
@@ -48,7 +56,7 @@ impl ParseSeparatedList for CssMediaQueryList {
     }
 
     fn is_at_list_end(&self, p: &mut Self::Parser<'_>) -> bool {
-        p.at(T!['{'])
+        p.at(self.end_kind)
     }
 
     fn recover(
@@ -56,9 +64,9 @@ impl ParseSeparatedList for CssMediaQueryList {
         p: &mut Self::Parser<'_>,
         parsed_element: ParsedSyntax,
     ) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(CSS_BOGUS_MEDIA_QUERY, token_set!(T![,], T!['{'])),
+            &ParseRecoveryTokenSet::new(CSS_BOGUS_MEDIA_QUERY, token_set!(T![,], T!['{'])),
             expected_media_query,
         )
     }
@@ -72,10 +80,14 @@ impl ParseSeparatedList for CssMediaQueryList {
 fn parse_any_media_query(p: &mut CssParser) -> ParsedSyntax {
     if is_at_media_type_query(p) {
         parse_any_media_type_query(p)
-    } else {
+    } else if is_at_metavariable(p) {
+        parse_metavariable(p)
+    } else if is_at_any_media_condition(p) {
         let m = p.start();
         parse_any_media_condition(p).ok(); // TODO handle error
         Present(m.complete(p, CSS_MEDIA_CONDITION_QUERY))
+    } else {
+        Absent
     }
 }
 

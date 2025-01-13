@@ -5,22 +5,25 @@
 #[macro_use]
 mod generated;
 pub mod assign_ext;
+pub mod binary_like_expression;
 pub mod binding_ext;
 pub mod declaration_ext;
 pub mod directive_ext;
 pub mod export_ext;
 pub mod expr_ext;
+pub mod expression_left_side;
 pub mod file_source;
 pub mod function_ext;
 pub mod identifier_ext;
 pub mod import_ext;
 pub mod jsx_ext;
+pub mod misc_ext;
 pub mod modifier_ext;
 pub mod numbers;
 pub mod parameter_ext;
+pub mod parentheses;
 pub mod static_value;
 pub mod stmt_ext;
-pub mod suppression;
 mod syntax_node;
 pub mod type_ext;
 mod union_ext;
@@ -34,12 +37,13 @@ pub use expr_ext::*;
 pub use file_source::*;
 pub use function_ext::*;
 pub use identifier_ext::*;
+pub use import_ext::*;
 pub use modifier_ext::*;
 pub use stmt_ext::*;
 pub use syntax_node::*;
 
 use crate::JsSyntaxKind::*;
-use biome_rowan::{AstNode, RawSyntaxKind};
+use biome_rowan::{AstNode, RawSyntaxKind, SyntaxKind, SyntaxResult};
 
 impl From<u16> for JsSyntaxKind {
     fn from(d: u16) -> JsSyntaxKind {
@@ -55,21 +59,20 @@ impl From<JsSyntaxKind> for u16 {
 }
 
 impl JsSyntaxKind {
-    pub fn is_trivia(self) -> bool {
-        matches!(
-            self,
-            JsSyntaxKind::NEWLINE
-                | JsSyntaxKind::WHITESPACE
-                | JsSyntaxKind::COMMENT
-                | JsSyntaxKind::MULTILINE_COMMENT
-        )
-    }
-
     /// Returns `true` for any contextual (await) or non-contextual keyword
     #[inline]
     pub const fn is_keyword(self) -> bool {
         (self as u16) <= (JsSyntaxKind::USING_KW as u16)
             && (self as u16) >= (JsSyntaxKind::BREAK_KW as u16)
+    }
+
+    /// Returns `true` for any kind representing a Grit metavariable.
+    #[inline]
+    pub fn is_metavariable(&self) -> bool {
+        matches!(
+            self,
+            JsSyntaxKind::GRIT_METAVARIABLE | JsSyntaxKind::JS_METAVARIABLE
+        )
     }
 
     /// Returns `true` for contextual keywords (excluding strict mode contextual keywords)
@@ -148,6 +151,16 @@ impl biome_rowan::SyntaxKind for JsSyntaxKind {
         JsSyntaxKind::is_list(*self)
     }
 
+    fn is_trivia(self) -> bool {
+        matches!(
+            self,
+            JsSyntaxKind::NEWLINE
+                | JsSyntaxKind::WHITESPACE
+                | JsSyntaxKind::COMMENT
+                | JsSyntaxKind::MULTILINE_COMMENT
+        )
+    }
+
     fn to_string(&self) -> Option<&'static str> {
         JsSyntaxKind::to_string(self)
     }
@@ -172,7 +185,6 @@ impl TryFrom<JsSyntaxKind> for TriviaPieceKind {
 }
 
 /// See: [MDN Operator precedence](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence#table)
-#[allow(dead_code)]
 #[derive(Debug, Eq, Ord, PartialOrd, PartialEq, Copy, Clone, Hash)]
 pub enum OperatorPrecedence {
     Comma = 0,
@@ -208,7 +220,6 @@ impl OperatorPrecedence {
     }
 
     /// Returns the operator with the highest precedence
-    #[allow(dead_code)]
     pub fn highest() -> Self {
         OperatorPrecedence::Primary
     }
@@ -307,4 +318,15 @@ pub fn inner_string_text(token: &JsSyntaxToken) -> TokenText {
         text = text.slice(range);
     }
     text
+}
+
+/// Returns `Ok(true)` if `maybe_argument` is an argument of a [test call expression](JsCallExpression::is_test_call_expression).
+pub fn is_test_call_argument(maybe_argument: &JsSyntaxNode) -> SyntaxResult<bool> {
+    let call_expression = maybe_argument
+        .parent()
+        .and_then(JsCallArgumentList::cast)
+        .and_then(|args| args.syntax().grand_parent())
+        .and_then(JsCallExpression::cast);
+
+    call_expression.map_or(Ok(false), |call| call.is_test_call_expression())
 }

@@ -3,42 +3,10 @@ use biome_rowan::{AstNode, Direction, WalkEvent};
 use std::iter;
 
 pub mod batch;
-pub mod case;
 pub mod rename;
+pub mod restricted_regex;
 #[cfg(test)]
 pub mod tests;
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum EscapeError {
-    EscapeAtEndOfString,
-    InvalidEscapedChar(char),
-}
-
-struct InterpretEscapedString<'a> {
-    s: std::str::Chars<'a>,
-}
-
-impl<'a> Iterator for InterpretEscapedString<'a> {
-    type Item = Result<char, EscapeError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.s.next().map(|c| match c {
-            '\\' => match self.s.next() {
-                None => Err(EscapeError::EscapeAtEndOfString),
-                Some('n') => Ok('\n'),
-                Some('\\') => Ok('\\'),
-                Some(c) => Err(EscapeError::InvalidEscapedChar(c)),
-            },
-            c => Ok(c),
-        })
-    }
-}
-
-/// unescape
-///
-pub(crate) fn escape_string(s: &str) -> Result<String, EscapeError> {
-    (InterpretEscapedString { s: s.chars() }).collect()
-}
 
 /// Verifies that both nodes are equal by checking their descendants (nodes included) kinds
 /// and tokens (same kind and inner token text).
@@ -72,7 +40,7 @@ pub(crate) fn is_node_equal(a_node: &JsSyntaxNode, b_node: &JsSyntaxNode) -> boo
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum VariablePosition {
+pub enum VariablePosition {
     Right,
     Left,
 }
@@ -101,9 +69,9 @@ pub(crate) fn find_variable_position(
         .map(|child| child.omit_parentheses())
         .filter(|child| child.syntax().text_trimmed() == variable)
         .map(|child| {
-            if child.syntax().text_trimmed_range().end() < operator_range.start() {
+            if child.syntax().text_trimmed_range().end() <= operator_range.start() {
                 return VariablePosition::Left;
-            } else if operator_range.end() < child.syntax().text_trimmed_range().start() {
+            } else if operator_range.end() <= child.syntax().text_trimmed_range().start() {
                 return VariablePosition::Right;
             }
 
@@ -186,5 +154,28 @@ mod test {
         );
 
         assert_eq!(position, None);
+    }
+
+    #[test]
+    fn find_variable_position_when_the_operator_has_no_spaces_around() {
+        let source = "l-c";
+        let parsed = parse(
+            source,
+            JsFileSource::js_module(),
+            JsParserOptions::default(),
+        );
+
+        let binary_expression = parsed
+            .syntax()
+            .descendants()
+            .find_map(JsBinaryExpression::cast);
+
+        let variable = "l";
+        let position = find_variable_position(
+            &binary_expression.expect("valid binary expression"),
+            variable,
+        );
+
+        assert_eq!(position, Some(VariablePosition::Left));
     }
 }

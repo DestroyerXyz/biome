@@ -2,7 +2,6 @@
 source: crates/biome_css_parser/tests/spec_test.rs
 expression: snapshot
 ---
-
 ## Input
 
 ```css
@@ -21,10 +20,10 @@ expression: snapshot
 CssRoot {
     bom_token: missing (optional),
     rules: CssRuleList [
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssPseudoClassSelector {
@@ -33,7 +32,7 @@ CssRoot {
                                 name: HOST_KW@1..5 "host" [] [],
                                 l_paren_token: L_PAREN@5..6 "(" [] [],
                                 selector: CssCompoundSelector {
-                                    nesting_selector_token: missing (optional),
+                                    nesting_selectors: CssNestedSelectorList [],
                                     simple_selector: missing (optional),
                                     sub_selectors: CssSubSelectorList [
                                         CssClassSelector {
@@ -50,16 +49,16 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@31..32 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@32..33 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssPseudoClassSelector {
@@ -68,7 +67,7 @@ CssRoot {
                                 name: HOST_KW@35..39 "host" [] [],
                                 l_paren_token: L_PAREN@39..43 "(" [] [Whitespace("   ")],
                                 selector: CssCompoundSelector {
-                                    nesting_selector_token: missing (optional),
+                                    nesting_selectors: CssNestedSelectorList [],
                                     simple_selector: missing (optional),
                                     sub_selectors: CssSubSelectorList [
                                         CssClassSelector {
@@ -85,16 +84,16 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@71..72 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@72..73 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssPseudoClassSelector {
@@ -103,7 +102,7 @@ CssRoot {
                                 name: HOST_KW@75..79 "host" [] [],
                                 l_paren_token: L_PAREN@79..80 "(" [] [],
                                 selector: CssCompoundSelector {
-                                    nesting_selector_token: missing (optional),
+                                    nesting_selectors: CssNestedSelectorList [],
                                     simple_selector: missing (optional),
                                     sub_selectors: CssSubSelectorList [
                                         CssClassSelector {
@@ -120,16 +119,16 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@89..90 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@90..91 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssPseudoClassSelector {
@@ -143,17 +142,17 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@98..99 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@99..100 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssComplexSelector {
                     left: CssCompoundSelector {
-                        nesting_selector_token: missing (optional),
+                        nesting_selectors: CssNestedSelectorList [],
                         simple_selector: missing (optional),
                         sub_selectors: CssSubSelectorList [
                             CssPseudoClassSelector {
@@ -162,7 +161,7 @@ CssRoot {
                                     name: HOST_KW@102..106 "host" [] [],
                                     l_paren_token: L_PAREN@106..107 "(" [] [],
                                     selector: CssCompoundSelector {
-                                        nesting_selector_token: missing (optional),
+                                        nesting_selectors: CssNestedSelectorList [],
                                         simple_selector: missing (optional),
                                         sub_selectors: CssSubSelectorList [
                                             CssClassSelector {
@@ -180,7 +179,7 @@ CssRoot {
                     },
                     combinator: CSS_SPACE_LITERAL@115..116 " " [] [],
                     right: CssCompoundSelector {
-                        nesting_selector_token: missing (optional),
+                        nesting_selectors: CssNestedSelectorList [],
                         simple_selector: missing (optional),
                         sub_selectors: CssSubSelectorList [
                             CssClassSelector {
@@ -193,9 +192,9 @@ CssRoot {
                     },
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@121..122 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@122..123 "}" [] [],
             },
         },
@@ -210,10 +209,10 @@ CssRoot {
 0: CSS_ROOT@0..124
   0: (empty)
   1: CSS_RULE_LIST@0..123
-    0: CSS_RULE@0..33
+    0: CSS_QUALIFIED_RULE@0..33
       0: CSS_SELECTOR_LIST@0..31
         0: CSS_COMPOUND_SELECTOR@0..31
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@0..0
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@0..31
             0: CSS_PSEUDO_CLASS_SELECTOR@0..31
@@ -222,7 +221,7 @@ CssRoot {
                 0: HOST_KW@1..5 "host" [] []
                 1: L_PAREN@5..6 "(" [] []
                 2: CSS_COMPOUND_SELECTOR@6..29
-                  0: (empty)
+                  0: CSS_NESTED_SELECTOR_LIST@6..6
                   1: (empty)
                   2: CSS_SUB_SELECTOR_LIST@6..29
                     0: CSS_CLASS_SELECTOR@6..29
@@ -230,14 +229,14 @@ CssRoot {
                       1: CSS_CUSTOM_IDENTIFIER@7..29
                         0: IDENT@7..29 "special-custom-element" [] []
                 3: R_PAREN@29..31 ")" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@31..33
+      1: CSS_DECLARATION_OR_RULE_BLOCK@31..33
         0: L_CURLY@31..32 "{" [] []
-        1: CSS_DECLARATION_LIST@32..32
+        1: CSS_DECLARATION_OR_RULE_LIST@32..32
         2: R_CURLY@32..33 "}" [] []
-    1: CSS_RULE@33..73
+    1: CSS_QUALIFIED_RULE@33..73
       0: CSS_SELECTOR_LIST@33..71
         0: CSS_COMPOUND_SELECTOR@33..71
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@33..33
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@33..71
             0: CSS_PSEUDO_CLASS_SELECTOR@33..71
@@ -246,7 +245,7 @@ CssRoot {
                 0: HOST_KW@35..39 "host" [] []
                 1: L_PAREN@39..43 "(" [] [Whitespace("   ")]
                 2: CSS_COMPOUND_SELECTOR@43..69
-                  0: (empty)
+                  0: CSS_NESTED_SELECTOR_LIST@43..43
                   1: (empty)
                   2: CSS_SUB_SELECTOR_LIST@43..69
                     0: CSS_CLASS_SELECTOR@43..69
@@ -254,14 +253,14 @@ CssRoot {
                       1: CSS_CUSTOM_IDENTIFIER@44..69
                         0: IDENT@44..69 "special-custom-element" [] [Whitespace("   ")]
                 3: R_PAREN@69..71 ")" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@71..73
+      1: CSS_DECLARATION_OR_RULE_BLOCK@71..73
         0: L_CURLY@71..72 "{" [] []
-        1: CSS_DECLARATION_LIST@72..72
+        1: CSS_DECLARATION_OR_RULE_LIST@72..72
         2: R_CURLY@72..73 "}" [] []
-    2: CSS_RULE@73..91
+    2: CSS_QUALIFIED_RULE@73..91
       0: CSS_SELECTOR_LIST@73..89
         0: CSS_COMPOUND_SELECTOR@73..89
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@73..73
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@73..89
             0: CSS_PSEUDO_CLASS_SELECTOR@73..89
@@ -270,7 +269,7 @@ CssRoot {
                 0: HOST_KW@75..79 "host" [] []
                 1: L_PAREN@79..80 "(" [] []
                 2: CSS_COMPOUND_SELECTOR@80..87
-                  0: (empty)
+                  0: CSS_NESTED_SELECTOR_LIST@80..80
                   1: (empty)
                   2: CSS_SUB_SELECTOR_LIST@80..87
                     0: CSS_CLASS_SELECTOR@80..87
@@ -278,14 +277,14 @@ CssRoot {
                       1: CSS_CUSTOM_IDENTIFIER@81..87
                         0: IDENT@81..87 "footer" [] []
                 3: R_PAREN@87..89 ")" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@89..91
+      1: CSS_DECLARATION_OR_RULE_BLOCK@89..91
         0: L_CURLY@89..90 "{" [] []
-        1: CSS_DECLARATION_LIST@90..90
+        1: CSS_DECLARATION_OR_RULE_LIST@90..90
         2: R_CURLY@90..91 "}" [] []
-    3: CSS_RULE@91..100
+    3: CSS_QUALIFIED_RULE@91..100
       0: CSS_SELECTOR_LIST@91..98
         0: CSS_COMPOUND_SELECTOR@91..98
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@91..91
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@91..98
             0: CSS_PSEUDO_CLASS_SELECTOR@91..98
@@ -293,15 +292,15 @@ CssRoot {
               1: CSS_PSEUDO_CLASS_IDENTIFIER@93..98
                 0: CSS_IDENTIFIER@93..98
                   0: IDENT@93..98 "host" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@98..100
+      1: CSS_DECLARATION_OR_RULE_BLOCK@98..100
         0: L_CURLY@98..99 "{" [] []
-        1: CSS_DECLARATION_LIST@99..99
+        1: CSS_DECLARATION_OR_RULE_LIST@99..99
         2: R_CURLY@99..100 "}" [] []
-    4: CSS_RULE@100..123
+    4: CSS_QUALIFIED_RULE@100..123
       0: CSS_SELECTOR_LIST@100..121
         0: CSS_COMPLEX_SELECTOR@100..121
           0: CSS_COMPOUND_SELECTOR@100..115
-            0: (empty)
+            0: CSS_NESTED_SELECTOR_LIST@100..100
             1: (empty)
             2: CSS_SUB_SELECTOR_LIST@100..115
               0: CSS_PSEUDO_CLASS_SELECTOR@100..115
@@ -310,7 +309,7 @@ CssRoot {
                   0: HOST_KW@102..106 "host" [] []
                   1: L_PAREN@106..107 "(" [] []
                   2: CSS_COMPOUND_SELECTOR@107..114
-                    0: (empty)
+                    0: CSS_NESTED_SELECTOR_LIST@107..107
                     1: (empty)
                     2: CSS_SUB_SELECTOR_LIST@107..114
                       0: CSS_CLASS_SELECTOR@107..114
@@ -320,19 +319,17 @@ CssRoot {
                   3: R_PAREN@114..115 ")" [] []
           1: CSS_SPACE_LITERAL@115..116 " " [] []
           2: CSS_COMPOUND_SELECTOR@116..121
-            0: (empty)
+            0: CSS_NESTED_SELECTOR_LIST@116..116
             1: (empty)
             2: CSS_SUB_SELECTOR_LIST@116..121
               0: CSS_CLASS_SELECTOR@116..121
                 0: DOT@116..117 "." [] []
                 1: CSS_CUSTOM_IDENTIFIER@117..121
                   0: IDENT@117..121 "div" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@121..123
+      1: CSS_DECLARATION_OR_RULE_BLOCK@121..123
         0: L_CURLY@121..122 "{" [] []
-        1: CSS_DECLARATION_LIST@122..122
+        1: CSS_DECLARATION_OR_RULE_LIST@122..122
         2: R_CURLY@122..123 "}" [] []
   2: EOF@123..124 "" [Newline("\n")] []
 
 ```
-
-

@@ -131,6 +131,10 @@ pub(crate) fn expected_namespace_import(p: &JsParser, range: TextRange) -> Parse
     expected_any(&["namespace imports"], range, p)
 }
 
+pub(crate) fn expected_declare_statement(p: &JsParser, range: TextRange) -> ParseDiagnostic {
+    expected_node("declare statement", range, p)
+}
+
 pub(crate) fn expected_namespace_or_named_import(
     p: &JsParser,
     range: TextRange,
@@ -161,7 +165,7 @@ pub(crate) fn duplicate_assertion_keys_error(
     duplicate_range: TextRange,
 ) -> ParseDiagnostic {
     p.err_builder("Duplicate assertion keys are not allowed", first_use)
-        .with_detail(first_use, format!("First use of the key `{}`", key))
+        .with_detail(first_use, format!("First use of the key `{key}`"))
         .with_detail(duplicate_range, "second use here")
 }
 

@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
 ---
 # Input
-```js
+```jsx
 const test = { debugger: 1 }; test.debugger;
 
 if (foo) debugger
@@ -55,12 +55,12 @@ invalid.js:5:1 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━�
   
   i Unsafe fix: Remove debugger statement
   
+     2 2 │   
      3 3 │   if (foo) debugger
-     4 4 │   
+     4   │ - 
      5   │ - debugger;
-     6   │ - 
+     6 4 │   
      7 5 │   function test() {
-     8 6 │     let a = 3;
   
 
 ```
@@ -85,5 +85,3 @@ invalid.js:9:3 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━�
   
 
 ```
-
-

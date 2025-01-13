@@ -9,6 +9,7 @@ use biome_js_parser::{parse, JsParserOptions, Parse};
 use biome_js_syntax::{AnyJsRoot, JsFileSource, JsSyntaxNode};
 use biome_rowan::SyntaxKind;
 use std::fmt::Debug;
+use std::io;
 use std::panic::RefUnwindSafe;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -155,7 +156,7 @@ impl TestCaseFiles {
             if let Err(err) = Formatter::new(&mut Termcolor(&mut *buffer)).write_markup(markup! {
                 {PrintDiagnostic::verbose(error)}
             }) {
-                eprintln!("Failed to print diagnostic: {}", err);
+                eprintln!("Failed to print diagnostic: {err}");
             }
         }
     }
@@ -183,6 +184,7 @@ pub(crate) trait TestSuite: Send + Sync {
     fn base_path(&self) -> &str;
     fn is_test(&self, path: &Path) -> bool;
     fn load_test(&self, path: &Path) -> Option<Box<dyn TestCase>>;
+    fn checkout(&self) -> io::Result<()>;
 }
 
 pub(crate) struct TestSuiteInstance {
@@ -221,6 +223,7 @@ pub(crate) fn run_test_suite(
     test_suite: &dyn TestSuite,
     context: &mut TestRunContext,
 ) -> TestResults {
+    test_suite.checkout().expect("To checkout the repository");
     context.reporter.test_suite_started(test_suite);
     let instance = load_tests(test_suite, context);
     context.reporter.test_suite_run_started(&instance);
@@ -243,20 +246,20 @@ pub(crate) fn run_test_suite(
 
                     let _ = write!(stacktrace, "{}", file.display());
                 } else if let Some(name) = s.name().and_then(|x| x.as_str()) {
-                    let _ = write!(stacktrace, "{}", name);
+                    let _ = write!(stacktrace, "{name}");
                 } else {
                     let _ = write!(stacktrace, "<unknown>");
                 }
 
                 match (s.lineno(), s.colno()) {
                     (Some(line), Some(col)) => {
-                        let _ = write!(stacktrace, " @ line {} col {}", line, col);
+                        let _ = write!(stacktrace, " @ line {line} col {col}");
                     }
                     (Some(line), None) => {
-                        let _ = write!(stacktrace, " @ line {}", line);
+                        let _ = write!(stacktrace, " @ line {line}");
                     }
                     (None, Some(col)) => {
-                        let _ = write!(stacktrace, " @ col {}", col);
+                        let _ = write!(stacktrace, " @ col {col}");
                     }
                     _ => {}
                 }
@@ -268,7 +271,7 @@ pub(crate) fn run_test_suite(
         let stacktrace = String::from_utf8(stacktrace).unwrap();
 
         let mut msg = vec![];
-        let _ = write!(msg, "{}", info);
+        let _ = write!(msg, "{info}");
         let msg = String::from_utf8(msg).unwrap();
 
         tracing::error!(

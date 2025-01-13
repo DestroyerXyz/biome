@@ -1,9 +1,8 @@
-use biome_formatter::{
-    CstFormatContext, FormatContext, FormatLanguage, FormatOptions, FormatResult, Formatted,
-    Printed,
-};
+use biome_formatter::{CstFormatContext, FormatLanguage, FormatResult, Formatted, Printed};
 use biome_parser::AnyParse;
-use biome_rowan::{Language, SyntaxNode, TextRange};
+use biome_rowan::{SyntaxNode, TextRange};
+use biome_service::file_handlers::DocumentFileSource;
+use biome_service::settings::{ServiceLanguage, Settings};
 
 pub mod check_reformat;
 pub mod diff_report;
@@ -13,29 +12,36 @@ pub mod test_prettier_snapshot;
 pub mod utils;
 
 pub trait TestFormatLanguage {
-    type SyntaxLanguage: Language + 'static;
-    type Options: FormatOptions + std::fmt::Display + Clone;
-    type Context: CstFormatContext<Options = Self::Options>;
-    type FormatLanguage: FormatLanguage<Context = Self::Context, SyntaxLanguage = Self::SyntaxLanguage>
-        + 'static;
+    type ServiceLanguage: ServiceLanguage + 'static;
+    type Context: CstFormatContext<
+        Options = <Self::ServiceLanguage as ServiceLanguage>::FormatOptions,
+    >;
+    type FormatLanguage: FormatLanguage<Context = Self::Context, SyntaxLanguage = Self::ServiceLanguage>
+        + 'static
+        + Clone;
 
     fn parse(&self, text: &str) -> AnyParse;
 
-    fn deserialize_format_options(
-        &self,
-        options: &str,
-    ) -> Vec<<Self::Context as FormatContext>::Options>;
-
     fn format_node(
         &self,
-        options: Self::Options,
-        node: &SyntaxNode<Self::SyntaxLanguage>,
-    ) -> FormatResult<Formatted<Self::Context>>;
+        language: Self::FormatLanguage,
+        node: &SyntaxNode<Self::ServiceLanguage>,
+    ) -> FormatResult<Formatted<Self::Context>> {
+        biome_formatter::format_node(node, language)
+    }
 
     fn format_range(
         &self,
-        options: Self::Options,
-        node: &SyntaxNode<Self::SyntaxLanguage>,
+        language: Self::FormatLanguage,
+        node: &SyntaxNode<Self::ServiceLanguage>,
         range: TextRange,
-    ) -> FormatResult<Printed>;
+    ) -> FormatResult<Printed> {
+        biome_formatter::format_range(node, range, language)
+    }
+
+    fn to_format_language(
+        &self,
+        settings: &Settings,
+        file_source: &DocumentFileSource,
+    ) -> Self::FormatLanguage;
 }

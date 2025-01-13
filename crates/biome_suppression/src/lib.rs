@@ -3,7 +3,7 @@ use biome_rowan::{TextRange, TextSize};
 
 /// Single instance of a suppression comment, with the following syntax:
 ///
-/// `// rome-ignore { <category> { (<value>) }? }+: <reason>`
+/// `// biome-ignore { <category> { (<value>) }? }+: <reason>`
 ///
 /// The category broadly describes what feature is being suppressed (formatting,
 /// linting, ...) with the value being and optional, category-specific name of
@@ -23,19 +23,33 @@ pub struct Suppression<'a> {
     pub categories: Vec<(&'a Category, Option<&'a str>)>,
     /// Reason for this suppression comment to exist
     pub reason: &'a str,
+    /// If the comment is `// biome-ignore`
+    pub is_legacy: bool,
 }
 
 pub fn parse_suppression_comment(
     base: &str,
 ) -> impl Iterator<Item = Result<Suppression, SuppressionDiagnostic>> {
-    let (head, mut comment) = base.split_at(2);
+    let (head, mut comment) = if base.starts_with('#') {
+        base.split_at(1)
+    } else if base.starts_with("<!--") {
+        base.split_at(4)
+    } else {
+        base.split_at(2)
+    };
+
     let is_block_comment = match head {
         "//" => false,
         "/*" => {
             comment = comment
                 .strip_suffix("*/")
-                .or_else(|| comment.strip_suffix(&['*', '/']))
+                .or_else(|| comment.strip_suffix(['*', '/']))
                 .unwrap_or(comment);
+            true
+        }
+        "#" => false,
+        "<!--" => {
+            comment = comment.strip_suffix("-->").unwrap_or(comment);
             true
         }
         token => panic!("comment with unknown opening token {token:?}, from {comment}"),
@@ -50,7 +64,24 @@ pub fn parse_suppression_comment(
             line = line.trim_start_matches('*').trim_start()
         }
 
-        const PATTERNS: [[char; 2]; 11] = [
+        line = line.trim_start();
+
+        const PATTERN: [[char; 2]; 12] = [
+            ['b', 'B'],
+            ['i', 'I'],
+            ['o', 'O'],
+            ['m', 'M'],
+            ['e', 'E'],
+            ['-', '_'],
+            ['i', 'I'],
+            ['g', 'G'],
+            ['n', 'N'],
+            ['o', 'O'],
+            ['r', 'R'],
+            ['e', 'E'],
+        ];
+        // TODO: Remove at Biome 2.0
+        const DEPRECATED_PATTERNS: [[char; 2]; 11] = [
             ['r', 'R'],
             ['o', 'O'],
             ['m', 'M'],
@@ -64,15 +95,27 @@ pub fn parse_suppression_comment(
             ['e', 'E'],
         ];
 
+        let mut is_legacy = false;
+        // it's a biome-ignore comment
+        if line.starts_with("biome-ignore") {
+            // Checks for `/biome[-_]ignore/i` without a regex, or skip the line
+            // entirely if it doesn't match
+            for pattern in PATTERN {
+                line = line.strip_prefix(pattern)?;
+            }
+        } else {
+            is_legacy = true;
+            for pattern in DEPRECATED_PATTERNS {
+                line = line.strip_prefix(pattern)?;
+            }
+        }
+
         // Checks for `/rome[-_]ignore/i` without a regex, or skip the line
         // entirely if it doesn't match
-        for pattern in PATTERNS {
-            line = line.strip_prefix(pattern)?;
-        }
 
         let line = line.trim_start();
         Some(
-            parse_suppression_line(line).map_err(|err| SuppressionDiagnostic {
+            parse_suppression_line(line, is_legacy).map_err(|err| SuppressionDiagnostic {
                 message: err.message,
                 // Adjust the position of the diagnostic in the whole comment
                 span: err.span + offset_from(base, line),
@@ -138,7 +181,10 @@ impl biome_console::fmt::Display for SuppressionDiagnosticKind {
 }
 
 /// Parse the `{ <category> { (<value>) }? }+: <reason>` section of a suppression line
-fn parse_suppression_line(base: &str) -> Result<Suppression, SuppressionDiagnostic> {
+fn parse_suppression_line(
+    base: &str,
+    is_legacy: bool,
+) -> Result<Suppression, SuppressionDiagnostic> {
     let mut line = base;
     let mut categories = Vec::new();
 
@@ -209,7 +255,11 @@ fn parse_suppression_line(base: &str) -> Result<Suppression, SuppressionDiagnost
     }
 
     let reason = line.trim_end();
-    Ok(Suppression { categories, reason })
+    Ok(Suppression {
+        categories,
+        reason,
+        is_legacy,
+    })
 }
 
 /// Returns the byte offset of `substr` within `base`
@@ -252,7 +302,8 @@ mod tests {
             parse_suppression_comment("// rome-ignore parse: explanation1").collect::<Vec<_>>(),
             vec![Ok(Suppression {
                 categories: vec![(category!("parse"), None)],
-                reason: "explanation1"
+                reason: "explanation1",
+                is_legacy: true
             })],
         );
 
@@ -260,7 +311,8 @@ mod tests {
             parse_suppression_comment("/** rome-ignore parse: explanation2 */").collect::<Vec<_>>(),
             vec![Ok(Suppression {
                 categories: vec![(category!("parse"), None)],
-                reason: "explanation2"
+                reason: "explanation2",
+                is_legacy: true
             })],
         );
 
@@ -273,7 +325,8 @@ mod tests {
             .collect::<Vec<_>>(),
             vec![Ok(Suppression {
                 categories: vec![(category!("parse"), None)],
-                reason: "explanation3"
+                reason: "explanation3",
+                is_legacy: true
             })],
         );
 
@@ -287,7 +340,8 @@ mod tests {
             .collect::<Vec<_>>(),
             vec![Ok(Suppression {
                 categories: vec![(category!("parse"), None)],
-                reason: "explanation4"
+                reason: "explanation4",
+                is_legacy: true
             })],
         );
     }
@@ -297,7 +351,8 @@ mod tests {
             parse_suppression_comment("/* rome-ignore format: explanation").collect::<Vec<_>>(),
             vec![Ok(Suppression {
                 categories: vec![(category!("format"), None)],
-                reason: "explanation"
+                reason: "explanation",
+                is_legacy: true
             })],
         );
 
@@ -305,7 +360,8 @@ mod tests {
             parse_suppression_comment("/* rome-ignore format: explanation *").collect::<Vec<_>>(),
             vec![Ok(Suppression {
                 categories: vec![(category!("format"), None)],
-                reason: "explanation"
+                reason: "explanation",
+                is_legacy: true
             })],
         );
 
@@ -313,7 +369,8 @@ mod tests {
             parse_suppression_comment("/* rome-ignore format: explanation /").collect::<Vec<_>>(),
             vec![Ok(Suppression {
                 categories: vec![(category!("format"), None)],
-                reason: "explanation"
+                reason: "explanation",
+                is_legacy: true
             })],
         );
     }
@@ -328,7 +385,8 @@ mod tests {
                     (category!("parse"), Some("foo")),
                     (category!("parse"), Some("dog"))
                 ],
-                reason: "explanation"
+                reason: "explanation",
+                is_legacy: true
             })],
         );
 
@@ -340,7 +398,8 @@ mod tests {
                     (category!("parse"), Some("bar")),
                     (category!("parse"), Some("cat"))
                 ],
-                reason: "explanation"
+                reason: "explanation",
+                is_legacy: true
             })],
         );
 
@@ -356,7 +415,8 @@ mod tests {
                     (category!("parse"), Some("yes")),
                     (category!("parse"), Some("frog"))
                 ],
-                reason: "explanation"
+                reason: "explanation",
+                is_legacy: true
             })],
         );
 
@@ -373,7 +433,8 @@ mod tests {
                     (category!("parse"), Some("wow")),
                     (category!("parse"), Some("fish"))
                 ],
-                reason: "explanation"
+                reason: "explanation",
+                is_legacy: true
             })],
         );
     }
@@ -385,7 +446,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![Ok(Suppression {
                 categories: vec![(category!("format"), None), (category!("lint"), None)],
-                reason: "explanation"
+                reason: "explanation",
+                is_legacy: true
             })],
         );
     }
@@ -443,6 +505,230 @@ mod tests {
             vec![Err(SuppressionDiagnostic {
                 message: SuppressionDiagnosticKind::ParseCategory(String::from("unknown")),
                 span: TextRange::new(TextSize::from(15), TextSize::from(22))
+            })],
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests_biome_ignore {
+    use biome_diagnostics::category;
+    use biome_rowan::{TextRange, TextSize};
+
+    use crate::{offset_from, SuppressionDiagnostic, SuppressionDiagnosticKind};
+
+    use super::{parse_suppression_comment, Suppression};
+
+    #[test]
+    fn parse_simple_suppression() {
+        assert_eq!(
+            parse_suppression_comment("// biome-ignore parse: explanation1").collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![(category!("parse"), None)],
+                reason: "explanation1",
+                is_legacy: false
+            })],
+        );
+
+        assert_eq!(
+            parse_suppression_comment("/** biome-ignore parse: explanation2 */")
+                .collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![(category!("parse"), None)],
+                reason: "explanation2",
+                is_legacy: false
+            })],
+        );
+
+        assert_eq!(
+            parse_suppression_comment(
+                "/**
+                  * biome-ignore parse: explanation3
+                  */"
+            )
+            .collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![(category!("parse"), None)],
+                reason: "explanation3",
+                is_legacy: false
+            })],
+        );
+
+        assert_eq!(
+            parse_suppression_comment(
+                "/**
+                  * hello
+                  * biome-ignore parse: explanation4
+                  */"
+            )
+            .collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![(category!("parse"), None)],
+                reason: "explanation4",
+                is_legacy: false
+            })],
+        );
+    }
+    #[test]
+    fn parse_unclosed_block_comment_suppressions() {
+        assert_eq!(
+            parse_suppression_comment("/* biome-ignore format: explanation").collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![(category!("format"), None)],
+                reason: "explanation",
+                is_legacy: false
+            })],
+        );
+
+        assert_eq!(
+            parse_suppression_comment("/* biome-ignore format: explanation *").collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![(category!("format"), None)],
+                reason: "explanation",
+                is_legacy: false
+            })],
+        );
+
+        assert_eq!(
+            parse_suppression_comment("/* biome-ignore format: explanation /").collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![(category!("format"), None)],
+                reason: "explanation",
+                is_legacy: false
+            })],
+        );
+    }
+
+    #[test]
+    fn parse_multiple_suppression() {
+        assert_eq!(
+            parse_suppression_comment("// biome-ignore parse(foo) parse(dog): explanation")
+                .collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![
+                    (category!("parse"), Some("foo")),
+                    (category!("parse"), Some("dog"))
+                ],
+                reason: "explanation",
+                is_legacy: false
+            })],
+        );
+
+        assert_eq!(
+            parse_suppression_comment("/** biome-ignore parse(bar) parse(cat): explanation */")
+                .collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![
+                    (category!("parse"), Some("bar")),
+                    (category!("parse"), Some("cat"))
+                ],
+                reason: "explanation",
+                is_legacy: false
+            })],
+        );
+
+        assert_eq!(
+            parse_suppression_comment(
+                "/**
+                  * biome-ignore parse(yes) parse(frog): explanation
+                  */"
+            )
+            .collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![
+                    (category!("parse"), Some("yes")),
+                    (category!("parse"), Some("frog"))
+                ],
+                reason: "explanation",
+                is_legacy: false
+            })],
+        );
+
+        assert_eq!(
+            parse_suppression_comment(
+                "/**
+                  * hello
+                  * biome-ignore parse(wow) parse(fish): explanation
+                  */"
+            )
+            .collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![
+                    (category!("parse"), Some("wow")),
+                    (category!("parse"), Some("fish"))
+                ],
+                reason: "explanation",
+                is_legacy: false
+            })],
+        );
+    }
+
+    #[test]
+    fn parse_multiple_suppression_categories() {
+        assert_eq!(
+            parse_suppression_comment("// biome-ignore format lint: explanation")
+                .collect::<Vec<_>>(),
+            vec![Ok(Suppression {
+                categories: vec![(category!("format"), None), (category!("lint"), None)],
+                reason: "explanation",
+                is_legacy: false
+            })],
+        );
+    }
+
+    #[test]
+    fn check_offset_from() {
+        const BASE: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua";
+
+        assert_eq!(offset_from(BASE, BASE), TextSize::from(0));
+
+        let (_, substr) = BASE.split_at(55);
+        assert_eq!(offset_from(BASE, substr), TextSize::from(55));
+
+        let (_, substr) = BASE.split_at(BASE.len());
+        assert_eq!(offset_from(BASE, substr), TextSize::of(BASE));
+    }
+
+    #[test]
+    fn diagnostic_missing_colon() {
+        assert_eq!(
+            parse_suppression_comment("// biome-ignore format explanation").collect::<Vec<_>>(),
+            vec![Err(SuppressionDiagnostic {
+                message: SuppressionDiagnosticKind::MissingColon,
+                span: TextRange::new(TextSize::from(23), TextSize::from(34))
+            })],
+        );
+    }
+
+    #[test]
+    fn diagnostic_missing_paren() {
+        assert_eq!(
+            parse_suppression_comment("// biome-ignore format(:").collect::<Vec<_>>(),
+            vec![Err(SuppressionDiagnostic {
+                message: SuppressionDiagnosticKind::MissingParen,
+                span: TextRange::new(TextSize::from(23), TextSize::from(24))
+            })],
+        );
+    }
+
+    #[test]
+    fn diagnostic_missing_category() {
+        assert_eq!(
+            parse_suppression_comment("// biome-ignore (value): explanation").collect::<Vec<_>>(),
+            vec![Err(SuppressionDiagnostic {
+                message: SuppressionDiagnosticKind::MissingCategory,
+                span: TextRange::new(TextSize::from(16), TextSize::from(17))
+            })],
+        );
+    }
+
+    #[test]
+    fn diagnostic_unknown_category() {
+        assert_eq!(
+            parse_suppression_comment("// biome-ignore unknown: explanation").collect::<Vec<_>>(),
+            vec![Err(SuppressionDiagnostic {
+                message: SuppressionDiagnosticKind::ParseCategory(String::from("unknown")),
+                span: TextRange::new(TextSize::from(16), TextSize::from(23))
             })],
         );
     }

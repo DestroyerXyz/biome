@@ -9,7 +9,9 @@ use crate::syntax::expr::{is_nth_at_identifier, parse_name, ExpressionContext};
 use super::ts_parse_error::expected_ts_enum_member;
 use crate::state::EnterAmbientContext;
 use crate::syntax::auxiliary::{is_nth_at_declaration_clause, parse_declaration_clause};
-use crate::syntax::js_parse_error::{expected_identifier, expected_module_source};
+use crate::syntax::js_parse_error::{
+    expected_declare_statement, expected_identifier, expected_module_source,
+};
 use crate::syntax::module::{parse_module_item_list, parse_module_source, ModuleItemListParent};
 use crate::syntax::stmt::{semi, STMT_RECOVERY_SET};
 use crate::syntax::typescript::ts_parse_error::expected_ts_type;
@@ -17,7 +19,7 @@ use crate::syntax::typescript::{
     expect_ts_type_list, parse_ts_identifier_binding, parse_ts_implements_clause, parse_ts_name,
     parse_ts_type, parse_ts_type_parameters, TypeContext, TypeMembers,
 };
-use crate::{syntax, Absent, JsParser, ParseRecovery, ParsedSyntax, Present};
+use crate::{syntax, Absent, JsParser, ParseRecoveryTokenSet, ParsedSyntax, Present};
 use biome_js_syntax::{JsSyntaxKind::*, *};
 use biome_parser::diagnostic::expected_token;
 use biome_parser::parse_lists::{ParseNodeList, ParseSeparatedList};
@@ -34,14 +36,15 @@ fn parse_literal_as_ts_enum_member(p: &mut JsParser) -> ParsedSyntax {
         JS_NUMBER_LITERAL => {
             let err = p.err_builder("An enum member cannot have a numeric name", p.cur_range());
             p.error(err);
-            p.bump_any()
+            m.abandon(p);
+            return Absent;
         }
         _ => {
             m.abandon(p);
             return Absent;
         }
     }
-    Present(m.complete(p, JS_LITERAL_MEMBER_NAME))
+    Present(m.complete(p, TS_LITERAL_ENUM_MEMBER_NAME))
 }
 
 /// An individual enum member
@@ -87,9 +90,9 @@ impl ParseSeparatedList for TsEnumMembersList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS_MEMBER,
                 STMT_RECOVERY_SET.union(token_set![JsSyntaxKind::IDENT, T![,], T!['}']]),
             )
@@ -119,8 +122,7 @@ fn parse_ts_enum_id(p: &mut JsParser, enum_token_range: TextRange) {
             if is_reserved_enum_name(text) {
                 let err = p.err_builder(
                     format!(
-                        "`{}` cannot be used as a enum name because it is already reserved",
-                        text
+                        "`{text}` cannot be used as a enum name because it is already reserved"
                     ),
                     id.range(p),
                 );
@@ -224,6 +226,10 @@ pub(crate) fn parse_ts_type_alias_declaration(p: &mut JsParser) -> ParsedSyntax 
 
 // test ts ts_declare_const_initializer
 // declare module test { const X; }
+//
+// test_err ts ts_declare_using
+// declare using x: null
+// declare await using x: null
 pub(crate) fn parse_ts_declare_statement(p: &mut JsParser) -> ParsedSyntax {
     if !is_at_ts_declare_statement(p) {
         return Absent;
@@ -237,8 +243,7 @@ pub(crate) fn parse_ts_declare_statement(p: &mut JsParser) -> ParsedSyntax {
         // test_err ts ts_declare_const_initializer
         // declare @decorator class D {}
         // declare @decorator abstract class D {}
-        parse_declaration_clause(p, stmt_start_pos)
-            .expect("Expected a declaration as guaranteed by is_at_ts_declare_statement")
+        parse_declaration_clause(p, stmt_start_pos).or_add_diagnostic(p, expected_declare_statement)
     });
 
     Present(m.complete(p, TS_DECLARE_STATEMENT))
@@ -250,16 +255,27 @@ pub(crate) fn is_at_ts_declare_statement(p: &mut JsParser) -> bool {
         return false;
     }
 
+    if matches!(p.nth(1), T![using])
+        || (matches!(p.nth(1), T![await]) && matches!(p.nth(2), T![using]))
+    {
+        return false;
+    }
+
     is_nth_at_declaration_clause(p, 1)
 }
 
 #[inline]
 pub(crate) fn is_at_ts_interface_declaration(p: &mut JsParser) -> bool {
-    if !p.at(T![interface]) || p.has_nth_preceding_line_break(1) {
+    is_nth_at_ts_interface_declaration(p, 0)
+}
+
+#[inline]
+pub(crate) fn is_nth_at_ts_interface_declaration(p: &mut JsParser, n: usize) -> bool {
+    if !p.nth_at(n, T![interface]) || p.has_nth_preceding_line_break(n + 1) {
         return false;
     }
 
-    is_nth_at_identifier_binding(p, 1) || p.nth_at(1, T!['{'])
+    is_nth_at_identifier_binding(p, n + 1) || p.nth_at(n + 1, T!['{'])
 }
 
 // test ts ts_interface
@@ -298,6 +314,10 @@ pub(crate) fn is_at_ts_interface_declaration(p: &mut JsParser) -> bool {
 // interface C {
 //     protected  [a: number]: string;
 // }
+
+// test_err ts interface_cannot_be_reserved_world
+// interface undefined {}
+// interface any {}
 pub(crate) fn parse_ts_interface_declaration(p: &mut JsParser) -> ParsedSyntax {
     if !is_at_ts_interface_declaration(p) {
         return Absent;
@@ -375,34 +395,17 @@ fn parse_ts_extends_clause(p: &mut JsParser) -> ParsedSyntax {
 }
 
 #[inline]
-pub(crate) fn is_at_any_ts_namespace_declaration(p: &mut JsParser) -> bool {
-    if p.has_nth_preceding_line_break(1) {
-        return false;
-    }
-
-    if matches!(p.cur(), T![namespace] | T![module]) {
-        return is_nth_at_identifier(p, 1) || p.nth_at(1, JS_STRING_LITERAL);
-    }
-
-    if p.at(T![global]) {
-        return p.nth_at(1, T!['{']);
-    }
-
-    false
-}
-
-#[inline]
 pub(crate) fn is_nth_at_any_ts_namespace_declaration(p: &mut JsParser, n: usize) -> bool {
+    if p.nth_at(n, T![global]) {
+        return p.nth_at(n + 1, T!['{']);
+    }
+
     if p.has_nth_preceding_line_break(n + 1) {
         return false;
     }
 
     if matches!(p.nth(n), T![namespace] | T![module]) {
         return is_nth_at_identifier(p, n + 1) || p.nth_at(n + 1, JS_STRING_LITERAL);
-    }
-
-    if p.nth_at(n, T![global]) {
-        return p.nth_at(n + 1, T!['{']);
     }
 
     false
@@ -521,6 +524,13 @@ fn parse_ts_module_block(p: &mut JsParser) -> ParsedSyntax {
 //      let VERSION: string;
 //  }
 // }
+// declare module "foo" {
+//  global
+//  { }
+// }
+// declare global {}
+// declare global
+// { }
 //
 // test ts ts_global_variable
 // let global;

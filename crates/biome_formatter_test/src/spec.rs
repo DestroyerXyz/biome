@@ -2,19 +2,26 @@ use crate::check_reformat::CheckReformat;
 use crate::snapshot_builder::{SnapshotBuilder, SnapshotOutput};
 use crate::utils::strip_rome_placeholders;
 use crate::TestFormatLanguage;
+use biome_configuration::PartialConfiguration;
 use biome_console::EnvConsole;
-use biome_formatter::{FormatOptions, Printed};
-use biome_fs::RomePath;
+use biome_deserialize::json::deserialize_from_str;
+use biome_diagnostics::print_diagnostic_to_string;
+use biome_formatter::{FormatLanguage, FormatOptions, Printed};
+use biome_fs::BiomePath;
 use biome_parser::AnyParse;
 use biome_rowan::{TextRange, TextSize};
-use biome_service::workspace::{FeatureName, FeaturesBuilder, SupportsFeatureParams};
+use biome_service::settings::Settings;
+use biome_service::workspace::{
+    DocumentFileSource, FeaturesBuilder, RegisterProjectFolderParams, SupportsFeatureParams,
+    UpdateSettingsParams,
+};
 use biome_service::App;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct SpecTestFile<'a> {
-    input_file: RomePath,
+    input_file: BiomePath,
     root_path: &'a Path,
 
     input_code: String,
@@ -24,7 +31,11 @@ pub struct SpecTestFile<'a> {
 }
 
 impl<'a> SpecTestFile<'a> {
-    pub fn try_from_file(input_file: &'a str, root_path: &'a Path) -> Option<SpecTestFile<'a>> {
+    pub fn try_from_file(
+        input_file: &'a str,
+        root_path: &'a Path,
+        settings: Option<UpdateSettingsParams>,
+    ) -> Option<SpecTestFile<'a>> {
         let mut console = EnvConsole::default();
         let app = App::with_console(&mut console);
         let file_path = &input_file;
@@ -36,16 +47,26 @@ impl<'a> SpecTestFile<'a> {
             spec_input_file.display()
         );
 
-        let mut input_file = RomePath::new(file_path);
+        app.workspace
+            .register_project_folder(RegisterProjectFolderParams {
+                set_as_current_workspace: true,
+                path: None,
+            })
+            .unwrap();
+
+        if let Some(settings) = settings {
+            app.workspace.update_settings(settings).unwrap();
+        }
+        let mut input_file = BiomePath::new(file_path);
         let can_format = app
             .workspace
             .file_features(SupportsFeatureParams {
                 path: input_file.clone(),
-                feature: FeaturesBuilder::new().with_formatter().build(),
+                features: FeaturesBuilder::new().with_formatter().build(),
             })
             .unwrap();
 
-        if can_format.supports_for(&FeatureName::Format) {
+        if can_format.supports_format() {
             let mut input_code = input_file.get_buffer_from_file();
 
             let (_, range_start_index, range_end_index) = strip_rome_placeholders(&mut input_code);
@@ -72,7 +93,7 @@ impl<'a> SpecTestFile<'a> {
         self.input_file.file_name().unwrap().to_str().unwrap()
     }
 
-    pub fn input_file(&self) -> &RomePath {
+    pub fn input_file(&self) -> &BiomePath {
         &self.input_file
     }
 
@@ -101,7 +122,7 @@ where
     test_file: SpecTestFile<'a>,
     test_directory: PathBuf,
     language: L,
-    options: L::Options,
+    format_language: L::FormatLanguage,
 }
 
 impl<'a, L> SpecSnapshot<'a, L>
@@ -112,7 +133,7 @@ where
         test_file: SpecTestFile<'a>,
         test_directory: &str,
         language: L,
-        options: L::Options,
+        format_language: L::FormatLanguage,
     ) -> Self {
         let test_directory = PathBuf::from(test_directory);
 
@@ -120,11 +141,15 @@ where
             test_file,
             test_directory,
             language,
-            options,
+            format_language,
         }
     }
 
-    fn formatted(&self, parsed: &AnyParse, options: L::Options) -> (String, Printed) {
+    fn formatted(
+        &self,
+        parsed: &AnyParse,
+        format_language: L::FormatLanguage,
+    ) -> (String, Printed) {
         let has_errors = parsed.has_errors();
         let syntax = parsed.syntax();
 
@@ -132,7 +157,7 @@ where
 
         let result = match range {
             (Some(start), Some(end)) => self.language.format_range(
-                options.clone(),
+                format_language.clone(),
                 &syntax,
                 TextRange::new(
                     TextSize::try_from(start).unwrap(),
@@ -141,7 +166,7 @@ where
             ),
             _ => self
                 .language
-                .format_node(options.clone(), &syntax)
+                .format_node(format_language.clone(), &syntax)
                 .map(|formatted| formatted.print().unwrap()),
         };
         let formatted = result.expect("formatting failed");
@@ -176,7 +201,7 @@ where
                         output_code,
                         self.test_file.file_name(),
                         &self.language,
-                        options,
+                        format_language,
                     );
                     check_reformat.check_reformat();
                 }
@@ -198,50 +223,65 @@ where
 
         let parsed = self.language.parse(self.test_file.input_code());
 
-        let (output_code, printed) = self.formatted(&parsed, self.options.clone());
+        let (output_code, printed) = self.formatted(&parsed, self.format_language.clone());
 
-        let max_width = self.options.line_width().get() as usize;
+        let max_width = self.format_language.options().line_width().value() as usize;
 
         snapshot_builder = snapshot_builder
             .with_output_and_options(
                 SnapshotOutput::new(&output_code).with_index(1),
-                self.options.clone(),
+                self.format_language.options().clone(),
             )
             .with_unimplemented(&printed)
             .with_lines_exceeding_max_width(&output_code, max_width);
 
         let options_path = self.test_directory.join("options.json");
         if options_path.exists() {
-            let mut options_path = RomePath::new(&options_path);
+            let mut options_path = BiomePath::new(&options_path);
 
+            let mut settings = Settings::default();
             // SAFETY: we checked its existence already, we assume we have rights to read it
-            let test_options = self
-                .language
-                .deserialize_format_options(options_path.get_buffer_from_file().as_str());
+            let (test_options, diagnostics) = deserialize_from_str::<PartialConfiguration>(
+                options_path.get_buffer_from_file().as_str(),
+            )
+            .consume();
+            settings
+                .merge_with_configuration(test_options.unwrap_or_default(), None, None, &[])
+                .unwrap();
 
-            for (index, options) in test_options.into_iter().enumerate() {
-                let (mut output_code, printed) = self.formatted(&parsed, options.clone());
+            if !diagnostics.is_empty() {
+                for diagnostic in diagnostics {
+                    println!("{:?}", print_diagnostic_to_string(&diagnostic));
+                }
 
-                let max_width = options.line_width().get() as usize;
-
-                // There are some logs that print different line endings, and we can't snapshot those
-                // otherwise we risk automatically having them replaced with LF by git.
-                //
-                // This is a workaround, and it might not work for all cases.
-                const CRLF_PATTERN: &str = "\r\n";
-                const CR_PATTERN: &str = "\r";
-                output_code = output_code
-                    .replace(CRLF_PATTERN, "<CRLF>\n")
-                    .replace(CR_PATTERN, "<CR>\n");
-
-                snapshot_builder = snapshot_builder
-                    .with_output_and_options(
-                        SnapshotOutput::new(&output_code).with_index(index + 2),
-                        options,
-                    )
-                    .with_unimplemented(&printed)
-                    .with_lines_exceeding_max_width(&output_code, max_width);
+                panic!("Configuration is invalid");
             }
+
+            let format_language = self
+                .language
+                .to_format_language(&settings, &DocumentFileSource::from_path(input_file));
+
+            let (mut output_code, printed) = self.formatted(&parsed, format_language.clone());
+
+            let max_width = format_language.options().line_width().value() as usize;
+
+            // There are some logs that print different line endings, and we can't snapshot those
+            // otherwise we risk automatically having them replaced with LF by git.
+            //
+            // This is a workaround, and it might not work for all cases.
+            const CRLF_PATTERN: &str = "\r\n";
+            const CR_PATTERN: &str = "\r";
+            output_code = output_code
+                .replace(CRLF_PATTERN, "<CRLF>\n")
+                .replace(CR_PATTERN, "<CR>\n");
+
+            snapshot_builder = snapshot_builder
+                .with_output_and_options(
+                    SnapshotOutput::new(&output_code).with_index(1),
+                    format_language.options(),
+                )
+                .with_unimplemented(&printed)
+                .with_lines_exceeding_max_width(&output_code, max_width);
         }
 
         snapshot_builder.finish(self.test_file.relative_file_name());

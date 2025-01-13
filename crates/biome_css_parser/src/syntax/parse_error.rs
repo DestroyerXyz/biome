@@ -1,23 +1,45 @@
 use crate::parser::CssParser;
+use biome_css_syntax::CssSyntaxKind;
 use biome_parser::diagnostic::{expect_one_of, expected_any, expected_node};
 use biome_parser::prelude::{ParseDiagnostic, ToDiagnostic};
+use biome_parser::Parser;
 use biome_rowan::TextRange;
 
 pub(crate) fn expected_identifier(p: &CssParser, range: TextRange) -> ParseDiagnostic {
     expected_node("identifier", range, p)
 }
 
-pub(crate) fn expected_expression(p: &CssParser, range: TextRange) -> ParseDiagnostic {
-    expected_any(
-        &[
-            "component value",
-            "binary expression",
-            "parenthesized expression",
-            "any function expression",
-        ],
-        range,
-        p,
-    )
+pub(crate) fn expected_dashed_identifier(p: &CssParser, range: TextRange) -> ParseDiagnostic {
+    expected_node("dashed identifier", range, p)
+}
+
+/// If we know the token that wasn't parsed is a CSS-wide keyword that isn't
+/// allowed here, we can give a more helpful error message since they _are_
+/// valid identifiers, just not allowed in specific contexts.
+pub(crate) fn expected_non_css_wide_keyword_identifier(
+    p: &CssParser,
+    range: TextRange,
+) -> ParseDiagnostic {
+    let text = p.text(range);
+
+    // It's possible that the parser recovered over more than one token and
+    // isn't just on the keyword anymore, so we want to try to cast _all_ of
+    // the skipped text to a keyword to see if it matches. For example:
+    //     @container revert-layer-and
+    if CssSyntaxKind::from_keyword(text).is_some_and(|keyword| keyword.is_css_wide_keyword()) {
+        // Trying to use `expected_node` here with the additional hint results in
+        // two details being added, but since we're adding the hint as well, we
+        // only want to show one code frame.
+        ParseDiagnostic::new(
+            format!("Expected an identifier but instead found '{text}'"),
+            range,
+        )
+        .with_hint(format!(
+            "'{text}' is a CSS-wide keyword that cannot be used here"
+        ))
+    } else {
+        expected_identifier(p, range)
+    }
 }
 
 pub(crate) fn expected_number(p: &CssParser, range: TextRange) -> ParseDiagnostic {
@@ -37,7 +59,7 @@ pub(crate) fn expected_selector(p: &CssParser, range: TextRange) -> ParseDiagnos
 }
 
 pub(crate) fn expected_any_rule(p: &CssParser, range: TextRange) -> ParseDiagnostic {
-    expected_any(&["rule", "at rule"], range, p)
+    expected_any(&["qualified rule", "at rule"], range, p)
 }
 
 pub(crate) fn expected_any_declaration_or_at_rule(
@@ -185,15 +207,8 @@ pub(crate) fn expected_any_at_rule(p: &CssParser, range: TextRange) -> ParseDiag
     .into_diagnostic(p)
 }
 
-pub(crate) fn expected_block(p: &CssParser, range: TextRange) -> ParseDiagnostic {
-    expected_node("body", range, p)
-}
-
 pub(crate) fn expected_declaration_item(p: &CssParser, range: TextRange) -> ParseDiagnostic {
     expected_node("declaration item", range, p)
-}
-pub(crate) fn expected_unit(p: &CssParser, range: TextRange) -> ParseDiagnostic {
-    expected_node("unit", range, p)
 }
 
 pub(crate) fn expected_component_value(p: &CssParser, range: TextRange) -> ParseDiagnostic {

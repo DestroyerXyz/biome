@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: css/atrule/container.css
 ---
-
 # Input
 
 ```css
@@ -89,6 +88,7 @@ Indent style: Tab
 Indent width: 2
 Line ending: LF
 Line width: 80
+Quote style: Double Quotes
 -----
 
 ```css
@@ -112,7 +112,7 @@ Line width: 80
 @container card (inline-size > 30em) and (inline-size < 45em) {
 }
 
-@container (100px > width >150px) {
+@container (100px > width > 150px) {
 }
 
 @container (not (width <= 150px)) {
@@ -142,10 +142,8 @@ Line width: 80
 @container (inline-size >= calc(200px)) {
 }
 
-@container (width <= 150px) {
+@container (WIDTH <= 150px) {
 }
-@container (150px <= width) {
+@container (150px <= WIDTH) {
 }
 ```
-
-

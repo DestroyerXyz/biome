@@ -5,7 +5,7 @@ use crate::check_reformat::CheckReformat;
 use crate::snapshot_builder::{SnapshotBuilder, SnapshotOutput};
 use crate::utils::{get_prettier_diff, strip_prettier_placeholders, PrettierDiff};
 use crate::TestFormatLanguage;
-use biome_formatter::FormatOptions;
+use biome_formatter::{FormatLanguage, FormatOptions};
 use biome_parser::AnyParse;
 
 const PRETTIER_IGNORE: &str = "prettier-ignore";
@@ -33,7 +33,7 @@ impl<'a> PrettierTestFile<'a> {
         );
 
         let mut input_code = read_to_string(input_file)
-            .unwrap_or_else(|err| panic!("failed to read {:?}: {:?}", input_file, err));
+            .unwrap_or_else(|err| panic!("failed to read {input_file:?}: {err:?}"));
 
         let (_, range_start_index, range_end_index) = strip_prettier_placeholders(&mut input_code);
         let parse_input = input_code.replace(PRETTIER_IGNORE, BIOME_IGNORE);
@@ -95,18 +95,23 @@ where
 {
     test_file: PrettierTestFile<'a>,
     language: L,
-    options: L::Options,
+    // options: <L::ServiceLanguage as ServiceLanguage>::FormatOptions,
+    format_language: L::FormatLanguage,
 }
 
 impl<'a, L> PrettierSnapshot<'a, L>
 where
     L: TestFormatLanguage,
 {
-    pub fn new(test_file: PrettierTestFile<'a>, language: L, options: L::Options) -> Self {
+    pub fn new(
+        test_file: PrettierTestFile<'a>,
+        language: L,
+        format_language: L::FormatLanguage,
+    ) -> Self {
         PrettierSnapshot {
             test_file,
             language,
-            options,
+            format_language,
         }
     }
 
@@ -125,7 +130,7 @@ where
                 }
 
                 self.language.format_range(
-                    self.options.clone(),
+                    self.format_language.clone(),
                     &syntax,
                     TextRange::new(
                         TextSize::try_from(start).unwrap(),
@@ -135,7 +140,7 @@ where
             }
             _ => self
                 .language
-                .format_node(self.options.clone(), &syntax)
+                .format_node(self.format_language.clone(), &syntax)
                 .map(|formatted| formatted.print().unwrap()),
         };
 
@@ -160,7 +165,7 @@ where
                         &formatted,
                         self.test_file.file_name(),
                         &self.language,
-                        self.options.clone(),
+                        self.format_language.clone(),
                     );
                     check_reformat.check_reformat();
                 }
@@ -198,7 +203,7 @@ where
             .with_output(SnapshotOutput::new(&formatted))
             .with_errors(&parsed, &self.test_file().parse_input);
 
-        let max_width = self.options.line_width().get() as usize;
+        let max_width = self.format_language.options().line_width().value() as usize;
         builder = builder.with_lines_exceeding_max_width(&formatted, max_width);
 
         builder.finish(relative_file_name);

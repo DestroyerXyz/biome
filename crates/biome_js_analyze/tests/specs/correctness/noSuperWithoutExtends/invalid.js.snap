@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
 ---
 # Input
-```js
+```jsx
 class A {
     constructor() {
         super()
@@ -14,7 +14,7 @@ class A {
 
 # Diagnostics
 ```
-invalid.js:3:9 parse/noSuperWithoutExtends ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.js:3:9 syntax/correctness/noSuperWithoutExtends ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ! super() is only valid in derived class constructors
   
@@ -27,5 +27,3 @@ invalid.js:3:9 parse/noSuperWithoutExtends ━━━━━━━━━━━━�
   
 
 ```
-
-

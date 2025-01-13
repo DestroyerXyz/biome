@@ -34,12 +34,12 @@ ci ━━━━━━━━━━━━━━━━━━━━━━━━━�
 ```block
 file.js:1:1 lint/style/useConst  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × This let declares a variable which is never re-assigned.
+  × This let declares a variable that is only assigned once.
   
   > 1 │ let a = !b || !c
       │ ^^^
   
-  i 'a' is never re-assigned.
+  i 'a' is never reassigned.
   
   > 1 │ let a = !b || !c
       │     ^
@@ -53,15 +53,6 @@ file.js:1:1 lint/style/useConst  FIXABLE  ━━━━━━━━━━━━�
 ```
 
 ```block
-file.js lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
+Checked 1 file in <TIME>. No fixes applied.
+Found 1 error.
 ```
-
-```block
-Checked 1 file(s) in <TIME>
-```
-
-

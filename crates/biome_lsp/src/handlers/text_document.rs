@@ -1,15 +1,21 @@
+use crate::utils::apply_document_changes;
+use crate::{documents::Document, session::Session};
 use anyhow::Result;
 use biome_service::workspace::{
-    ChangeFileParams, CloseFileParams, GetFileContentParams, Language, OpenFileParams,
+    ChangeFileParams, CloseFileParams, DocumentFileSource, GetFileContentParams, OpenFileParams,
 };
 use tower_lsp::lsp_types;
 use tracing::{error, field};
 
-use crate::utils::apply_document_changes;
-use crate::{documents::Document, session::Session};
-
 /// Handler for `textDocument/didOpen` LSP notification
-#[tracing::instrument(level = "debug", skip(session), err)]
+#[tracing::instrument(
+    level = "debug",
+    skip_all,
+    fields(
+        text_document_uri = display(params.text_document.uri.as_ref()),
+        text_document_language_id = display(&params.text_document.language_id),
+    )
+)]
 pub(crate) async fn did_open(
     session: &Session,
     params: lsp_types::DidOpenTextDocumentParams,
@@ -17,16 +23,16 @@ pub(crate) async fn did_open(
     let url = params.text_document.uri;
     let version = params.text_document.version;
     let content = params.text_document.text;
-    let language_hint = Language::from_language_id(&params.text_document.language_id);
+    let language_hint = DocumentFileSource::from_language_id(&params.text_document.language_id);
 
-    let rome_path = session.file_path(&url)?;
+    let biome_path = session.file_path(&url)?;
     let doc = Document::new(version, &content);
 
     session.workspace.open_file(OpenFileParams {
-        path: rome_path,
+        path: biome_path,
         version,
         content,
-        language_hint,
+        document_file_source: Some(language_hint),
     })?;
 
     session.insert_document(url.clone(), doc);
@@ -47,10 +53,10 @@ pub(crate) async fn did_change(
     let url = params.text_document.uri;
     let version = params.text_document.version;
 
-    let rome_path = session.file_path(&url)?;
+    let biome_path = session.file_path(&url)?;
 
     let old_text = session.workspace.get_file_content(GetFileContentParams {
-        path: rome_path.clone(),
+        path: biome_path.clone(),
     })?;
     tracing::trace!("old document: {:?}", old_text);
     tracing::trace!("content changes: {:?}", params.content_changes);
@@ -66,7 +72,7 @@ pub(crate) async fn did_change(
     session.insert_document(url.clone(), Document::new(version, &text));
 
     session.workspace.change_file(ChangeFileParams {
-        path: rome_path,
+        path: biome_path,
         version,
         content: text,
     })?;
@@ -85,11 +91,11 @@ pub(crate) async fn did_close(
     params: lsp_types::DidCloseTextDocumentParams,
 ) -> Result<()> {
     let url = params.text_document.uri;
-    let rome_path = session.file_path(&url)?;
+    let biome_path = session.file_path(&url)?;
 
     session
         .workspace
-        .close_file(CloseFileParams { path: rome_path })?;
+        .close_file(CloseFileParams { path: biome_path })?;
 
     session.remove_document(&url);
 

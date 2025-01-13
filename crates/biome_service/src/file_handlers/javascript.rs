@@ -1,35 +1,41 @@
 use super::{
-    AnalyzerCapabilities, DebugCapabilities, ExtensionHandler, FormatterCapabilities, LintParams,
-    LintResults, Mime, ParserCapabilities,
+    search, AnalyzerCapabilities, AnalyzerVisitorBuilder, CodeActionsParams, DebugCapabilities,
+    ExtensionHandler, FormatterCapabilities, LintParams, LintResults, ParseResult,
+    ParserCapabilities, SearchCapabilities,
 };
 use crate::configuration::to_analyzer_rules;
 use crate::diagnostics::extension_error;
-use crate::file_handlers::{is_diagnostic_error, FixAllParams, Language as LanguageId};
-use crate::settings::OverrideSettings;
-use crate::workspace::OrganizeImportsResult;
+use crate::file_handlers::{is_diagnostic_error, FixAllParams};
+use crate::settings::{LinterSettings, OverrideSettings, Settings};
+use crate::workspace::{DocumentFileSource, OrganizeImportsResult};
 use crate::{
-    settings::{FormatSettings, Language, LanguageListSettings, LanguageSettings, SettingsHandle},
+    settings::{
+        FormatSettings, LanguageListSettings, LanguageSettings, ServiceLanguage,
+        WorkspaceSettingsHandle,
+    },
     workspace::{
         CodeAction, FixAction, FixFileMode, FixFileResult, GetSyntaxTreeResult, PullActionsResult,
         RenameResult,
     },
-    Rules, WorkspaceError,
+    WorkspaceError,
 };
+use biome_analyze::options::PreferredQuote;
 use biome_analyze::{
-    AnalysisFilter, AnalyzerConfiguration, AnalyzerOptions, ControlFlow, GroupCategory, Never,
-    QueryMatch, RegistryVisitor, RuleCategories, RuleCategory, RuleFilter, RuleGroup,
+    AnalysisFilter, AnalyzerConfiguration, AnalyzerOptions, ControlFlow, Never, QueryMatch,
+    RuleCategoriesBuilder, RuleCategory, RuleError, RuleFilter,
 };
+use biome_configuration::javascript::JsxRuntime;
 use biome_diagnostics::{category, Applicability, Diagnostic, DiagnosticExt, Severity};
-use biome_formatter::{FormatError, IndentStyle, IndentWidth, LineEnding, LineWidth, Printed};
-use biome_fs::RomePath;
-use biome_js_analyze::utils::rename::{RenameError, RenameSymbolExtensions};
-use biome_js_analyze::{
-    analyze, analyze_with_inspect_matcher, visit_registry, ControlFlowGraph, RuleError,
+use biome_formatter::{
+    AttributePosition, BracketSpacing, FormatError, IndentStyle, IndentWidth, LineEnding,
+    LineWidth, Printed, QuoteStyle,
 };
-use biome_js_formatter::context::trailing_comma::TrailingComma;
+use biome_fs::BiomePath;
+use biome_js_analyze::utils::rename::{RenameError, RenameSymbolExtensions};
+use biome_js_analyze::{analyze, analyze_with_inspect_matcher, ControlFlowGraph};
+use biome_js_formatter::context::trailing_commas::TrailingCommas;
 use biome_js_formatter::context::{
-    ArrowParentheses, BracketSameLine, BracketSpacing, JsFormatOptions, QuoteProperties,
-    QuoteStyle, Semicolons,
+    ArrowParentheses, BracketSameLine, JsFormatOptions, QuoteProperties, Semicolons,
 };
 use biome_js_formatter::format_node;
 use biome_js_parser::JsParserOptions;
@@ -38,11 +44,11 @@ use biome_js_syntax::{
     AnyJsRoot, JsFileSource, JsLanguage, JsSyntaxNode, TextRange, TextSize, TokenAtOffset,
 };
 use biome_parser::AnyParse;
-use biome_rowan::{AstNode, BatchMutationExt, Direction, FileSource, NodeCache};
+use biome_rowan::{AstNode, BatchMutationExt, Direction, NodeCache};
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt::Debug;
-use std::path::PathBuf;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, debug_span, error, info, trace, trace_span};
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -50,7 +56,7 @@ pub struct JsFormatterSettings {
     pub quote_style: Option<QuoteStyle>,
     pub jsx_quote_style: Option<QuoteStyle>,
     pub quote_properties: Option<QuoteProperties>,
-    pub trailing_comma: Option<TrailingComma>,
+    pub trailing_commas: Option<TrailingCommas>,
     pub semicolons: Option<Semicolons>,
     pub arrow_parentheses: Option<ArrowParentheses>,
     pub bracket_spacing: Option<BracketSpacing>,
@@ -60,70 +66,238 @@ pub struct JsFormatterSettings {
     pub indent_width: Option<IndentWidth>,
     pub indent_style: Option<IndentStyle>,
     pub enabled: Option<bool>,
+    pub attribute_position: Option<AttributePosition>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct JsParserSettings {
     pub parse_class_parameter_decorators: bool,
+    pub grit_metavariables: bool,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct JsLinterSettings {
-    pub globals: Vec<String>,
+    pub enabled: Option<bool>,
+    pub suppression_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct JsOrganizeImportsSettings {}
 
-impl Language for JsLanguage {
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct JsEnvironmentSettings {
+    pub jsx_runtime: JsxRuntime,
+}
+
+impl From<JsxRuntime> for JsEnvironmentSettings {
+    fn from(jsx_runtime: JsxRuntime) -> Self {
+        Self { jsx_runtime }
+    }
+}
+
+impl ServiceLanguage for JsLanguage {
     type FormatterSettings = JsFormatterSettings;
     type LinterSettings = JsLinterSettings;
     type FormatOptions = JsFormatOptions;
     type OrganizeImportsSettings = JsOrganizeImportsSettings;
     type ParserSettings = JsParserSettings;
+    type EnvironmentSettings = JsEnvironmentSettings;
 
     fn lookup_settings(languages: &LanguageListSettings) -> &LanguageSettings<Self> {
         &languages.javascript
     }
 
     fn resolve_format_options(
-        global: &FormatSettings,
-        overrides: &OverrideSettings,
-        language: &JsFormatterSettings,
-        path: &RomePath,
+        global: Option<&FormatSettings>,
+        overrides: Option<&OverrideSettings>,
+        language: Option<&JsFormatterSettings>,
+        path: &BiomePath,
+        document_file_source: &DocumentFileSource,
     ) -> JsFormatOptions {
-        let indent_style = if let Some(indent_style) = language.indent_style {
-            indent_style
-        } else {
-            global.indent_style.unwrap_or_default()
-        };
-        let line_width = if let Some(line_width) = language.line_width {
-            line_width
-        } else {
-            global.line_width.unwrap_or_default()
-        };
-        let indent_width = if let Some(indent_width) = language.indent_width {
-            indent_width
-        } else {
-            global.indent_width.unwrap_or_default()
-        };
-        let options = JsFormatOptions::new(path.as_path().try_into().unwrap_or_default())
-            .with_indent_style(indent_style)
-            .with_indent_width(indent_width)
-            .with_line_width(line_width)
-            .with_quote_style(language.quote_style.unwrap_or_default())
-            .with_jsx_quote_style(language.jsx_quote_style.unwrap_or_default())
-            .with_quote_properties(language.quote_properties.unwrap_or_default())
-            .with_trailing_comma(language.trailing_comma.unwrap_or_default())
-            .with_semicolons(language.semicolons.unwrap_or_default())
-            .with_arrow_parentheses(language.arrow_parentheses.unwrap_or_default())
-            .with_bracket_spacing(language.bracket_spacing.unwrap_or_default())
-            .with_bracket_same_line(language.bracket_same_line.unwrap_or_default());
+        let options = JsFormatOptions::new(
+            document_file_source
+                .to_js_file_source()
+                .or(JsFileSource::try_from(path.as_path()).ok())
+                .unwrap_or_default(),
+        )
+        .with_indent_style(
+            language
+                .and_then(|l| l.indent_style)
+                .or(global.and_then(|g| g.indent_style))
+                .unwrap_or_default(),
+        )
+        .with_indent_width(
+            language
+                .and_then(|l| l.indent_width)
+                .or(global.and_then(|g| g.indent_width))
+                .unwrap_or_default(),
+        )
+        .with_line_width(
+            language
+                .and_then(|l| l.line_width)
+                .or(global.and_then(|g| g.line_width))
+                .unwrap_or_default(),
+        )
+        .with_line_ending(
+            language
+                .and_then(|l| l.line_ending)
+                .or(global.and_then(|g| g.line_ending))
+                .unwrap_or_default(),
+        )
+        .with_quote_style(language.and_then(|l| l.quote_style).unwrap_or_default())
+        .with_jsx_quote_style(language.and_then(|l| l.jsx_quote_style).unwrap_or_default())
+        .with_quote_properties(
+            language
+                .and_then(|l| l.quote_properties)
+                .unwrap_or_default(),
+        )
+        .with_trailing_commas(language.and_then(|l| l.trailing_commas).unwrap_or_default())
+        .with_semicolons(language.and_then(|l| l.semicolons).unwrap_or_default())
+        .with_arrow_parentheses(
+            language
+                .and_then(|l| l.arrow_parentheses)
+                .unwrap_or_default(),
+        )
+        .with_bracket_spacing(
+            language
+                .and_then(|l| l.bracket_spacing)
+                .or(global.and_then(|g| g.bracket_spacing))
+                .unwrap_or_default(),
+        )
+        .with_bracket_same_line(
+            language
+                .and_then(|l| l.bracket_same_line)
+                .unwrap_or_default(),
+        )
+        .with_attribute_position(
+            language
+                .and_then(|l| l.attribute_position)
+                .or(global.and_then(|g| g.attribute_position))
+                .unwrap_or_default(),
+        );
 
-        overrides.override_js_format_options(path, options)
+        if let Some(overrides) = overrides {
+            overrides.override_js_format_options(path, options)
+        } else {
+            options
+        }
+    }
+
+    fn resolve_analyzer_options(
+        global: Option<&Settings>,
+        _linter: Option<&LinterSettings>,
+        overrides: Option<&OverrideSettings>,
+        _language: Option<&Self::LinterSettings>,
+        path: &BiomePath,
+        _file_source: &DocumentFileSource,
+        suppression_reason: Option<String>,
+    ) -> AnalyzerOptions {
+        let preferred_quote =
+            global
+                .and_then(|global| {
+                    global.languages.javascript.formatter.quote_style.map(
+                        |quote_style: QuoteStyle| {
+                            if quote_style == QuoteStyle::Single {
+                                PreferredQuote::Single
+                            } else {
+                                PreferredQuote::Double
+                            }
+                        },
+                    )
+                })
+                .unwrap_or_default();
+        let preferred_jsx_quote = global
+            .and_then(|global| {
+                global.languages.javascript.formatter.jsx_quote_style.map(
+                    |quote_style: QuoteStyle| {
+                        if quote_style == QuoteStyle::Single {
+                            PreferredQuote::Single
+                        } else {
+                            PreferredQuote::Double
+                        }
+                    },
+                )
+            })
+            .unwrap_or_default();
+
+        let mut jsx_runtime = None;
+        let mut globals = Vec::new();
+
+        if let (Some(overrides), Some(global)) = (overrides, global) {
+            jsx_runtime = Some(
+                match overrides
+                    .override_jsx_runtime(path, global.languages.javascript.environment.jsx_runtime)
+                {
+                    // In the future, we may wish to map an `Auto` variant to a concrete
+                    // analyzer value for easy access by the analyzer.
+                    JsxRuntime::Transparent => biome_analyze::options::JsxRuntime::Transparent,
+                    JsxRuntime::ReactClassic => biome_analyze::options::JsxRuntime::ReactClassic,
+                },
+            );
+
+            globals.extend(
+                overrides
+                    .override_js_globals(path, &global.languages.javascript.globals)
+                    .into_iter()
+                    .collect::<Vec<_>>(),
+            );
+        }
+
+        if let Some(filename) = path.file_name().map(|filename| filename.as_encoded_bytes()) {
+            if filename.ends_with(b".vue") {
+                globals.extend(
+                    [
+                        "defineEmits",
+                        "defineExpose",
+                        "defineModel",
+                        "defineOptions",
+                        "defineProps",
+                        "defineSlots",
+                        "withDefaults",
+                    ]
+                    .map(str::to_string),
+                );
+            } else if filename.ends_with(b".astro") {
+                globals.extend(["Astro"].map(str::to_string));
+            } else if filename.ends_with(b".svelte")
+                || filename.ends_with(b".svelte.js")
+                || filename.ends_with(b".svelte.ts")
+            {
+                // Svelte 5 runes
+                globals.extend(
+                    [
+                        "$bindable",
+                        "$derived",
+                        "$effect",
+                        "$host",
+                        "$inspect",
+                        "$props",
+                        "$state",
+                    ]
+                    .map(str::to_string),
+                );
+            }
+        }
+
+        let configuration = AnalyzerConfiguration {
+            rules: global
+                .map(|g| to_analyzer_rules(g, path.as_path()))
+                .unwrap_or_default(),
+            globals,
+            preferred_quote,
+            preferred_jsx_quote,
+            jsx_runtime,
+        };
+
+        AnalyzerOptions {
+            configuration,
+            file_path: path.to_path_buf(),
+            suppression_reason,
+        }
     }
 }
 
@@ -131,18 +305,6 @@ impl Language for JsLanguage {
 pub(crate) struct JsFileHandler;
 
 impl ExtensionHandler for JsFileHandler {
-    fn language(&self) -> super::Language {
-        super::Language::JavaScript
-    }
-
-    fn mime(&self) -> Mime {
-        Mime::Javascript
-    }
-
-    fn may_use_tabs(&self) -> bool {
-        true
-    }
-
     fn capabilities(&self) -> super::Capabilities {
         super::Capabilities {
             parser: ParserCapabilities { parse: Some(parse) },
@@ -163,43 +325,45 @@ impl ExtensionHandler for JsFileHandler {
                 format_range: Some(format_range),
                 format_on_type: Some(format_on_type),
             },
+            search: SearchCapabilities {
+                search: Some(search),
+            },
         }
     }
 }
+
 fn parse(
-    rome_path: &RomePath,
-    language_hint: LanguageId,
+    biome_path: &BiomePath,
+    file_source: DocumentFileSource,
     text: &str,
-    settings: SettingsHandle,
+    settings: Option<&Settings>,
     cache: &mut NodeCache,
-) -> AnyParse {
-    let source_type =
-        JsFileSource::try_from(rome_path.as_path()).unwrap_or_else(|_| match language_hint {
-            LanguageId::JavaScriptReact => JsFileSource::jsx(),
-            LanguageId::TypeScript => JsFileSource::ts(),
-            LanguageId::TypeScriptReact => JsFileSource::tsx(),
-            _ => JsFileSource::js_module(),
-        });
-    let parser_settings = &settings.as_ref().languages.javascript.parser;
-    let overrides = &settings.as_ref().override_settings;
-    let options = overrides.override_js_parser_options(
-        rome_path,
-        JsParserOptions {
-            parse_class_parameter_decorators: parser_settings.parse_class_parameter_decorators,
-        },
-    );
-    let parse = biome_js_parser::parse_js_with_cache(text, source_type, options, cache);
-    let root = parse.syntax();
-    let diagnostics = parse.into_diagnostics();
-    AnyParse::new(
-        // SAFETY: the parser should always return a root node
-        root.as_send().unwrap(),
-        diagnostics,
-        source_type.as_any_file_source(),
-    )
+) -> ParseResult {
+    let mut options = JsParserOptions {
+        grit_metavariables: false,
+        parse_class_parameter_decorators: settings.is_some_and(|settings| {
+            settings
+                .languages
+                .javascript
+                .parser
+                .parse_class_parameter_decorators
+        }),
+    };
+    if let Some(settings) = settings {
+        options = settings
+            .override_settings
+            .to_override_js_parser_options(biome_path, options);
+    }
+
+    let file_source = file_source.to_js_file_source().unwrap_or_default();
+    let parse = biome_js_parser::parse_js_with_cache(text, file_source, options, cache);
+    ParseResult {
+        any_parse: parse.into(),
+        language: None,
+    }
 }
 
-fn debug_syntax_tree(_rome_path: &RomePath, parse: AnyParse) -> GetSyntaxTreeResult {
+fn debug_syntax_tree(_rome_path: &BiomePath, parse: AnyParse) -> GetSyntaxTreeResult {
     let syntax: JsSyntaxNode = parse.syntax();
     let tree: AnyJsRoot = parse.tree();
     GetSyntaxTreeResult {
@@ -212,7 +376,7 @@ fn debug_control_flow(parse: AnyParse, cursor: TextSize) -> String {
     let mut control_flow_graph = None;
 
     let filter = AnalysisFilter {
-        categories: RuleCategories::LINT,
+        categories: RuleCategoriesBuilder::default().with_lint().build(),
         enabled_rules: Some(&[RuleFilter::Rule("correctness", "noUnreachable")]),
         ..AnalysisFilter::default()
     };
@@ -245,6 +409,7 @@ fn debug_control_flow(parse: AnyParse, cursor: TextSize) -> String {
         },
         &options,
         JsFileSource::default(),
+        None,
         |_| ControlFlow::<Never>::Continue(()),
     );
 
@@ -252,11 +417,12 @@ fn debug_control_flow(parse: AnyParse, cursor: TextSize) -> String {
 }
 
 fn debug_formatter_ir(
-    rome_path: &RomePath,
+    path: &BiomePath,
+    document_file_source: &DocumentFileSource,
     parse: AnyParse,
-    settings: SettingsHandle,
+    settings: WorkspaceSettingsHandle,
 ) -> Result<String, WorkspaceError> {
-    let options = settings.format_options::<JsLanguage>(rome_path);
+    let options = settings.format_options::<JsLanguage>(path, document_file_source);
 
     let tree = parse.syntax();
     let formatted = format_node(options, &tree)?;
@@ -265,254 +431,301 @@ fn debug_formatter_ir(
     Ok(root_element.to_string())
 }
 
-fn lint(params: LintParams) -> LintResults {
-    let Ok(file_source) = params.parse.file_source(params.path) else {
-        return LintResults {
-            errors: 0,
-            diagnostics: vec![],
-            skipped_diagnostics: 0,
-        };
-    };
-    let tree = params.parse.tree();
-    let mut diagnostics = params.parse.into_diagnostics();
+pub(crate) fn lint(params: LintParams) -> LintResults {
+    debug_span!("Linting JavaScript file", path =? params.path, language =? params.language)
+        .in_scope(move || {
+            let Some(file_source) = params
+                .language
+                .to_js_file_source()
+                .or(JsFileSource::try_from(params.path.as_path()).ok())
+            else {
+                return LintResults {
+                    errors: 0,
+                    diagnostics: Vec::new(),
+                    skipped_diagnostics: 0,
+                };
+            };
+            let tree = params.parse.tree();
+            let analyzer_options = &params.workspace.analyzer_options::<JsLanguage>(
+                params.path,
+                &params.language,
+                params.suppression_reason,
+            );
 
-    let analyzer_options =
-        compute_analyzer_options(&params.settings, PathBuf::from(params.path.as_path()));
+            let rules = params
+                .workspace
+                .settings()
+                .as_ref()
+                .and_then(|settings| settings.as_linter_rules(params.path.as_path()));
 
-    let mut diagnostic_count = diagnostics.len() as u64;
-    let mut errors = diagnostics
-        .iter()
-        .filter(|diag| diag.severity() <= Severity::Error)
-        .count();
+            let (enabled_rules, disabled_rules) =
+                AnalyzerVisitorBuilder::new(params.workspace.settings())
+                    .with_syntax_rules()
+                    .with_linter_rules(&params.only, &params.skip, params.path.as_path())
+                    .with_assists_rules(&params.only, &params.skip, params.path.as_path())
+                    .finish();
 
-    let has_lint = params.filter.categories.contains(RuleCategories::LINT);
+            let filter = AnalysisFilter {
+                categories: params.categories,
+                enabled_rules: Some(enabled_rules.as_slice()),
+                disabled_rules: &disabled_rules,
+                range: None,
+            };
 
-    info!("Analyze file {}", params.path.display());
-    let (_, analyze_diagnostics) = analyze(
-        &tree,
-        params.filter,
-        &analyzer_options,
-        file_source,
-        |signal| {
-            if let Some(mut diagnostic) = signal.diagnostic() {
-                // Do not report unused suppression comment diagnostics if this is a syntax-only analyzer pass
-                if !has_lint && diagnostic.category() == Some(category!("suppressions/unused")) {
-                    return ControlFlow::<Never>::Continue(());
-                }
+            let ignores_suppression_comment =
+                !filter.categories.contains(RuleCategory::Lint) || !params.only.is_empty();
 
-                diagnostic_count += 1;
+            let mut diagnostics = params.parse.into_diagnostics();
+            let mut diagnostic_count = diagnostics.len() as u32;
+            let mut errors = diagnostics
+                .iter()
+                .filter(|diag| diag.severity() <= Severity::Error)
+                .count();
 
-                // We do now check if the severity of the diagnostics should be changed.
-                // The configuration allows to change the severity of the diagnostics emitted by rules.
-                let severity = diagnostic
-                    .category()
-                    .filter(|category| category.name().starts_with("lint/"))
-                    .map(|category| {
-                        params
-                            .rules
-                            .and_then(|rules| rules.get_severity_from_code(category))
-                            .unwrap_or(Severity::Warning)
-                    })
-                    .unwrap_or_else(|| diagnostic.severity());
+            info!("Analyze file {}", params.path.display());
+            let (_, analyze_diagnostics) = analyze(
+                &tree,
+                filter,
+                analyzer_options,
+                file_source,
+                params.manifest,
+                |signal| {
+                    if let Some(mut diagnostic) = signal.diagnostic() {
+                        if ignores_suppression_comment
+                            && diagnostic.category() == Some(category!("suppressions/unused"))
+                        {
+                            return ControlFlow::<Never>::Continue(());
+                        }
 
-                if severity >= Severity::Error {
-                    errors += 1;
-                }
+                        diagnostic_count += 1;
 
-                if diagnostic_count <= params.max_diagnostics {
-                    for action in signal.actions() {
-                        if !action.is_suppression() {
-                            diagnostic = diagnostic.add_code_suggestion(action.into());
+                        // We do now check if the severity of the diagnostics should be changed.
+                        // The configuration allows to change the severity of the diagnostics emitted by rules.
+                        let severity = diagnostic
+                            .category()
+                            .filter(|category| category.name().starts_with("lint/"))
+                            .map_or_else(
+                                || diagnostic.severity(),
+                                |category| {
+                                    rules
+                                        .as_ref()
+                                        .and_then(|rules| rules.get_severity_from_code(category))
+                                        .unwrap_or(Severity::Warning)
+                                },
+                            );
+
+                        if severity >= Severity::Error {
+                            errors += 1;
+                        }
+
+                        if diagnostic_count <= params.max_diagnostics {
+                            for action in signal.actions() {
+                                if !action.is_suppression() {
+                                    diagnostic = diagnostic.add_code_suggestion(action.into());
+                                }
+                            }
+
+                            let error = diagnostic.with_severity(severity);
+
+                            diagnostics.push(biome_diagnostics::serde::Diagnostic::new(error));
                         }
                     }
 
-                    let error = diagnostic.with_severity(severity);
+                    ControlFlow::<Never>::Continue(())
+                },
+            );
 
-                    diagnostics.push(biome_diagnostics::serde::Diagnostic::new(error));
-                }
+            diagnostics.extend(
+                analyze_diagnostics
+                    .into_iter()
+                    .map(biome_diagnostics::serde::Diagnostic::new)
+                    .collect::<Vec<_>>(),
+            );
+            let skipped_diagnostics = diagnostic_count.saturating_sub(diagnostics.len() as u32);
+
+            LintResults {
+                diagnostics,
+                errors,
+                skipped_diagnostics,
             }
-
-            ControlFlow::<Never>::Continue(())
-        },
-    );
-
-    diagnostics.extend(
-        analyze_diagnostics
-            .into_iter()
-            .map(biome_diagnostics::serde::Diagnostic::new)
-            .collect::<Vec<_>>(),
-    );
-    let skipped_diagnostics = diagnostic_count.saturating_sub(diagnostics.len() as u64);
-
-    LintResults {
-        diagnostics,
-        errors,
-        skipped_diagnostics,
-    }
+        })
 }
 
-struct ActionsVisitor<'a> {
-    enabled_rules: Vec<RuleFilter<'a>>,
-}
+#[tracing::instrument(level = "debug", skip(params))]
+pub(crate) fn code_actions(params: CodeActionsParams) -> PullActionsResult {
+    let CodeActionsParams {
+        parse,
+        range,
+        workspace,
+        path,
+        manifest,
+        language,
+        only,
+        skip,
+        suppression_reason,
+    } = params;
+    debug_span!("Code actions JavaScript", range =? range, path =? path).in_scope(move || {
+        let tree = parse.tree();
+        trace_span!("Parsed file", tree =? tree).in_scope(move || {
+            let analyzer_options =
+                workspace.analyzer_options::<JsLanguage>(path, &language, suppression_reason);
+            let mut actions = Vec::new();
+            let (enabled_rules, disabled_rules) =
+                AnalyzerVisitorBuilder::new(params.workspace.settings())
+                    .with_syntax_rules()
+                    .with_linter_rules(&only, &skip, params.path.as_path())
+                    .with_assists_rules(&only, &skip, params.path.as_path())
+                    .finish();
 
-impl RegistryVisitor<JsLanguage> for ActionsVisitor<'_> {
-    fn record_category<C: GroupCategory<Language = JsLanguage>>(&mut self) {
-        if matches!(C::CATEGORY, RuleCategory::Action) {
-            C::record_groups(self);
-        }
-    }
+            let filter = AnalysisFilter {
+                categories: RuleCategoriesBuilder::default()
+                    .with_syntax()
+                    .with_lint()
+                    .with_action()
+                    .build(),
+                enabled_rules: Some(enabled_rules.as_slice()),
+                disabled_rules: &disabled_rules,
+                range,
+            };
 
-    fn record_group<G: RuleGroup<Language = JsLanguage>>(&mut self) {
-        G::record_rules(self)
-    }
+            let Some(source_type) = language.to_js_file_source() else {
+                error!("Could not determine the file source of the file");
+                return PullActionsResult {
+                    actions: Vec::new(),
+                };
+            };
 
-    fn record_rule<R>(&mut self)
-    where
-        R: biome_analyze::Rule + 'static,
-        R::Query: biome_analyze::Queryable<Language = JsLanguage>,
-        <R::Query as biome_analyze::Queryable>::Output: Clone,
-    {
-        self.enabled_rules.push(RuleFilter::Rule(
-            <R::Group as RuleGroup>::NAME,
-            R::METADATA.name,
-        ));
-    }
-}
+            trace!("Javascript runs the analyzer");
+            analyze(
+                &tree,
+                filter,
+                &analyzer_options,
+                source_type,
+                manifest,
+                |signal| {
+                    actions.extend(signal.actions().into_code_action_iter().map(|item| {
+                        CodeAction {
+                            category: item.category.clone(),
+                            rule_name: item
+                                .rule_name
+                                .map(|(group, name)| (Cow::Borrowed(group), Cow::Borrowed(name))),
+                            suggestion: item.suggestion,
+                        }
+                    }));
 
-#[tracing::instrument(level = "trace", skip(parse))]
-fn code_actions(
-    parse: AnyParse,
-    range: TextRange,
-    rules: Option<&Rules>,
-    settings: SettingsHandle,
-    path: &RomePath,
-) -> PullActionsResult {
-    let tree = parse.tree();
+                    ControlFlow::<Never>::Continue(())
+                },
+            );
 
-    let mut actions = Vec::new();
-
-    let mut enabled_rules = vec![];
-    if settings.as_ref().organize_imports.enabled {
-        enabled_rules.push(RuleFilter::Rule("correctness", "organizeImports"));
-    }
-    if let Some(rules) = rules {
-        let rules = rules.as_enabled_rules().into_iter().collect();
-
-        // The rules in the assist category do not have configuration entries,
-        // always add them all to the enabled rules list
-        let mut visitor = ActionsVisitor {
-            enabled_rules: rules,
-        };
-        visit_registry(&mut visitor);
-
-        enabled_rules.extend(visitor.enabled_rules);
-    }
-
-    let mut filter = if !enabled_rules.is_empty() {
-        AnalysisFilter::from_enabled_rules(Some(enabled_rules.as_slice()))
-    } else {
-        AnalysisFilter::default()
-    };
-
-    filter.categories = RuleCategories::SYNTAX | RuleCategories::LINT;
-    if settings.as_ref().organize_imports.enabled {
-        filter.categories |= RuleCategories::ACTION;
-    }
-    filter.range = Some(range);
-
-    trace!("Filter applied for code actions: {:?}", &filter);
-    let analyzer_options = compute_analyzer_options(&settings, PathBuf::from(path.as_path()));
-    let Ok(source_type) = parse.file_source(path) else {
-        return PullActionsResult { actions: vec![] };
-    };
-
-    analyze(&tree, filter, &analyzer_options, source_type, |signal| {
-        actions.extend(signal.actions().into_code_action_iter().map(|item| {
-            CodeAction {
-                category: item.category.clone(),
-                rule_name: item
-                    .rule_name
-                    .map(|(group, name)| (Cow::Borrowed(group), Cow::Borrowed(name))),
-                suggestion: item.suggestion,
-            }
-        }));
-
-        ControlFlow::<Never>::Continue(())
-    });
-
-    PullActionsResult { actions }
+            PullActionsResult { actions }
+        })
+    })
 }
 
 /// If applies all the safe fixes to the given syntax tree.
-///
-/// If `indent_style` is [Some], it means that the formatting should be applied at the end
-fn fix_all(params: FixAllParams) -> Result<FixFileResult, WorkspaceError> {
-    let FixAllParams {
-        parse,
-        rules,
-        fix_file_mode,
-        settings,
-        should_format,
-        rome_path,
-        mut filter,
-    } = params;
+pub(crate) fn fix_all(params: FixAllParams) -> Result<FixFileResult, WorkspaceError> {
+    let mut tree: AnyJsRoot = params.parse.tree();
+    let Some(settings) = params.workspace.settings() else {
+        return Ok(FixFileResult {
+            actions: Vec::new(),
+            errors: 0,
+            skipped_suggested_fixes: 0,
+            code: tree.syntax().to_string(),
+        });
+    };
 
-    let file_source = parse
-        .file_source(rome_path)
-        .map_err(|_| extension_error(params.rome_path))?;
-    let mut tree: AnyJsRoot = parse.tree();
+    // Compute final rules (taking `overrides` into account)
+    let rules = settings.as_linter_rules(params.biome_path.as_path());
+
+    let (enabled_rules, disabled_rules) = AnalyzerVisitorBuilder::new(params.workspace.settings())
+        .with_syntax_rules()
+        .with_linter_rules(&params.only, &params.skip, params.biome_path.as_path())
+        .with_assists_rules(&params.only, &params.skip, params.biome_path.as_path())
+        .finish();
+
+    let filter = AnalysisFilter {
+        categories: params.rule_categories,
+        enabled_rules: Some(enabled_rules.as_slice()),
+        disabled_rules: &disabled_rules,
+        range: None,
+    };
+
+    let Some(file_source) = params
+        .document_file_source
+        .to_js_file_source()
+        .or(JsFileSource::try_from(params.biome_path.as_path()).ok())
+    else {
+        return Err(extension_error(params.biome_path));
+    };
+
     let mut actions = Vec::new();
-
-    filter.categories = RuleCategories::SYNTAX | RuleCategories::LINT;
-
     let mut skipped_suggested_fixes = 0;
     let mut errors: u16 = 0;
-    let analyzer_options = compute_analyzer_options(&settings, PathBuf::from(rome_path.as_path()));
+    let analyzer_options = params.workspace.analyzer_options::<JsLanguage>(
+        params.biome_path,
+        &params.document_file_source,
+        params.suppression_reason,
+    );
     loop {
-        let (action, _) = analyze(&tree, filter, &analyzer_options, file_source, |signal| {
-            let current_diagnostic = signal.diagnostic();
+        let (action, _) = analyze(
+            &tree,
+            filter,
+            &analyzer_options,
+            file_source,
+            params.manifest.clone(),
+            |signal| {
+                let current_diagnostic = signal.diagnostic();
 
-            if let Some(diagnostic) = current_diagnostic.as_ref() {
-                if is_diagnostic_error(diagnostic, rules) {
-                    errors += 1;
-                }
-            }
-
-            for action in signal.actions() {
-                // suppression actions should not be part of the fixes (safe or suggested)
-                if action.is_suppression() {
-                    continue;
-                }
-
-                match fix_file_mode {
-                    FixFileMode::SafeFixes => {
-                        if action.applicability == Applicability::MaybeIncorrect {
-                            skipped_suggested_fixes += 1;
-                        }
-                        if action.applicability == Applicability::Always {
-                            errors = errors.saturating_sub(1);
-                            return ControlFlow::Break(action);
-                        }
-                    }
-                    FixFileMode::SafeAndUnsafeFixes => {
-                        if matches!(
-                            action.applicability,
-                            Applicability::Always | Applicability::MaybeIncorrect
-                        ) {
-                            errors = errors.saturating_sub(1);
-                            return ControlFlow::Break(action);
-                        }
+                if let Some(diagnostic) = current_diagnostic.as_ref() {
+                    if is_diagnostic_error(diagnostic, rules.as_deref()) {
+                        errors += 1;
                     }
                 }
-            }
 
-            ControlFlow::Continue(())
-        });
+                for action in signal.actions() {
+                    match params.fix_file_mode {
+                        FixFileMode::ApplySuppressions => {
+                            if action.is_suppression() {
+                                return ControlFlow::Break(action);
+                            }
+                        }
+                        FixFileMode::SafeFixes => {
+                            if action.is_suppression() {
+                                continue;
+                            }
+                            if action.applicability == Applicability::MaybeIncorrect {
+                                skipped_suggested_fixes += 1;
+                            }
+                            if action.applicability == Applicability::Always {
+                                errors = errors.saturating_sub(1);
+                                return ControlFlow::Break(action);
+                            }
+                        }
+                        FixFileMode::SafeAndUnsafeFixes => {
+                            if action.is_suppression() {
+                                continue;
+                            }
+                            if matches!(
+                                action.applicability,
+                                Applicability::Always | Applicability::MaybeIncorrect
+                            ) {
+                                errors = errors.saturating_sub(1);
+                                return ControlFlow::Break(action);
+                            }
+                        }
+                    }
+                }
+
+                ControlFlow::Continue(())
+            },
+        );
 
         match action {
             Some(action) => {
-                if let Some((range, _)) = action.mutation.as_text_edits() {
-                    tree = match AnyJsRoot::cast(action.mutation.commit()) {
+                if let (root, Some((range, _))) =
+                    action.mutation.commit_with_text_range_and_edit(true)
+                {
+                    tree = match AnyJsRoot::cast(root) {
                         Some(tree) => tree,
                         None => {
                             return Err(WorkspaceError::RuleError(
@@ -521,7 +734,7 @@ fn fix_all(params: FixAllParams) -> Result<FixFileResult, WorkspaceError> {
                                         (Cow::Borrowed(group), Cow::Borrowed(rule))
                                     }),
                                 },
-                            ))
+                            ));
                         }
                     };
                     actions.push(FixAction {
@@ -533,9 +746,12 @@ fn fix_all(params: FixAllParams) -> Result<FixFileResult, WorkspaceError> {
                 }
             }
             None => {
-                let code = if should_format {
+                let code = if params.should_format {
                     format_node(
-                        settings.format_options::<JsLanguage>(rome_path),
+                        params.workspace.format_options::<JsLanguage>(
+                            params.biome_path,
+                            &params.document_file_source,
+                        ),
                         tree.syntax(),
                     )?
                     .print()?
@@ -554,49 +770,53 @@ fn fix_all(params: FixAllParams) -> Result<FixFileResult, WorkspaceError> {
     }
 }
 
-#[tracing::instrument(level = "trace", skip(parse))]
-fn format(
-    rome_path: &RomePath,
+#[tracing::instrument(level = "trace", skip(parse, settings))]
+pub(crate) fn format(
+    biome_path: &BiomePath,
+    document_file_source: &DocumentFileSource,
     parse: AnyParse,
-    settings: SettingsHandle,
+    settings: WorkspaceSettingsHandle,
 ) -> Result<Printed, WorkspaceError> {
-    let options = settings.format_options::<JsLanguage>(rome_path);
+    let options = settings.format_options::<JsLanguage>(biome_path, document_file_source);
 
     debug!("Options used for format: \n{}", options);
 
     let tree = parse.syntax();
-    info!("Format file {}", rome_path.display());
+    info!("Format file {}", biome_path.display());
     let formatted = format_node(options, &tree)?;
     match formatted.print() {
         Ok(printed) => Ok(printed),
         Err(error) => {
-            error!("The file {} couldn't be formatted", rome_path.display());
+            error!("The file {} couldn't be formatted", biome_path.display());
             Err(WorkspaceError::FormatError(error.into()))
         }
     }
 }
-#[tracing::instrument(level = "trace", skip(parse))]
-fn format_range(
-    rome_path: &RomePath,
+
+#[tracing::instrument(level = "trace", skip(parse, settings))]
+pub(crate) fn format_range(
+    biome_path: &BiomePath,
+    document_file_source: &DocumentFileSource,
     parse: AnyParse,
-    settings: SettingsHandle,
+    settings: WorkspaceSettingsHandle,
     range: TextRange,
 ) -> Result<Printed, WorkspaceError> {
-    let options = settings.format_options::<JsLanguage>(rome_path);
+    let options = settings.format_options::<JsLanguage>(biome_path, document_file_source);
 
     let tree = parse.syntax();
     let printed = biome_js_formatter::format_range(options, &tree, range)?;
     Ok(printed)
 }
 
-#[tracing::instrument(level = "trace", skip(parse))]
-fn format_on_type(
-    rome_path: &RomePath,
+#[tracing::instrument(level = "trace", skip(parse, settings))]
+pub(crate) fn format_on_type(
+    path: &BiomePath,
+    document_file_source: &DocumentFileSource,
     parse: AnyParse,
-    settings: SettingsHandle,
+    settings: WorkspaceSettingsHandle,
     offset: TextSize,
 ) -> Result<Printed, WorkspaceError> {
-    let options = settings.format_options::<JsLanguage>(rome_path);
+    let options = settings.format_options::<JsLanguage>(path, document_file_source);
 
     let tree = parse.syntax();
 
@@ -627,7 +847,7 @@ fn format_on_type(
 }
 
 fn rename(
-    _rome_path: &RomePath,
+    _rome_path: &BiomePath,
     parse: AnyParse,
     symbol_at: TextSize,
     new_name: String,
@@ -646,7 +866,7 @@ fn rename(
         match node.try_into() {
             Ok(node) => {
                 let mut batch = root.begin();
-                let result = batch.rename_any_renamable_node(&model, node, &new_name);
+                let result = batch.rename_any_renamable_node(&model, &node, &new_name);
                 if !result {
                     Err(WorkspaceError::RenameError(RenameError::CannotBeRenamed {
                         original_name: original_name.to_string(),
@@ -654,7 +874,7 @@ fn rename(
                         new_name,
                     }))
                 } else {
-                    let (range, indels) = batch.as_text_edits().unwrap_or_default();
+                    let (range, indels) = batch.as_text_range_and_edit().unwrap_or_default();
                     Ok(RenameResult { range, indels })
                 }
             }
@@ -667,12 +887,12 @@ fn rename(
     }
 }
 
-fn organize_imports(parse: AnyParse) -> Result<OrganizeImportsResult, WorkspaceError> {
+pub(crate) fn organize_imports(parse: AnyParse) -> Result<OrganizeImportsResult, WorkspaceError> {
     let mut tree: AnyJsRoot = parse.tree();
 
     let filter = AnalysisFilter {
-        enabled_rules: Some(&[RuleFilter::Rule("correctness", "organizeImports")]),
-        categories: RuleCategories::ACTION,
+        enabled_rules: Some(&[RuleFilter::Rule("source", "organizeImports")]),
+        categories: RuleCategoriesBuilder::default().with_action().build(),
         ..AnalysisFilter::default()
     };
 
@@ -681,6 +901,7 @@ fn organize_imports(parse: AnyParse) -> Result<OrganizeImportsResult, WorkspaceE
         filter,
         &AnalyzerOptions::default(),
         JsFileSource::default(),
+        None,
         |signal| {
             for action in signal.actions() {
                 if action.is_suppression() {
@@ -703,7 +924,7 @@ fn organize_imports(parse: AnyParse) -> Result<OrganizeImportsResult, WorkspaceE
                             .rule_name
                             .map(|(group, rule)| (Cow::Borrowed(group), Cow::Borrowed(rule))),
                     },
-                ))
+                ));
             }
         };
 
@@ -714,24 +935,5 @@ fn organize_imports(parse: AnyParse) -> Result<OrganizeImportsResult, WorkspaceE
         Ok(OrganizeImportsResult {
             code: tree.syntax().to_string(),
         })
-    }
-}
-
-fn compute_analyzer_options(settings: &SettingsHandle, file_path: PathBuf) -> AnalyzerOptions {
-    let configuration = AnalyzerConfiguration {
-        rules: to_analyzer_rules(settings.as_ref(), file_path.as_path()),
-        globals: if let Some(globals) = settings.as_ref().languages.javascript.globals.as_ref() {
-            globals
-                .iter()
-                .map(|global| global.to_string())
-                .collect::<Vec<_>>()
-        } else {
-            vec![]
-        },
-    };
-
-    AnalyzerOptions {
-        configuration,
-        file_path,
     }
 }

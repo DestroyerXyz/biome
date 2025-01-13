@@ -1,4 +1,4 @@
-#[allow(deprecated)]
+#[expect(deprecated)]
 use crate::parser::single_token_parse_recovery::SingleTokenParseRecovery;
 use crate::parser::ParsedSyntax::{Absent, Present};
 use crate::parser::{ParsedSyntax, RecoveryResult};
@@ -22,10 +22,12 @@ use crate::syntax::typescript::{
     TypeContext,
 };
 use crate::JsSyntaxFeature::TypeScript;
-use crate::{JsParser, ParseRecovery};
+use crate::{JsParser, ParseRecoveryTokenSet};
 use biome_js_syntax::JsSyntaxKind::*;
 use biome_js_syntax::{JsSyntaxKind, T};
 use biome_parser::parse_lists::ParseSeparatedList;
+
+use super::metavariable::parse_metavariable;
 
 // test js object_expr
 // let a = {};
@@ -53,9 +55,9 @@ impl ParseSeparatedList for ObjectMembersList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(JS_BOGUS_MEMBER, token_set![T![,], T!['}'], T![;], T![:]])
+            &ParseRecoveryTokenSet::new(JS_BOGUS_MEMBER, token_set![T![,], T!['}'], T![;], T![:]])
                 .enable_recovery_on_line_break(),
             js_parse_error::expected_object_member,
         )
@@ -112,6 +114,8 @@ fn parse_object_member(p: &mut JsParser) -> ParsedSyntax {
         // test js setter_object_member
         // let a = {
         //  set foo(value) {
+        //  },
+        //  set a(value,) {
         //  },
         //  set "bar"(value) {
         //  },
@@ -227,7 +231,7 @@ fn parse_object_member(p: &mut JsParser) -> ParsedSyntax {
                 // test_err js object_expr_non_ident_literal_prop
                 // let d = {5}
 
-                #[allow(deprecated)]
+                #[expect(deprecated)]
                 SingleTokenParseRecovery::new(token_set![T![:], T![,]], JS_BOGUS).recover(p);
 
                 if p.eat(T![:]) {
@@ -329,6 +333,11 @@ fn parse_setter_object_member(p: &mut JsParser) -> ParsedSyntax {
             TypeContext::default(),
         )
         .or_add_diagnostic(p, js_parse_error::expected_parameter);
+
+        if p.at(T![,]) {
+            p.bump_any();
+        }
+
         p.expect(T![')']);
     });
 
@@ -355,6 +364,7 @@ fn parse_setter_object_member(p: &mut JsParser) -> ParsedSyntax {
 pub(crate) fn parse_object_member_name(p: &mut JsParser) -> ParsedSyntax {
     match p.cur() {
         T!['['] => parse_computed_member_name(p),
+        t if t.is_metavariable() => parse_metavariable(p),
         _ => parse_literal_member_name(p),
     }
 }
@@ -410,6 +420,10 @@ pub(super) fn parse_literal_member_name(p: &mut JsParser) -> ParsedSyntax {
         }
         t if t.is_keyword() => {
             p.bump_remap(T![ident]);
+        }
+        t if t.is_metavariable() => {
+            m.abandon(p);
+            return parse_metavariable(p);
         }
         _ => {
             m.abandon(p);

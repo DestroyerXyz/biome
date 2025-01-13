@@ -7,27 +7,24 @@ use crate::registry::visit_migration_registry;
 use crate::version_services::TheVersion;
 pub use biome_analyze::ControlFlow;
 use biome_analyze::{
-    AnalysisFilter, Analyzer, AnalyzerContext, AnalyzerOptions, AnalyzerSignal, InspectMatcher,
-    LanguageRoot, MatchQueryParams, MetadataRegistry, RuleAction, RuleRegistry,
+    AnalysisFilter, Analyzer, AnalyzerContext, AnalyzerOptions, AnalyzerSignal, ApplySuppression,
+    InspectMatcher, LanguageRoot, MatchQueryParams, MetadataRegistry, RuleAction, RuleRegistry,
+    SuppressionAction,
 };
 use biome_diagnostics::Error;
 use biome_json_syntax::JsonLanguage;
+use biome_rowan::{BatchMutation, SyntaxToken};
 use std::convert::Infallible;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 /// Return the static [MetadataRegistry] for the JS analyzer rules
-pub fn metadata() -> &'static MetadataRegistry {
-    lazy_static::lazy_static! {
-        static ref METADATA: MetadataRegistry = {
-            let mut metadata = MetadataRegistry::default();
-            visit_migration_registry(&mut metadata);
-            metadata
-        };
-    }
-
-    &METADATA
-}
+static METADATA: LazyLock<MetadataRegistry> = LazyLock::new(|| {
+    let mut metadata = MetadataRegistry::default();
+    visit_migration_registry(&mut metadata);
+    metadata
+});
 
 /// Run the analyzer on the provided `root`: this process will use the given `filter`
 /// to selectively restrict analysis to specific rules / a specific source range,
@@ -61,12 +58,32 @@ where
     if !diagnostics.is_empty() {
         return (None, diagnostics);
     }
+    struct TestAction;
+    impl SuppressionAction for TestAction {
+        type Language = JsonLanguage;
 
+        fn find_token_to_apply_suppression(
+            &self,
+            _: SyntaxToken<Self::Language>,
+        ) -> Option<ApplySuppression<Self::Language>> {
+            None
+        }
+
+        fn apply_suppression(
+            &self,
+            _: &mut BatchMutation<Self::Language>,
+            _: ApplySuppression<Self::Language>,
+            _: &str,
+            _: &str,
+        ) {
+            unreachable!("")
+        }
+    }
     let mut analyzer = Analyzer::new(
-        metadata(),
+        METADATA.deref(),
         InspectMatcher::new(migration_registry, inspect_matcher),
         |_| -> Vec<Result<_, Infallible>> { unreachable!() },
-        |_| {},
+        Box::new(TestAction),
         &mut emit_signal,
     );
 
@@ -126,7 +143,24 @@ mod test {
     #[ignore]
     fn quick_test() {
         let source = r#"{
-	"$schema": "https://biomejs.dev/schemas/1.0.0/schema.json"
+	"$schema": "https://biomejs.dev/schemas/1.0.0/schema.json",
+	"javascript": {
+		"formatter": {
+			"trailingCommas": "all",
+			"indentSize": 2
+		}
+	},
+	"overrides": [
+		{
+			"include": ["scripts/**"],
+			"javascript": {
+				"formatter": {
+					"trailingCommas": "es5",
+					"indentSize": 4
+				}
+			}
+		}
+	]
 }
 "#;
 

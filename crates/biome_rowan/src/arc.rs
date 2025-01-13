@@ -4,7 +4,7 @@ use std::{
     cmp::Ordering,
     hash::{Hash, Hasher},
     marker::PhantomData,
-    mem::{self, ManuallyDrop},
+    mem::{self, offset_of, ManuallyDrop},
     ops::Deref,
     ptr::{self, NonNull},
     sync::atomic::{
@@ -12,8 +12,6 @@ use std::{
         Ordering::{Acquire, Relaxed, Release},
     },
 };
-
-use memoffset::offset_of;
 
 /// A soft limit on the amount of references that may be made to an `Arc`.
 ///
@@ -86,7 +84,7 @@ impl<T: ?Sized> Arc<T> {
     /// allocation
     #[inline]
     pub(crate) fn ptr_eq(this: &Self, other: &Self) -> bool {
-        this.ptr() == other.ptr()
+        std::ptr::addr_eq(this.ptr(), other.ptr())
     }
 
     pub(crate) fn ptr(&self) -> *mut ArcInner<T> {

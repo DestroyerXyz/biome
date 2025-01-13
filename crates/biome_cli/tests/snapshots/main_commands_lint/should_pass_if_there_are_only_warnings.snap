@@ -28,6 +28,14 @@ A = 0;
 # Emitted Messages
 
 ```block
+internalError/fs  DEPRECATED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! The argument --apply-unsafe is deprecated, it will be removed in the next major release. Use --write --unsafe instead.
+  
+
+```
+
+```block
 file.js:2:1 lint/suspicious/noClassAssign ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ! 'A' is a class.
@@ -48,7 +56,6 @@ file.js:2:1 lint/suspicious/noClassAssign ━━━━━━━━━━━━�
 ```
 
 ```block
-Fixed 1 file(s) in <TIME>
+Checked 1 file in <TIME>. No fixes applied.
+Found 1 warning.
 ```
-
-

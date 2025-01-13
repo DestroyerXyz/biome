@@ -1,4 +1,4 @@
-use crate::parse_recovery::{ParseRecovery, RecoveryResult};
+use crate::parse_recovery::{ParseRecovery, ParseRecoveryTokenSet, RecoveryResult};
 use crate::parsed_syntax::ParsedSyntax::{Absent, Present};
 use crate::prelude::*;
 use biome_rowan::TextRange;
@@ -11,14 +11,16 @@ use biome_rowan::TextRange;
 /// ## Parse Rule conventions
 ///
 /// * A parse rule must return [ParsedSyntax::Present] if it is able to parse a node or at least parts of it. For example,
-/// the `parse_for_statement` should return [ParsedSyntax::Present] for `for (` even tough many of the required children are missing
-/// because it is still able to parse parts of the for statement.
+///     the `parse_for_statement` should return [ParsedSyntax::Present] for `for (` even tough many of the required children are missing
+///     because it is still able to parse parts of the for statement.
 /// * A parse rule must return [ParsedSyntax::Absent] if the expected node isn't present in the source code.
-/// In most cases, this means if the first expected token isn't present, for example,
-/// if the `for` keyword isn't present when parsing a for statement.
+///     In most cases, this means if the first expected token isn't present, for example,
+///     if the `for` keyword isn't present when parsing a for statement.
+///
 /// However, it can be possible for rules to recover even if the first token doesn't match. One example
 /// is when parsing an assignment target that has an optional default. The rule can recover even
 /// if the assignment target is missing as long as the cursor is then positioned at an `=` token.
+///
 /// The rule must then return [ParsedSyntax::Present] with the partial parsed node.
 /// * A parse rule must not eat any tokens when it returns [ParsedSyntax::Absent]
 /// * A parse rule must not add any errors when it returns [ParsedSyntax::Absent]
@@ -59,7 +61,7 @@ impl ParsedSyntax {
         }
     }
 
-    /// Calls `op` if the syntax is absent ond otherwise returns [ParsedSyntax::Present]
+    /// Calls `op` if the syntax is absent and otherwise returns [ParsedSyntax::Present]
     #[inline]
     pub fn or_else<F>(self, op: F) -> ParsedSyntax
     where
@@ -102,7 +104,6 @@ impl ParsedSyntax {
     }
 
     /// Returns the contained [ParsedSyntax::Present] value or passed default
-    #[allow(unused)]
     #[inline]
     pub fn unwrap_or(self, default: CompletedMarker) -> CompletedMarker {
         match self {
@@ -113,7 +114,6 @@ impl ParsedSyntax {
 
     /// Returns the contained [ParsedSyntax::Present] value or computes it from a clojure.
     #[inline]
-    #[allow(unused)]
     pub fn unwrap_or_else<F>(self, default: F) -> CompletedMarker
     where
         F: FnOnce() -> CompletedMarker,
@@ -242,19 +242,57 @@ impl ParsedSyntax {
     /// parser if the syntax is absent. The recovery...
     ///
     /// * eats all unexpected tokens into a `Bogus*` node until the parser reaches one
+    ///   of the "safe tokens" configured in the [ParseRecoveryTokenSet].
+    /// * creates an error using the passed in error builder and adds it to the parsing diagnostics.
+    ///
+    /// The error recovery can fail if the parser is located at the EOF token or if the parser
+    /// is already at a valid position according to the [ParseRecoveryTokenSet].
+    pub fn or_recover_with_token_set<P, E>(
+        self,
+        p: &mut P,
+        recovery: &ParseRecoveryTokenSet<P::Kind>,
+        error_builder: E,
+    ) -> RecoveryResult
+    where
+        P: Parser,
+        E: FnOnce(&P, TextRange) -> ParseDiagnostic,
+    {
+        match self {
+            Present(syntax) => Ok(syntax),
+            Absent => match recovery.recover(p) {
+                Ok(recovered) => {
+                    let diagnostic = error_builder(p, recovered.range(p));
+                    p.error(diagnostic);
+                    Ok(recovered)
+                }
+
+                Err(recovery_error) => {
+                    let diagnostic = error_builder(p, p.cur_range());
+                    p.error(diagnostic);
+                    Err(recovery_error)
+                }
+            },
+        }
+    }
+
+    /// Returns this Syntax if it is present in the source text or tries to recover the
+    /// parser if the syntax is absent. The recovery...
+    ///
+    /// * eats all unexpected tokens into a `Bogus*` node until the parser reaches one
     ///   of the "safe tokens" configured in the [ParseRecovery].
     /// * creates an error using the passed in error builder and adds it to the parsing diagnostics.
     ///
     /// The error recovery can fail if the parser is located at the EOF token or if the parser
     /// is already at a valid position according to the [ParseRecovery].
-    pub fn or_recover<P, E>(
+    pub fn or_recover<'source, P, E, R>(
         self,
         p: &mut P,
-        recovery: &ParseRecovery<P::Kind>,
+        recovery: &R,
         error_builder: E,
     ) -> RecoveryResult
     where
         P: Parser,
+        R: ParseRecovery<Parser<'source> = P>,
         E: FnOnce(&P, TextRange) -> ParseDiagnostic,
     {
         match self {

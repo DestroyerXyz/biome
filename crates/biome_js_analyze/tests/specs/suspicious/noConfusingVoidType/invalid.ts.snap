@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.ts
 ---
 # Input
-```js
+```ts
 // ref: https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/tests/rules/no-invalid-void-type.test.ts
 function takeVoid(thing: void) {}
 const arrowGeneric = <T extends void>(arg: T) => {};
@@ -12,7 +12,7 @@ function functionGeneric<T extends void>(arg: T) {}
 function functionGeneric2<T extends void = void>(arg: T) {}
 declare function functionDeclaration<T extends void>(arg: T): void;
 declare function functionDeclaration2<T extends void = void>(arg: T): void;
-functionGeneric<void>(undefined);
+
 declare function voidArray(args: void[]): void[];
 let value = undefined as void;
 let value = <void>undefined;
@@ -54,9 +54,9 @@ type invalidVoidUnion = void | Map<string, number>;
 
 # Diagnostics
 ```
-invalid.ts:2:26 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:2:26 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     1 │ // ref: https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/tests/rules/no-invalid-void-type.test.ts
   > 2 │ function takeVoid(thing: void) {}
@@ -64,15 +64,21 @@ invalid.ts:2:26 lint/suspicious/noConfusingVoidType ━━━━━━━━━�
     3 │ const arrowGeneric = <T extends void>(arg: T) => {};
     4 │ const arrowGeneric2 = <T extends void = void>(arg: T) => {};
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     1  1 │   // ref: https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/tests/rules/no-invalid-void-type.test.ts
+     2    │ - function·takeVoid(thing:·void)·{}
+        2 │ + function·takeVoid(thing:·undefined)·{}
+     3  3 │   const arrowGeneric = <T extends void>(arg: T) => {};
+     4  4 │   const arrowGeneric2 = <T extends void = void>(arg: T) => {};
   
 
 ```
 
 ```
-invalid.ts:3:33 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:3:33 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     1 │ // ref: https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/tests/rules/no-invalid-void-type.test.ts
     2 │ function takeVoid(thing: void) {}
@@ -81,15 +87,22 @@ invalid.ts:3:33 lint/suspicious/noConfusingVoidType ━━━━━━━━━�
     4 │ const arrowGeneric2 = <T extends void = void>(arg: T) => {};
     5 │ function functionGeneric<T extends void>(arg: T) {}
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     1  1 │   // ref: https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/tests/rules/no-invalid-void-type.test.ts
+     2  2 │   function takeVoid(thing: void) {}
+     3    │ - const·arrowGeneric·=·<T·extends·void>(arg:·T)·=>·{};
+        3 │ + const·arrowGeneric·=·<T·extends·undefined>(arg:·T)·=>·{};
+     4  4 │   const arrowGeneric2 = <T extends void = void>(arg: T) => {};
+     5  5 │   function functionGeneric<T extends void>(arg: T) {}
   
 
 ```
 
 ```
-invalid.ts:4:34 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:4:34 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     2 │ function takeVoid(thing: void) {}
     3 │ const arrowGeneric = <T extends void>(arg: T) => {};
@@ -98,15 +111,22 @@ invalid.ts:4:34 lint/suspicious/noConfusingVoidType ━━━━━━━━━�
     5 │ function functionGeneric<T extends void>(arg: T) {}
     6 │ function functionGeneric2<T extends void = void>(arg: T) {}
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     2  2 │   function takeVoid(thing: void) {}
+     3  3 │   const arrowGeneric = <T extends void>(arg: T) => {};
+     4    │ - const·arrowGeneric2·=·<T·extends·void·=·void>(arg:·T)·=>·{};
+        4 │ + const·arrowGeneric2·=·<T·extends·undefined·=·void>(arg:·T)·=>·{};
+     5  5 │   function functionGeneric<T extends void>(arg: T) {}
+     6  6 │   function functionGeneric2<T extends void = void>(arg: T) {}
   
 
 ```
 
 ```
-invalid.ts:5:36 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:5:36 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     3 │ const arrowGeneric = <T extends void>(arg: T) => {};
     4 │ const arrowGeneric2 = <T extends void = void>(arg: T) => {};
@@ -115,15 +135,22 @@ invalid.ts:5:36 lint/suspicious/noConfusingVoidType ━━━━━━━━━�
     6 │ function functionGeneric2<T extends void = void>(arg: T) {}
     7 │ declare function functionDeclaration<T extends void>(arg: T): void;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     3  3 │   const arrowGeneric = <T extends void>(arg: T) => {};
+     4  4 │   const arrowGeneric2 = <T extends void = void>(arg: T) => {};
+     5    │ - function·functionGeneric<T·extends·void>(arg:·T)·{}
+        5 │ + function·functionGeneric<T·extends·undefined>(arg:·T)·{}
+     6  6 │   function functionGeneric2<T extends void = void>(arg: T) {}
+     7  7 │   declare function functionDeclaration<T extends void>(arg: T): void;
   
 
 ```
 
 ```
-invalid.ts:6:37 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:6:37 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     4 │ const arrowGeneric2 = <T extends void = void>(arg: T) => {};
     5 │ function functionGeneric<T extends void>(arg: T) {}
@@ -132,117 +159,141 @@ invalid.ts:6:37 lint/suspicious/noConfusingVoidType ━━━━━━━━━�
     7 │ declare function functionDeclaration<T extends void>(arg: T): void;
     8 │ declare function functionDeclaration2<T extends void = void>(arg: T): void;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     4  4 │   const arrowGeneric2 = <T extends void = void>(arg: T) => {};
+     5  5 │   function functionGeneric<T extends void>(arg: T) {}
+     6    │ - function·functionGeneric2<T·extends·void·=·void>(arg:·T)·{}
+        6 │ + function·functionGeneric2<T·extends·undefined·=·void>(arg:·T)·{}
+     7  7 │   declare function functionDeclaration<T extends void>(arg: T): void;
+     8  8 │   declare function functionDeclaration2<T extends void = void>(arg: T): void;
   
 
 ```
 
 ```
-invalid.ts:7:48 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:7:48 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     5 │ function functionGeneric<T extends void>(arg: T) {}
     6 │ function functionGeneric2<T extends void = void>(arg: T) {}
   > 7 │ declare function functionDeclaration<T extends void>(arg: T): void;
       │                                                ^^^^
     8 │ declare function functionDeclaration2<T extends void = void>(arg: T): void;
-    9 │ functionGeneric<void>(undefined);
+    9 │ 
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     5  5 │   function functionGeneric<T extends void>(arg: T) {}
+     6  6 │   function functionGeneric2<T extends void = void>(arg: T) {}
+     7    │ - declare·function·functionDeclaration<T·extends·void>(arg:·T):·void;
+        7 │ + declare·function·functionDeclaration<T·extends·undefined>(arg:·T):·void;
+     8  8 │   declare function functionDeclaration2<T extends void = void>(arg: T): void;
+     9  9 │   
   
 
 ```
 
 ```
-invalid.ts:8:49 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:8:49 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
      6 │ function functionGeneric2<T extends void = void>(arg: T) {}
      7 │ declare function functionDeclaration<T extends void>(arg: T): void;
    > 8 │ declare function functionDeclaration2<T extends void = void>(arg: T): void;
        │                                                 ^^^^
-     9 │ functionGeneric<void>(undefined);
+     9 │ 
     10 │ declare function voidArray(args: void[]): void[];
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     6  6 │   function functionGeneric2<T extends void = void>(arg: T) {}
+     7  7 │   declare function functionDeclaration<T extends void>(arg: T): void;
+     8    │ - declare·function·functionDeclaration2<T·extends·void·=·void>(arg:·T):·void;
+        8 │ + declare·function·functionDeclaration2<T·extends·undefined·=·void>(arg:·T):·void;
+     9  9 │   
+    10 10 │   declare function voidArray(args: void[]): void[];
   
 
 ```
 
 ```
-invalid.ts:9:17 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:10:34 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
-  
-     7 │ declare function functionDeclaration<T extends void>(arg: T): void;
-     8 │ declare function functionDeclaration2<T extends void = void>(arg: T): void;
-   > 9 │ functionGeneric<void>(undefined);
-       │                 ^^^^
-    10 │ declare function voidArray(args: void[]): void[];
-    11 │ let value = undefined as void;
-  
-  i Remove void
-  
-
-```
-
-```
-invalid.ts:10:34 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
      8 │ declare function functionDeclaration2<T extends void = void>(arg: T): void;
-     9 │ functionGeneric<void>(undefined);
+     9 │ 
   > 10 │ declare function voidArray(args: void[]): void[];
        │                                  ^^^^
     11 │ let value = undefined as void;
     12 │ let value = <void>undefined;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     8  8 │   declare function functionDeclaration2<T extends void = void>(arg: T): void;
+     9  9 │   
+    10    │ - declare·function·voidArray(args:·void[]):·void[];
+       10 │ + declare·function·voidArray(args:·undefined[]):·void[];
+    11 11 │   let value = undefined as void;
+    12 12 │   let value = <void>undefined;
   
 
 ```
 
 ```
-invalid.ts:10:43 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:10:43 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
      8 │ declare function functionDeclaration2<T extends void = void>(arg: T): void;
-     9 │ functionGeneric<void>(undefined);
+     9 │ 
   > 10 │ declare function voidArray(args: void[]): void[];
        │                                           ^^^^
     11 │ let value = undefined as void;
     12 │ let value = <void>undefined;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     8  8 │   declare function functionDeclaration2<T extends void = void>(arg: T): void;
+     9  9 │   
+    10    │ - declare·function·voidArray(args:·void[]):·void[];
+       10 │ + declare·function·voidArray(args:·void[]):·undefined[];
+    11 11 │   let value = undefined as void;
+    12 12 │   let value = <void>undefined;
   
 
 ```
 
 ```
-invalid.ts:11:26 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:11:26 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
-     9 │ functionGeneric<void>(undefined);
     10 │ declare function voidArray(args: void[]): void[];
   > 11 │ let value = undefined as void;
        │                          ^^^^
     12 │ let value = <void>undefined;
     13 │ function takesThings(...things: void[]): void {}
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+     9  9 │   
+    10 10 │   declare function voidArray(args: void[]): void[];
+    11    │ - let·value·=·undefined·as·void;
+       11 │ + let·value·=·undefined·as·undefined;
+    12 12 │   let value = <void>undefined;
+    13 13 │   function takesThings(...things: void[]): void {}
   
 
 ```
 
 ```
-invalid.ts:12:14 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:12:14 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     10 │ declare function voidArray(args: void[]): void[];
     11 │ let value = undefined as void;
@@ -251,15 +302,22 @@ invalid.ts:12:14 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     13 │ function takesThings(...things: void[]): void {}
     14 │ type KeyofVoid = keyof void;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    10 10 │   declare function voidArray(args: void[]): void[];
+    11 11 │   let value = undefined as void;
+    12    │ - let·value·=·<void>undefined;
+       12 │ + let·value·=·<undefined>undefined;
+    13 13 │   function takesThings(...things: void[]): void {}
+    14 14 │   type KeyofVoid = keyof void;
   
 
 ```
 
 ```
-invalid.ts:13:33 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:13:33 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     11 │ let value = undefined as void;
     12 │ let value = <void>undefined;
@@ -268,15 +326,22 @@ invalid.ts:13:33 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     14 │ type KeyofVoid = keyof void;
     15 │ 
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    11 11 │   let value = undefined as void;
+    12 12 │   let value = <void>undefined;
+    13    │ - function·takesThings(...things:·void[]):·void·{}
+       13 │ + function·takesThings(...things:·undefined[]):·void·{}
+    14 14 │   type KeyofVoid = keyof void;
+    15 15 │   
   
 
 ```
 
 ```
-invalid.ts:14:24 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:14:24 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     12 │ let value = <void>undefined;
     13 │ function takesThings(...things: void[]): void {}
@@ -285,15 +350,22 @@ invalid.ts:14:24 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     15 │ 
     16 │ interface Interface {
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    12 12 │   let value = <void>undefined;
+    13 13 │   function takesThings(...things: void[]): void {}
+    14    │ - type·KeyofVoid·=·keyof·void;
+       14 │ + type·KeyofVoid·=·keyof·undefined;
+    15 15 │   
+    16 16 │   interface Interface {
   
 
 ```
 
 ```
-invalid.ts:18:13 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:18:13 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     16 │ interface Interface {
     17 │   lambda: () => void;
@@ -302,15 +374,22 @@ invalid.ts:18:13 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     19 │ }
     20 │ 
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    16 16 │   interface Interface {
+    17 17 │     lambda: () => void;
+    18    │ - ··voidProp:·void;
+       18 │ + ··voidProp:·undefined;
+    19 19 │   }
+    20 20 │   
   
 
 ```
 
 ```
-invalid.ts:22:30 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:22:30 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     21 │ class ClassName {
   > 22 │   private readonly propName: void;
@@ -318,15 +397,22 @@ invalid.ts:22:30 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     23 │ }
     24 │ let letVoid: void;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    20 20 │   
+    21 21 │   class ClassName {
+    22    │ - ··private·readonly·propName:·void;
+       22 │ + ··private·readonly·propName:·undefined;
+    23 23 │   }
+    24 24 │   let letVoid: void;
   
 
 ```
 
 ```
-invalid.ts:24:14 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:24:14 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     22 │   private readonly propName: void;
     23 │ }
@@ -335,15 +421,22 @@ invalid.ts:24:14 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     25 │ type VoidType = void;
     26 │ class OtherClassName {
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    22 22 │     private readonly propName: void;
+    23 23 │   }
+    24    │ - let·letVoid:·void;
+       24 │ + let·letVoid:·undefined;
+    25 25 │   type VoidType = void;
+    26 26 │   class OtherClassName {
   
 
 ```
 
 ```
-invalid.ts:25:17 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:25:17 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     23 │ }
     24 │ let letVoid: void;
@@ -352,15 +445,22 @@ invalid.ts:25:17 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     26 │ class OtherClassName {
     27 │   private propName: VoidType;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    23 23 │   }
+    24 24 │   let letVoid: void;
+    25    │ - type·VoidType·=·void;
+       25 │ + type·VoidType·=·undefined;
+    26 26 │   class OtherClassName {
+    27 27 │     private propName: VoidType;
   
 
 ```
 
 ```
-invalid.ts:30:36 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:30:36 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is not valid as a constituent in a union type
+  ! void is confusing inside a union type.
   
     28 │ }
     29 │ 
@@ -369,15 +469,22 @@ invalid.ts:30:36 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     31 │ type UnionType = string | ((number & any) | (string | void));
     32 │ declare function test(): number | void;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    28 28 │   }
+    29 29 │   
+    30    │ - type·UnionType·=·string·|·number·|·void;
+       30 │ + type·UnionType·=·string·|·number·|·undefined;
+    31 31 │   type UnionType = string | ((number & any) | (string | void));
+    32 32 │   declare function test(): number | void;
   
 
 ```
 
 ```
-invalid.ts:31:55 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:31:55 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is not valid as a constituent in a union type
+  ! void is confusing inside a union type.
   
     30 │ type UnionType = string | number | void;
   > 31 │ type UnionType = string | ((number & any) | (string | void));
@@ -385,15 +492,22 @@ invalid.ts:31:55 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     32 │ declare function test(): number | void;
     33 │ declare function test<T extends number | void>(): T;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    29 29 │   
+    30 30 │   type UnionType = string | number | void;
+    31    │ - type·UnionType·=·string·|·((number·&·any)·|·(string·|·void));
+       31 │ + type·UnionType·=·string·|·((number·&·any)·|·(string·|·undefined));
+    32 32 │   declare function test(): number | void;
+    33 33 │   declare function test<T extends number | void>(): T;
   
 
 ```
 
 ```
-invalid.ts:32:35 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:32:35 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is not valid as a constituent in a union type
+  ! void is confusing inside a union type.
   
     30 │ type UnionType = string | number | void;
     31 │ type UnionType = string | ((number & any) | (string | void));
@@ -402,15 +516,22 @@ invalid.ts:32:35 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     33 │ declare function test<T extends number | void>(): T;
     34 │ type IntersectionType = string & number & void;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    30 30 │   type UnionType = string | number | void;
+    31 31 │   type UnionType = string | ((number & any) | (string | void));
+    32    │ - declare·function·test():·number·|·void;
+       32 │ + declare·function·test():·number·|·undefined;
+    33 33 │   declare function test<T extends number | void>(): T;
+    34 34 │   type IntersectionType = string & number & void;
   
 
 ```
 
 ```
-invalid.ts:33:42 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:33:42 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is not valid as a constituent in a union type
+  ! void is confusing inside a union type.
   
     31 │ type UnionType = string | ((number & any) | (string | void));
     32 │ declare function test(): number | void;
@@ -419,15 +540,22 @@ invalid.ts:33:42 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     34 │ type IntersectionType = string & number & void;
     35 │ 
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    31 31 │   type UnionType = string | ((number & any) | (string | void));
+    32 32 │   declare function test(): number | void;
+    33    │ - declare·function·test<T·extends·number·|·void>():·T;
+       33 │ + declare·function·test<T·extends·number·|·undefined>():·T;
+    34 34 │   type IntersectionType = string & number & void;
+    35 35 │   
   
 
 ```
 
 ```
-invalid.ts:34:43 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:34:43 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     32 │ declare function test(): number | void;
     33 │ declare function test<T extends number | void>(): T;
@@ -436,15 +564,22 @@ invalid.ts:34:43 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     35 │ 
     36 │ type MappedType<T> = {
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    32 32 │   declare function test(): number | void;
+    33 33 │   declare function test<T extends number | void>(): T;
+    34    │ - type·IntersectionType·=·string·&·number·&·void;
+       34 │ + type·IntersectionType·=·string·&·number·&·undefined;
+    35 35 │   
+    36 36 │   type MappedType<T> = {
   
 
 ```
 
 ```
-invalid.ts:37:19 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:37:19 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     36 │ type MappedType<T> = {
   > 37 │   [K in keyof T]: void;
@@ -452,15 +587,22 @@ invalid.ts:37:19 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     38 │ };
     39 │ 
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    35 35 │   
+    36 36 │   type MappedType<T> = {
+    37    │ - ··[K·in·keyof·T]:·void;
+       37 │ + ··[K·in·keyof·T]:·undefined;
+    38 38 │   };
+    39 39 │   
   
 
 ```
 
 ```
-invalid.ts:41:41 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:41:41 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     40 │ type ConditionalType<T> = {
   > 41 │   [K in keyof T]: T[K] extends string ? void : string;
@@ -468,15 +610,22 @@ invalid.ts:41:41 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     42 │ };
     43 │ type ManyVoid = readonly void[];
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    39 39 │   
+    40 40 │   type ConditionalType<T> = {
+    41    │ - ··[K·in·keyof·T]:·T[K]·extends·string·?·void·:·string;
+       41 │ + ··[K·in·keyof·T]:·T[K]·extends·string·?·undefined·:·string;
+    42 42 │   };
+    43 43 │   type ManyVoid = readonly void[];
   
 
 ```
 
 ```
-invalid.ts:43:26 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:43:26 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     41 │   [K in keyof T]: T[K] extends string ? void : string;
     42 │ };
@@ -485,15 +634,22 @@ invalid.ts:43:26 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     44 │ function foo(arr: readonly void[]) {}
     45 │ type invalidVoidUnion = void | Map<string, number>;
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    41 41 │     [K in keyof T]: T[K] extends string ? void : string;
+    42 42 │   };
+    43    │ - type·ManyVoid·=·readonly·void[];
+       43 │ + type·ManyVoid·=·readonly·undefined[];
+    44 44 │   function foo(arr: readonly void[]) {}
+    45 45 │   type invalidVoidUnion = void | Map<string, number>;
   
 
 ```
 
 ```
-invalid.ts:44:28 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:44:28 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is only valid as a return type or a type argument in generic type
+  ! void is confusing outside a return type or a type parameter.
   
     42 │ };
     43 │ type ManyVoid = readonly void[];
@@ -502,15 +658,22 @@ invalid.ts:44:28 lint/suspicious/noConfusingVoidType ━━━━━━━━━
     45 │ type invalidVoidUnion = void | Map<string, number>;
     46 │ 
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    42 42 │   };
+    43 43 │   type ManyVoid = readonly void[];
+    44    │ - function·foo(arr:·readonly·void[])·{}
+       44 │ + function·foo(arr:·readonly·undefined[])·{}
+    45 45 │   type invalidVoidUnion = void | Map<string, number>;
+    46 46 │   
   
 
 ```
 
 ```
-invalid.ts:45:25 lint/suspicious/noConfusingVoidType ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+invalid.ts:45:25 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! void is not valid as a constituent in a union type
+  ! void is confusing inside a union type.
   
     43 │ type ManyVoid = readonly void[];
     44 │ function foo(arr: readonly void[]) {}
@@ -518,9 +681,13 @@ invalid.ts:45:25 lint/suspicious/noConfusingVoidType ━━━━━━━━━
        │                         ^^^^
     46 │ 
   
-  i Remove void
+  i Unsafe fix: Use undefined instead.
+  
+    43 43 │   type ManyVoid = readonly void[];
+    44 44 │   function foo(arr: readonly void[]) {}
+    45    │ - type·invalidVoidUnion·=·void·|·Map<string,·number>;
+       45 │ + type·invalidVoidUnion·=·undefined·|·Map<string,·number>;
+    46 46 │   
   
 
 ```
-
-

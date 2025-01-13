@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidImport.tsx
 ---
 # Input
-```js
+```tsx
 import CustomReactDOM, { render as customRender } from "react-dom";
 
 const a = CustomReactDOM.render(<div />, document.body);
@@ -47,7 +47,7 @@ invalidImport.tsx:3:11 lint/correctness/noRenderReturnValue ━━━━━━�
     4 │ const foo = bar && CustomReactDOM.render(<div />, document.body);
     5 │ const foo = bar ? CustomReactDOM.render(<div />, document.body) : null
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -64,7 +64,7 @@ invalidImport.tsx:4:20 lint/correctness/noRenderReturnValue ━━━━━━�
     5 │ const foo = bar ? CustomReactDOM.render(<div />, document.body) : null
     6 │ const foo = () => CustomReactDOM.render(<div />, document.body);
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -82,7 +82,7 @@ invalidImport.tsx:5:19 lint/correctness/noRenderReturnValue ━━━━━━�
     6 │ const foo = () => CustomReactDOM.render(<div />, document.body);
     7 │ const foo = {
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -100,7 +100,7 @@ invalidImport.tsx:6:19 lint/correctness/noRenderReturnValue ━━━━━━�
     7 │ const foo = {
     8 │     react: CustomReactDOM.render(<div />, document.body)
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -118,7 +118,7 @@ invalidImport.tsx:8:12 lint/correctness/noRenderReturnValue ━━━━━━�
      9 │ };
     10 │ let lorem;
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -136,7 +136,7 @@ invalidImport.tsx:11:9 lint/correctness/noRenderReturnValue ━━━━━━�
     12 │ function render1() {
     13 │     return CustomReactDOM.render(<div />, document.body)
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -154,7 +154,7 @@ invalidImport.tsx:13:12 lint/correctness/noRenderReturnValue ━━━━━━�
     14 │ }
     15 │ 
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -172,7 +172,7 @@ invalidImport.tsx:16:11 lint/correctness/noRenderReturnValue ━━━━━━�
     17 │ const foo = bar && customRender(<div />, document.body);
     18 │ const foo = bar ? customRender(<div />, document.body) : null
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -189,7 +189,7 @@ invalidImport.tsx:17:20 lint/correctness/noRenderReturnValue ━━━━━━�
     18 │ const foo = bar ? customRender(<div />, document.body) : null
     19 │ const foo = () => customRender(<div />, document.body);
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -207,7 +207,7 @@ invalidImport.tsx:18:19 lint/correctness/noRenderReturnValue ━━━━━━�
     19 │ const foo = () => customRender(<div />, document.body);
     20 │ const foo = {
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -225,7 +225,7 @@ invalidImport.tsx:19:19 lint/correctness/noRenderReturnValue ━━━━━━�
     20 │ const foo = {
     21 │     react: customRender(<div />, document.body)
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -243,7 +243,7 @@ invalidImport.tsx:21:12 lint/correctness/noRenderReturnValue ━━━━━━�
     22 │ };
     23 │ let lorem;
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -261,7 +261,7 @@ invalidImport.tsx:24:9 lint/correctness/noRenderReturnValue ━━━━━━�
     25 │ function render2() {
     26 │     return customRender(<div />, document.body)
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
@@ -279,10 +279,8 @@ invalidImport.tsx:26:12 lint/correctness/noRenderReturnValue ━━━━━━�
     27 │ }
     28 │ 
   
-  i The returned value is legacy and future versions of react might return that value asynchronously.
+  i The returned value is legacy and future versions of React might return that value asynchronously.
     Check the React documentation for more information.
   
 
 ```
-
-

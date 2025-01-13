@@ -2,7 +2,6 @@
 source: crates/biome_css_parser/tests/spec_test.rs
 expression: snapshot
 ---
-
 ## Input
 
 ```css
@@ -18,10 +17,10 @@ tabbed-custom-element::part(   active   ) {}
 CssRoot {
     bom_token: missing (optional),
     rules: CssRuleList [
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssTypeSelector {
                         namespace: missing (optional),
                         ident: CssIdentifier {
@@ -43,16 +42,16 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@36..37 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@37..38 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssTypeSelector {
                         namespace: missing (optional),
                         ident: CssIdentifier {
@@ -74,9 +73,9 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@81..82 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@82..83 "}" [] [],
             },
         },
@@ -91,10 +90,10 @@ CssRoot {
 0: CSS_ROOT@0..84
   0: (empty)
   1: CSS_RULE_LIST@0..83
-    0: CSS_RULE@0..38
+    0: CSS_QUALIFIED_RULE@0..38
       0: CSS_SELECTOR_LIST@0..36
         0: CSS_COMPOUND_SELECTOR@0..36
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@0..0
           1: CSS_TYPE_SELECTOR@0..21
             0: (empty)
             1: CSS_IDENTIFIER@0..21
@@ -108,14 +107,14 @@ CssRoot {
                 2: CSS_IDENTIFIER@28..34
                   0: IDENT@28..34 "active" [] []
                 3: R_PAREN@34..36 ")" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@36..38
+      1: CSS_DECLARATION_OR_RULE_BLOCK@36..38
         0: L_CURLY@36..37 "{" [] []
-        1: CSS_DECLARATION_LIST@37..37
+        1: CSS_DECLARATION_OR_RULE_LIST@37..37
         2: R_CURLY@37..38 "}" [] []
-    1: CSS_RULE@38..83
+    1: CSS_QUALIFIED_RULE@38..83
       0: CSS_SELECTOR_LIST@38..81
         0: CSS_COMPOUND_SELECTOR@38..81
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@38..38
           1: CSS_TYPE_SELECTOR@38..60
             0: (empty)
             1: CSS_IDENTIFIER@38..60
@@ -129,12 +128,10 @@ CssRoot {
                 2: CSS_IDENTIFIER@70..79
                   0: IDENT@70..79 "active" [] [Whitespace("   ")]
                 3: R_PAREN@79..81 ")" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@81..83
+      1: CSS_DECLARATION_OR_RULE_BLOCK@81..83
         0: L_CURLY@81..82 "{" [] []
-        1: CSS_DECLARATION_LIST@82..82
+        1: CSS_DECLARATION_OR_RULE_LIST@82..82
         2: R_CURLY@82..83 "}" [] []
   2: EOF@83..84 "" [Newline("\n")] []
 
 ```
-
-

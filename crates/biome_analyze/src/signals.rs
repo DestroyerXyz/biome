@@ -4,8 +4,7 @@ use crate::{
     context::RuleContext,
     registry::{RuleLanguage, RuleRoot},
     rule::Rule,
-    AnalyzerDiagnostic, AnalyzerOptions, Queryable, RuleGroup, ServiceBag,
-    SuppressionCommentEmitter,
+    AnalyzerDiagnostic, AnalyzerOptions, Queryable, RuleGroup, ServiceBag, SuppressionAction,
 };
 use biome_console::MarkupBuf;
 use biome_diagnostics::{advice::CodeSuggestionAdvice, Applicability, CodeSuggestion, Error};
@@ -134,7 +133,7 @@ impl<L: Language> Default for AnalyzerActionIter<L> {
 
 impl<L: Language> From<AnalyzerAction<L>> for CodeSuggestionAdvice<MarkupBuf> {
     fn from(action: AnalyzerAction<L>) -> Self {
-        let (_, suggestion) = action.mutation.as_text_edits().unwrap_or_default();
+        let (_, suggestion) = action.mutation.as_text_range_and_edit().unwrap_or_default();
         CodeSuggestionAdvice {
             applicability: action.applicability,
             msg: action.message,
@@ -145,7 +144,7 @@ impl<L: Language> From<AnalyzerAction<L>> for CodeSuggestionAdvice<MarkupBuf> {
 
 impl<L: Language> From<AnalyzerAction<L>> for CodeSuggestionItem {
     fn from(action: AnalyzerAction<L>) -> Self {
-        let (range, suggestion) = action.mutation.as_text_edits().unwrap_or_default();
+        let (range, suggestion) = action.mutation.as_text_range_and_edit().unwrap_or_default();
 
         CodeSuggestionItem {
             rule_name: action.rule_name,
@@ -310,7 +309,7 @@ pub(crate) struct RuleSignal<'phase, R: Rule> {
     state: R::State,
     services: &'phase ServiceBag,
     /// An optional action to suppress the rule.
-    apply_suppression_comment: SuppressionCommentEmitter<RuleLanguage<R>>,
+    suppression_action: &'phase dyn SuppressionAction<Language = RuleLanguage<R>>,
     /// A list of strings that are considered "globals" inside the analyzer
     options: &'phase AnalyzerOptions,
 }
@@ -324,8 +323,8 @@ where
         query_result: <<R as Rule>::Query as Queryable>::Output,
         state: R::State,
         services: &'phase ServiceBag,
-        apply_suppression_comment: SuppressionCommentEmitter<
-            <<R as Rule>::Query as Queryable>::Language,
+        suppression_action: &'phase dyn SuppressionAction<
+            Language = <<R as Rule>::Query as Queryable>::Language,
         >,
         options: &'phase AnalyzerOptions,
     ) -> Self {
@@ -334,7 +333,7 @@ where
             query_result,
             state,
             services,
-            apply_suppression_comment,
+            suppression_action,
             options,
         }
     }
@@ -342,11 +341,12 @@ where
 
 impl<'bag, R> AnalyzerSignal<RuleLanguage<R>> for RuleSignal<'bag, R>
 where
-    R: Rule + 'static,
-    <R as Rule>::Options: Default,
+    R: Rule<Options: Default> + 'static,
 {
     fn diagnostic(&self) -> Option<AnalyzerDiagnostic> {
         let globals = self.options.globals();
+        let preferred_quote = self.options.preferred_quote();
+        let preferred_jsx_quote = self.options.preferred_jsx_quote();
         let options = self.options.rule_options::<R>().unwrap_or_default();
         let ctx = RuleContext::new(
             &self.query_result,
@@ -355,6 +355,9 @@ where
             &globals,
             &self.options.file_path,
             &options,
+            preferred_quote,
+            preferred_jsx_quote,
+            self.options.jsx_runtime(),
         )
         .ok()?;
 
@@ -363,6 +366,19 @@ where
 
     fn actions(&self) -> AnalyzerActionIter<RuleLanguage<R>> {
         let globals = self.options.globals();
+
+        let configured_applicability = if let Some(fix_kind) = self.options.rule_fix_kind::<R>() {
+            match fix_kind {
+                crate::FixKind::None => {
+                    // The action is disabled
+                    return AnalyzerActionIter::new(vec![]);
+                }
+                crate::FixKind::Safe => Some(Applicability::Always),
+                crate::FixKind::Unsafe => Some(Applicability::MaybeIncorrect),
+            }
+        } else {
+            None
+        };
         let options = self.options.rule_options::<R>().unwrap_or_default();
         let ctx = RuleContext::new(
             &self.query_result,
@@ -371,6 +387,9 @@ where
             &globals,
             &self.options.file_path,
             &options,
+            self.options.preferred_quote(),
+            self.options.preferred_jsx_quote(),
+            self.options.jsx_runtime(),
         )
         .ok();
         if let Some(ctx) = ctx {
@@ -378,16 +397,19 @@ where
             if let Some(action) = R::action(&ctx, &self.state) {
                 actions.push(AnalyzerAction {
                     rule_name: Some((<R::Group as RuleGroup>::NAME, R::METADATA.name)),
+                    applicability: configured_applicability.unwrap_or(action.applicability()),
                     category: action.category,
-                    applicability: action.applicability,
                     mutation: action.mutation,
                     message: action.message,
                 });
             };
             if let Some(text_range) = R::text_range(&ctx, &self.state) {
-                if let Some(suppression_action) =
-                    R::suppress(&ctx, &text_range, self.apply_suppression_comment)
-                {
+                if let Some(suppression_action) = R::suppress(
+                    &ctx,
+                    &text_range,
+                    self.suppression_action,
+                    self.options.suppression_reason.as_deref(),
+                ) {
                     let action = AnalyzerAction {
                         rule_name: Some((<R::Group as RuleGroup>::NAME, R::METADATA.name)),
                         category: ActionCategory::Other(Cow::Borrowed(SUPPRESSION_ACTION_CATEGORY)),
@@ -415,6 +437,9 @@ where
             &globals,
             &self.options.file_path,
             &options,
+            self.options.preferred_quote(),
+            self.options.preferred_jsx_quote(),
+            self.options.jsx_runtime(),
         )
         .ok();
         if let Some(ctx) = ctx {

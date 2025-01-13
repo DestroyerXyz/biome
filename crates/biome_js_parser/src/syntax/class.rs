@@ -40,18 +40,19 @@ use biome_js_syntax::JsSyntaxKind::*;
 use biome_js_syntax::TextSize;
 use biome_js_syntax::{JsSyntaxKind, T};
 use biome_parser::parse_lists::ParseNodeList;
-use biome_parser::parse_recovery::ParseRecovery;
+use biome_parser::parse_recovery::ParseRecoveryTokenSet;
 use biome_parser::ParserProgress;
 use biome_rowan::{SyntaxKind, TextRange};
-use bitflags::bitflags;
 use drop_bomb::DebugDropBomb;
+use enumflags2::{bitflags, make_bitflags, BitFlags};
 use smallvec::SmallVec;
 use std::fmt::Debug;
-use std::ops::Add;
+use std::ops::{Add, BitOr, BitOrAssign};
 use std::slice::Iter;
 
 use super::function::LineBreak;
 use super::js_parse_error::unexpected_body_inside_ambient_context;
+use super::metavariable::{is_at_metavariable, parse_metavariable};
 use super::typescript::ts_parse_error::{self, unexpected_abstract_member_with_body};
 use super::typescript::{
     expect_ts_index_signature_member, is_at_ts_index_signature_member, MemberParent,
@@ -117,6 +118,7 @@ pub(super) fn parse_class_expression(
 //     abstract display();
 //     abstract get my_name();
 //     abstract set my_name(val);
+//     abstract set my_age(age,);
 // }
 
 // test_err ts typescript_abstract_classes_incomplete
@@ -251,10 +253,13 @@ fn parse_class(p: &mut JsParser, kind: ClassKind, decorator_list: ParsedSyntax) 
         Present(id) => {
             let text = p.text(id.range(p));
             if TypeScript.is_supported(p) && is_reserved_type_name(text) {
+                // test_err ts ts_class_name_reserved_as_type
+                // class undefined {}
+                // class string {}
+                // class any {}
                 let err = p
                     .err_builder(format!(
-                            "`{}` cannot be used as a class name because it is already reserved as a type",
-                            text
+                            "`{text}` cannot be used as a class name because it is already reserved as a type"
                         ),id.range(p), );
 
                 p.error(err);
@@ -479,9 +484,9 @@ impl ParseNodeList for ClassMembersList {
         //     let a=;
         //   };
         // };
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS_MEMBER,
                 token_set![
                     T![;],
@@ -518,6 +523,10 @@ impl ParseNodeList for ClassMembersList {
 //  static async *foo() {}
 // }
 fn parse_class_member(p: &mut JsParser, inside_abstract_class: bool) -> ParsedSyntax {
+    if is_at_metavariable(p) {
+        return parse_metavariable(p);
+    }
+
     let member_marker = p.start();
     // test js class_empty_element
     // class foo { ;;;;;;;;;; get foo() {};;;;}
@@ -703,11 +712,14 @@ fn parse_class_member_impl(
     // test js setter_class_member
     // class Setters {
     //   set foo(a) {}
+    //   set bax(a,) {}
     //   set static(a) {}
     //   static set bar(a) {}
+    //   static set baz(a,) {}
     //   set "baz"(a) {}
     //   set ["a" + "b"](a) {}
     //   set 5(a) {}
+    //   set 6(a,) {}
     //   set #private(a) {}
     // }
     // class NotSetters {
@@ -781,6 +793,11 @@ fn parse_class_member_impl(
                 )
             })
             .or_add_diagnostic(p, js_parse_error::expected_parameter);
+
+            if p.at(T![,]) {
+                p.bump_any();
+            }
+
             p.expect(T![')']);
 
             // test_err ts ts_setter_return_type_annotation
@@ -1884,36 +1901,75 @@ fn parse_modifier(p: &mut JsParser, constructor_parameter: bool) -> Option<Class
     }
 }
 
-bitflags! {
-    /// Bitflag of class member modifiers.
-    /// Useful to cheaply track all already seen modifiers of a member (instead of using a HashSet<ModifierKind>).
-    #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-    struct ModifierFlags: u16 {
-        const DECLARE       = 1 << 0;
-        const PRIVATE       = 1 << 1;
-        const PROTECTED     = 1 << 2;
-        const PUBLIC        = 1 << 3;
-        const STATIC        = 1 << 4;
-        const READONLY      = 1 << 5;
-        const ABSTRACT      = 1 << 6;
-        const OVERRIDE      = 1 << 7;
-        const PRIVATE_NAME  = 1 << 8;
-        const ACCESSOR      = 1 << 9;
-        const DECORATOR     = 1 << 10;
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[bitflags]
+#[repr(u16)]
+enum ModifierFlag {
+    Declare = 1 << 0,
+    Private = 1 << 1,
+    Protected = 1 << 2,
+    Public = 1 << 3,
+    Static = 1 << 4,
+    Readonly = 1 << 5,
+    Abstract = 1 << 6,
+    Override = 1 << 7,
+    PrivateName = 1 << 8,
+    Accessor = 1 << 9,
+    Decorator = 1 << 10,
+}
 
-        const ACCESSIBILITY = ModifierFlags::PRIVATE.bits() | ModifierFlags::PROTECTED.bits() | ModifierFlags::PUBLIC.bits();
+/// Bitflag of class member modifiers.
+/// Useful to cheaply track all already seen modifiers of a member (instead of using a HashSet<ModifierKind>).
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+struct ModifierFlags(BitFlags<ModifierFlag>);
 
-        const ALL_MODIFIERS_EXCEPT_DECORATOR = ModifierFlags::DECLARE.bits()
-            | ModifierFlags::PRIVATE.bits()
-            | ModifierFlags::PROTECTED.bits()
-            | ModifierFlags::PUBLIC.bits()
-            | ModifierFlags::STATIC.bits()
-            | ModifierFlags::READONLY.bits()
-            | ModifierFlags::ABSTRACT.bits()
-            | ModifierFlags::OVERRIDE.bits()
-            | ModifierFlags::PRIVATE_NAME.bits()
-            | ModifierFlags::ACCESSOR.bits();
+impl ModifierFlags {
+    const DECLARE: Self = Self(make_bitflags!(ModifierFlag::{Declare}));
+    const PRIVATE: Self = Self(make_bitflags!(ModifierFlag::{Private}));
+    const PROTECTED: Self = Self(make_bitflags!(ModifierFlag::{Protected}));
+    const PUBLIC: Self = Self(make_bitflags!(ModifierFlag::{Public}));
+    const STATIC: Self = Self(make_bitflags!(ModifierFlag::{Static}));
+    const READONLY: Self = Self(make_bitflags!(ModifierFlag::{Readonly}));
+    const ABSTRACT: Self = Self(make_bitflags!(ModifierFlag::{Abstract}));
+    const OVERRIDE: Self = Self(make_bitflags!(ModifierFlag::{Override}));
+    const PRIVATE_NAME: Self = Self(make_bitflags!(ModifierFlag::{PrivateName}));
+    const ACCESSOR: Self = Self(make_bitflags!(ModifierFlag::{Accessor}));
+    const DECORATOR: Self = Self(make_bitflags!(ModifierFlag::{Decorator}));
 
+    const ACCESSIBILITY: Self = Self(make_bitflags!(ModifierFlag::{Private | Protected |  Public}));
+
+    const ALL_MODIFIERS_EXCEPT_DECORATOR: Self = Self(
+        make_bitflags!(ModifierFlag::{Declare | Private | Protected | Public | Static | Readonly | Abstract | Override | PrivateName | Accessor}),
+    );
+
+    pub const fn empty() -> Self {
+        Self(BitFlags::EMPTY)
+    }
+
+    pub fn contains(&self, other: impl Into<ModifierFlags>) -> bool {
+        self.0.contains(other.into().0)
+    }
+
+    pub fn intersects(&self, other: impl Into<ModifierFlags>) -> bool {
+        self.0.intersects(other.into().0)
+    }
+
+    pub fn set(&mut self, other: impl Into<ModifierFlags>, cond: bool) {
+        self.0.set(other.into().0, cond)
+    }
+}
+
+impl BitOr for ModifierFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        ModifierFlags(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for ModifierFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
     }
 }
 
@@ -2065,7 +2121,7 @@ impl ClassMemberModifiers {
     /// or by iterating over all modifiers and keeping track of the modifier it has seen).
     fn get_first_range_unchecked(&self, kind: ModifierKind) -> TextRange {
         self.get_first_range(kind)
-            .unwrap_or_else(|| panic!("Expected modifier of kind {:?} to be present", kind))
+            .unwrap_or_else(|| panic!("Expected modifier of kind {kind:?} to be present"))
     }
 
     fn is_empty(&self) -> bool {
@@ -2106,7 +2162,7 @@ impl ClassMemberModifiers {
                 self.list_marker.undo_completion(p).abandon(p);
                 return false;
             }
-            t => panic!("Unknown member kind {:?}", t),
+            t => panic!("Unknown member kind {t:?}"),
         };
 
         self.list_marker.change_kind(p, list_kind);

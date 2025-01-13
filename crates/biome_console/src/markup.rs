@@ -44,7 +44,7 @@ impl fmt::Display for MarkupElement<'_> {
     }
 }
 
-impl<'fmt> MarkupElement<'fmt> {
+impl MarkupElement<'_> {
     /// Mutate a [ColorSpec] object in place to apply this element's associated
     /// style to it
     pub(crate) fn update_color(&self, color: &mut ColorSpec) {
@@ -73,13 +73,10 @@ impl<'fmt> MarkupElement<'fmt> {
             MarkupElement::Warn => {
                 color.set_fg(Some(Color::Yellow));
             }
-            MarkupElement::Info => {
-                color.set_fg(Some(Color::Green));
-            }
             MarkupElement::Trace => {
                 color.set_fg(Some(Color::Magenta));
             }
-            MarkupElement::Debug => {
+            MarkupElement::Info | MarkupElement::Debug => {
                 // Blue is really difficult to see on the standard windows command line
                 #[cfg(windows)]
                 const BLUE: Color = Color::Cyan;
@@ -174,7 +171,7 @@ impl Debug for MarkupNodeBuf {
 #[derive(Copy, Clone)]
 pub struct Markup<'fmt>(pub &'fmt [MarkupNode<'fmt>]);
 
-impl<'fmt> Markup<'fmt> {
+impl Markup<'_> {
     pub fn to_owned(&self) -> MarkupBuf {
         let mut result = MarkupBuf(Vec::new());
         // SAFETY: The implementation of Write for MarkupBuf below always returns Ok
@@ -197,6 +194,12 @@ impl MarkupBuf {
 
     pub fn len(&self) -> TextSize {
         self.0.iter().map(|node| TextSize::of(&node.content)).sum()
+    }
+
+    pub fn text_len(&self) -> usize {
+        self.0
+            .iter()
+            .fold(0, |acc, string| acc + string.content.len())
     }
 }
 

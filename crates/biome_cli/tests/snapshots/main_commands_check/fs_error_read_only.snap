@@ -16,6 +16,14 @@ internalError/io ━━━━━━━━━━━━━━━━━━━━━
 # Emitted Messages
 
 ```block
+internalError/fs  DEPRECATED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! The argument --apply is deprecated, it will be removed in the next major release. Use --write instead.
+  
+
+```
+
+```block
 test.js internalError/io  INTERNAL  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   × cannot acquire write access to file in read-only filesystem
@@ -26,11 +34,5 @@ test.js internalError/io  INTERNAL  ━━━━━━━━━━━━━━�
 ```
 
 ```block
-Fixed 1 file(s) in <TIME>
+Checked 1 file in <TIME>. No fixes applied.
 ```
-
-```block
-Skipped 1 file(s)
-```
-
-

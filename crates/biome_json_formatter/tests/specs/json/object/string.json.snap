@@ -27,6 +27,7 @@ Indent style: Tab
 Indent width: 2
 Line ending: LF
 Line width: 80
+Trailing commas: None
 -----
 
 ```json
@@ -42,5 +43,4 @@ Line width: 80
     2: 	"/\\\"\uCAFE\uBABE\uAB98\uFCDE\ubcda\uef4A\b\f\n\r\t`1~!@#$%^&*()_+-=[]{}|;:',./<>?": "A key can be any string",
     3: 	"/ & /": "/\\\"\uCAFE\uBABE\uAB98\uFCDE\ubcda\uef4A\b\f\n\r\t`1~!@#$%^&*()_+-=[]{}|;:',./<>?",
 ```
-
 

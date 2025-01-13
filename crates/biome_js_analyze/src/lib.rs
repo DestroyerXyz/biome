@@ -1,52 +1,41 @@
 #![warn(clippy::needless_pass_by_value)]
 
-use crate::suppression_action::apply_suppression_comment;
+use crate::suppression_action::JsSuppressionAction;
 use biome_analyze::{
     AnalysisFilter, Analyzer, AnalyzerContext, AnalyzerOptions, AnalyzerSignal, ControlFlow,
     InspectMatcher, LanguageRoot, MatchQueryParams, MetadataRegistry, RuleAction, RuleRegistry,
     SuppressionKind,
 };
-use biome_aria::{AriaProperties, AriaRoles};
-use biome_diagnostics::{category, Diagnostic, Error as DiagnosticError};
-use biome_js_syntax::suppression::SuppressionDiagnostic;
-use biome_js_syntax::{suppression::parse_suppression_comment, JsFileSource, JsLanguage};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use std::{borrow::Cow, error::Error};
+use biome_aria::AriaRoles;
+use biome_diagnostics::{category, Error as DiagnosticError};
+use biome_js_syntax::{JsFileSource, JsLanguage};
+use biome_project::PackageJson;
+use biome_suppression::{parse_suppression_comment, SuppressionDiagnostic};
+use std::ops::Deref;
+use std::sync::{Arc, LazyLock};
 
-mod analyzers;
-mod aria_analyzers;
-mod aria_services;
-mod assists;
+pub mod assists;
 mod ast_utils;
-mod control_flow;
 pub mod globals;
+pub mod lint;
 pub mod options;
 mod react;
 mod registry;
-mod semantic_analyzers;
-mod semantic_services;
+mod services;
 mod suppression_action;
 mod syntax;
 pub mod utils;
 
-pub use crate::control_flow::ControlFlowGraph;
 pub use crate::registry::visit_registry;
+pub use crate::services::control_flow::ControlFlowGraph;
 
 pub(crate) type JsRuleAction = RuleAction<JsLanguage>;
 
-/// Return the static [MetadataRegistry] for the JS analyzer rules
-pub fn metadata() -> &'static MetadataRegistry {
-    lazy_static::lazy_static! {
-        static ref METADATA: MetadataRegistry = {
-            let mut metadata = MetadataRegistry::default();
-            visit_registry(&mut metadata);
-            metadata
-        };
-    }
-
-    &METADATA
-}
+pub static METADATA: LazyLock<MetadataRegistry> = LazyLock::new(|| {
+    let mut metadata = MetadataRegistry::default();
+    visit_registry(&mut metadata);
+    metadata
+});
 
 /// Run the analyzer on the provided `root`: this process will use the given `filter`
 /// to selectively restrict analysis to specific rules / a specific source range,
@@ -60,6 +49,7 @@ pub fn analyze_with_inspect_matcher<'a, V, F, B>(
     inspect_matcher: V,
     options: &'a AnalyzerOptions,
     source_type: JsFileSource,
+    manifest: Option<PackageJson>,
     mut emit_signal: F,
 ) -> (Option<B>, Vec<DiagnosticError>)
 where
@@ -96,7 +86,11 @@ where
                 } else {
                     let category = key.name();
                     if let Some(rule) = category.strip_prefix("lint/") {
-                        result.push(Ok(SuppressionKind::Rule(rule)));
+                        if let Some(instance) = value {
+                            result.push(Ok(SuppressionKind::RuleInstance(rule, instance)));
+                        } else {
+                            result.push(Ok(SuppressionKind::Rule(rule)));
+                        }
                     }
                 }
             }
@@ -116,10 +110,10 @@ where
     }
 
     let mut analyzer = Analyzer::new(
-        metadata(),
+        METADATA.deref(),
         InspectMatcher::new(registry, inspect_matcher),
         parse_linter_suppression_comment,
-        apply_suppression_comment,
+        Box::new(JsSuppressionAction),
         &mut emit_signal,
     );
 
@@ -128,7 +122,7 @@ where
     }
 
     services.insert_service(Arc::new(AriaRoles));
-    services.insert_service(Arc::new(AriaProperties));
+    services.insert_service(Arc::new(manifest));
     services.insert_service(source_type);
     (
         analyzer.run(AnalyzerContext {
@@ -149,74 +143,27 @@ pub fn analyze<'a, F, B>(
     filter: AnalysisFilter,
     options: &'a AnalyzerOptions,
     source_type: JsFileSource,
+    manifest: Option<PackageJson>,
     emit_signal: F,
 ) -> (Option<B>, Vec<DiagnosticError>)
 where
     F: FnMut(&dyn AnalyzerSignal<JsLanguage>) -> ControlFlow<B> + 'a,
     B: 'a,
 {
-    analyze_with_inspect_matcher(root, filter, |_| {}, options, source_type, emit_signal)
+    analyze_with_inspect_matcher(
+        root,
+        filter,
+        |_| {},
+        options,
+        source_type,
+        manifest,
+        emit_signal,
+    )
 }
-
-/// Series of errors encountered when running rules on a file
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub enum RuleError {
-    /// The rule with the specified name replaced the root of the file with a node that is not a valid root for that language.
-    ReplacedRootWithNonRootError {
-        rule_name: Option<(Cow<'static, str>, Cow<'static, str>)>,
-    },
-}
-
-impl Diagnostic for RuleError {}
-
-impl std::fmt::Display for RuleError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            RuleError::ReplacedRootWithNonRootError {
-                rule_name: Some((group, rule)),
-            } => {
-                std::write!(
-                    fmt,
-                    "the rule '{group}/{rule}' replaced the root of the file with a non-root node."
-                )
-            }
-            RuleError::ReplacedRootWithNonRootError { rule_name: None } => {
-                std::write!(
-                    fmt,
-                    "a code action replaced the root of the file with a non-root node."
-                )
-            }
-        }
-    }
-}
-
-impl biome_console::fmt::Display for RuleError {
-    fn fmt(&self, fmt: &mut biome_console::fmt::Formatter) -> std::io::Result<()> {
-        match self {
-            RuleError::ReplacedRootWithNonRootError {
-                rule_name: Some((group, rule)),
-            } => {
-                std::write!(
-                    fmt,
-                    "the rule '{group}/{rule}' replaced the root of the file with a non-root node."
-                )
-            }
-            RuleError::ReplacedRootWithNonRootError { rule_name: None } => {
-                std::write!(
-                    fmt,
-                    "a code action replaced the root of the file with a non-root node."
-                )
-            }
-        }
-    }
-}
-
-impl Error for RuleError {}
 
 #[cfg(test)]
 mod tests {
-    use biome_analyze::options::RuleOptions;
-    use biome_analyze::{AnalyzerOptions, Never, RuleCategories, RuleFilter, RuleKey};
+    use biome_analyze::{AnalyzerOptions, Never, RuleCategoriesBuilder, RuleFilter};
     use biome_console::fmt::{Formatter, Termcolor};
     use biome_console::{markup, Markup};
     use biome_diagnostics::category;
@@ -224,11 +171,9 @@ mod tests {
     use biome_diagnostics::{Diagnostic, DiagnosticExt, PrintDiagnostic, Severity};
     use biome_js_parser::{parse, JsParserOptions};
     use biome_js_syntax::{JsFileSource, TextRange, TextSize};
+    use biome_project::{Dependencies, PackageJson};
     use std::slice;
 
-    use crate::semantic_analyzers::correctness::use_exhaustive_dependencies::{
-        Hooks, HooksOptions,
-    };
     use crate::{analyze, AnalysisFilter, ControlFlow};
 
     #[ignore]
@@ -243,27 +188,16 @@ mod tests {
             String::from_utf8(buffer).unwrap()
         }
 
-        const SOURCE: &str = r#"require("fs")
-        "#;
-        // const SOURCE: &str = r#"document.querySelector("foo").value = document.querySelector("foo").value
-        //
-        // "#;
+        const SOURCE: &str = r#"import buffer from "buffer"; "#;
 
         let parsed = parse(SOURCE, JsFileSource::tsx(), JsParserOptions::default());
 
         let mut error_ranges: Vec<TextRange> = Vec::new();
-        let mut options = AnalyzerOptions::default();
-        let hook = Hooks {
-            name: "myEffect".to_string(),
-            closure_index: Some(0),
-            dependencies_index: Some(1),
-        };
-        let rule_filter = RuleFilter::Rule("nursery", "useNodeImportProtocol");
-        options.configuration.rules.push_rule(
-            RuleKey::new("nursery", "useHookAtTopLevel"),
-            RuleOptions::new(HooksOptions { hooks: vec![hook] }),
-        );
+        let options = AnalyzerOptions::default();
+        let rule_filter = RuleFilter::Rule("style", "useNodejsImportProtocol");
 
+        let mut dependencies = Dependencies::default();
+        dependencies.add("buffer", "latest");
         analyze(
             &parsed.tree(),
             AnalysisFilter {
@@ -272,6 +206,10 @@ mod tests {
             },
             &options,
             JsFileSource::tsx(),
+            Some(PackageJson {
+                dependencies,
+                ..Default::default()
+            }),
             |signal| {
                 if let Some(diag) = signal.diagnostic() {
                     error_ranges.push(diag.location().span.unwrap());
@@ -363,6 +301,7 @@ mod tests {
             AnalysisFilter::default(),
             &options,
             JsFileSource::js_module(),
+            None,
             |signal| {
                 if let Some(diag) = signal.diagnostic() {
                     let span = diag.get_span();
@@ -438,7 +377,7 @@ mod tests {
         );
 
         let filter = AnalysisFilter {
-            categories: RuleCategories::SYNTAX,
+            categories: RuleCategoriesBuilder::default().with_syntax().build(),
             ..AnalysisFilter::default()
         };
 
@@ -448,6 +387,7 @@ mod tests {
             filter,
             &options,
             JsFileSource::js_module(),
+            None,
             |signal| {
                 if let Some(diag) = signal.diagnostic() {
                     let code = diag.category().unwrap();

@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidObjectSetter.js
 ---
 # Input
-```js
+```jsx
 export default {
     set X(x) {},
 
@@ -29,8 +29,6 @@ invalidObjectSetter.js:2:9 lint/style/useNamingConvention ━━━━━━━�
     3 │ 
     4 │     set PROPERTY(x) {},
   
-  i The name could be renamed to `x`.
-  
 
 ```
 
@@ -45,8 +43,6 @@ invalidObjectSetter.js:4:9 lint/style/useNamingConvention ━━━━━━━�
       │         ^^^^^^^^
     5 │ 
     6 │     set SpecialProperty(x) {},
-  
-  i The name could be renamed to `property`.
   
 
 ```
@@ -63,8 +59,6 @@ invalidObjectSetter.js:6:9 lint/style/useNamingConvention ━━━━━━━�
     7 │ 
     8 │     set special_property(x) {},
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
@@ -80,8 +74,6 @@ invalidObjectSetter.js:8:9 lint/style/useNamingConvention ━━━━━━━�
      9 │ 
     10 │     set Unknown_Style(x) {},
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
@@ -96,9 +88,5 @@ invalidObjectSetter.js:10:9 lint/style/useNamingConvention ━━━━━━━
        │         ^^^^^^^^^^^^^
     11 │ }
   
-  i The name could be renamed to `unknownStyle`.
-  
 
 ```
-
-

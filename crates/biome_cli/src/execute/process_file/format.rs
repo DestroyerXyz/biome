@@ -4,8 +4,10 @@ use crate::execute::process_file::{
     DiffKind, FileResult, FileStatus, Message, SharedTraversalOptions,
 };
 use crate::execute::TraversalMode;
-use biome_diagnostics::{category, DiagnosticExt};
-use biome_service::workspace::RuleCategories;
+use biome_analyze::RuleCategoriesBuilder;
+use biome_diagnostics::{category, Diagnostic, DiagnosticExt, Error, Severity};
+use biome_service::file_handlers::{AstroFileHandler, SvelteFileHandler, VueFileHandler};
+use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use tracing::debug;
@@ -25,7 +27,12 @@ pub(crate) fn format_with_guard<'ctx>(
             debug!("Pulling diagnostics from parsed file");
             let diagnostics_result = workspace_file
                 .guard()
-                .pull_diagnostics(RuleCategories::SYNTAX, max_diagnostics.into())
+                .pull_diagnostics(
+                    RuleCategoriesBuilder::default().with_syntax().build(),
+                    max_diagnostics,
+                    Vec::new(),
+                    Vec::new(),
+                )
                 .with_file_path_and_code(
                     workspace_file.path.display().to_string(),
                     category!("format"),
@@ -53,6 +60,23 @@ pub(crate) fn format_with_guard<'ctx>(
                 ));
             }
 
+            ctx.push_message(Message::Diagnostics {
+                name: workspace_file.path.display().to_string(),
+                content: input.clone(),
+                diagnostics: diagnostics_result
+                    .diagnostics
+                    .into_iter()
+                    .filter_map(|diag| {
+                        if diag.severity() >= Severity::Error && ignore_errors {
+                            None
+                        } else {
+                            Some(Error::from(diag))
+                        }
+                    })
+                    .collect(),
+                skipped_diagnostics: diagnostics_result.skipped_diagnostics as u32,
+            });
+
             let printed = workspace_file
                 .guard()
                 .format_file()
@@ -61,26 +85,50 @@ pub(crate) fn format_with_guard<'ctx>(
                     category!("format"),
                 )?;
 
-            let output = printed.into_code();
+            let mut output = printed.into_code();
 
-            // NOTE: ignoring the
             if ignore_errors {
                 return Ok(FileStatus::Ignored);
+            }
+
+            match workspace_file.as_extension().map(OsStr::as_encoded_bytes) {
+                Some(b"astro") => {
+                    if output.is_empty() {
+                        return Ok(FileStatus::Unchanged);
+                    }
+                    output = AstroFileHandler::output(input.as_str(), output.as_str());
+                }
+                Some(b"vue") => {
+                    if output.is_empty() {
+                        return Ok(FileStatus::Unchanged);
+                    }
+                    output = VueFileHandler::output(input.as_str(), output.as_str());
+                }
+
+                Some(b"svelte") => {
+                    if output.is_empty() {
+                        return Ok(FileStatus::Unchanged);
+                    }
+                    output = SvelteFileHandler::output(input.as_str(), output.as_str());
+                }
+                _ => {}
             }
 
             if output != input {
                 if should_write {
                     workspace_file.update_file(output)?;
+                    Ok(FileStatus::Changed)
                 } else {
-                    return Ok(FileStatus::Message(Message::Diff {
+                    Ok(FileStatus::Message(Message::Diff {
                         file_name: workspace_file.path.display().to_string(),
                         old: input,
                         new: output,
                         diff_kind: DiffKind::Format,
-                    }));
+                    }))
                 }
+            } else {
+                Ok(FileStatus::Unchanged)
             }
-            Ok(FileStatus::Success)
         },
     )
 }

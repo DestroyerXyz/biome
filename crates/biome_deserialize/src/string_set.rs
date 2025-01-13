@@ -1,15 +1,15 @@
-use crate::{Deserializable, DeserializableValue};
+use crate::{self as biome_deserialize, Merge};
+use biome_deserialize_macros::Deserializable;
+use indexmap::set::IntoIter;
 use indexmap::IndexSet;
-use serde::de::{SeqAccess, Visitor};
-use serde::ser::SerializeSeq;
-use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
-// To implement serde's traits, we encapsulate `IndexSet<String>` in a new type `StringSet`.
+// To implement schemars trait, we encapsulate `IndexSet<String>` in a new type `StringSet`.
 
-#[derive(Default, Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(
+    Clone, Default, Debug, Deserializable, Eq, PartialEq, serde::Deserialize, serde::Serialize,
+)]
 pub struct StringSet(IndexSet<String>);
 
 impl StringSet {
@@ -23,6 +23,24 @@ impl StringSet {
 
     pub fn clear(&mut self) {
         self.0.clear();
+    }
+
+    pub fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.0.extend(iter)
+    }
+}
+
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for StringSet {
+    fn schema_name() -> String {
+        String::from("StringSet")
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        <std::collections::HashSet<String>>::json_schema(gen)
     }
 }
 
@@ -48,54 +66,23 @@ impl FromStr for StringSet {
     }
 }
 
-impl<'de> Deserialize<'de> for StringSet {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct IndexVisitor;
-        impl<'de> Visitor<'de> for IndexVisitor {
-            type Value = IndexSet<String>;
-
-            // Format a message stating what data this Visitor expects to receive.
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("expecting a sequence")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let mut index_set = IndexSet::with_capacity(seq.size_hint().unwrap_or(0));
-                while let Some(value) = seq.next_element()? {
-                    index_set.insert(value);
-                }
-                Ok(index_set)
-            }
-        }
-        deserializer.deserialize_seq(IndexVisitor).map(StringSet)
+impl FromIterator<String> for StringSet {
+    fn from_iter<T: IntoIterator<Item = String>>(iter: T) -> Self {
+        StringSet::new(IndexSet::from_iter(iter))
     }
 }
 
-impl Serialize for StringSet {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut sequence = serializer.serialize_seq(Some(self.len()))?;
-        for item in self.0.iter() {
-            sequence.serialize_element(&item)?;
-        }
-        sequence.end()
+impl IntoIterator for StringSet {
+    type Item = String;
+    type IntoIter = IntoIter<String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
-impl Deserializable for StringSet {
-    fn deserialize(
-        value: &impl DeserializableValue,
-        name: &str,
-        diagnostics: &mut Vec<crate::DeserializationDiagnostic>,
-    ) -> Option<Self> {
-        Deserializable::deserialize(value, name, diagnostics).map(StringSet)
+impl Merge for StringSet {
+    fn merge_with(&mut self, other: Self) {
+        self.extend(other)
     }
 }

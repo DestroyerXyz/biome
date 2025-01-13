@@ -77,17 +77,14 @@
 //! to apply a deterministic formatting.
 //! - first group will be the identifier
 //! - the rest of the groups will be  will start StaticMemberExpression followed by the rest of the nodes,
-//! right before the end of the next StaticMemberExpression
+//!     right before the end of the next StaticMemberExpression
 //!
 //! The first group is special, because it holds the reference; it has its own heuristic.
 //! Inside the first group we store the first element of the flattened array, then:
 //!
-//! 1. as many as [biome_js_syntax::JsCallExpression] we can find, this cover cases like
-//! `something()()().then()`;
-//! 2. as many as [biome_js_syntax::JsComputedMemberExpression] we can find, this cover cases like
-//! `something()()[1][3].then()`;
-//! 3. as many as consecutive [biome_js_syntax::JsStaticMemberExpression] or [biome_js_syntax::JsComputedMemberExpression], this cover cases like
-//! `this.items[0].then()`
+//! 1. as many as [biome_js_syntax::JsCallExpression] we can find, this cover cases like `something()()().then()`;
+//! 2. as many as [biome_js_syntax::JsComputedMemberExpression] we can find, this cover cases like `something()()[1][3].then()`;
+//! 3. as many as consecutive [biome_js_syntax::JsStaticMemberExpression] or [biome_js_syntax::JsComputedMemberExpression], this cover cases like `this.items[0].then()`
 //!
 //! The rest of the groups are essentially a sequence of `[StaticMemberExpression , CallExpression]`.
 //! In order to achieve that, we simply start looping through the rest of the flatten items that we haven't seen.
@@ -114,7 +111,6 @@ use crate::utils::member_chain::groups::{
     MemberChainGroup, MemberChainGroupsBuilder, TailChainGroups,
 };
 pub use crate::utils::member_chain::simple_argument::SimpleArgument;
-use crate::utils::test_call::is_test_call_expression;
 use crate::JsLabels;
 use biome_formatter::{write, Buffer};
 use biome_js_syntax::{
@@ -299,6 +295,16 @@ impl MemberChain {
             return Ok(true);
         }
 
+        let has_empty_line_inside_tail = self
+            .tail
+            .iter()
+            .skip(1)
+            .any(|group| group.needs_empty_line_before());
+
+        if has_empty_line_inside_tail {
+            return Ok(true);
+        }
+
         Ok(false)
     }
 
@@ -319,7 +325,7 @@ impl MemberChain {
     }
 
     /// Returns an iterator over all members in the member chain
-    fn members(&self) -> impl Iterator<Item = &ChainMember> + DoubleEndedIterator {
+    fn members(&self) -> impl DoubleEndedIterator<Item = &ChainMember> {
         self.head.members().iter().chain(self.tail.members())
     }
 
@@ -363,26 +369,23 @@ impl Format<JsFormatContext> for MemberChain {
         if self.tail.len() <= 1 && !has_comments {
             return if is_long_curried_call(Some(&self.root)) {
                 write!(f, [format_one_line])
-            } else if is_test_call_expression(&self.root)? && self.head.members().len() >= 2 {
+            } else if self.root.is_test_call_expression()? && self.head.members().len() >= 2 {
                 write!(f, [self.head, soft_line_indent_or_space(&self.tail)])
             } else {
                 write!(f, [group(&format_one_line)])
             };
         }
 
-        let has_empty_line = match self.tail.members().next() {
-            Some(member) => member.needs_empty_line_before(),
-            None => false,
-        };
-
         let format_tail = format_with(|f| {
-            if !has_empty_line {
-                write!(f, [hard_line_break()])?;
+            for group in self.tail.iter() {
+                if group.needs_empty_line_before() {
+                    write!(f, [empty_line()])?;
+                } else {
+                    write!(f, [hard_line_break()])?;
+                }
+                write!(f, [group])?;
             }
-
-            f.join_with(hard_line_break())
-                .entries(self.tail.iter())
-                .finish()
+            Ok(())
         });
 
         let format_expanded = format_with(|f| write!(f, [self.head, indent(&group(&format_tail))]));
@@ -391,7 +394,12 @@ impl Format<JsFormatContext> for MemberChain {
             if self.groups_should_break(f)? {
                 write!(f, [group(&format_expanded)])
             } else {
-                if has_empty_line || self.last_group().will_break(f)? {
+                let has_empty_line_before_tail = self
+                    .tail
+                    .first()
+                    .map_or(false, |group| group.needs_empty_line_before());
+
+                if has_empty_line_before_tail || self.last_group().will_break(f)? {
                     write!(f, [expand_parent()])?;
                 }
 
@@ -578,11 +586,11 @@ fn has_simple_arguments(call: &JsCallExpression) -> bool {
 fn is_factory(token: &JsSyntaxToken) -> bool {
     let text = token.text_trimmed();
 
-    let mut chars = text.chars();
+    let mut bytes = text.bytes();
 
     match text.chars().next() {
         // Any sequence of '$' or '_' characters
-        Some('_' | '$') => chars.all(|c| matches!(c, '_' | '$')),
+        Some('_' | '$') => bytes.all(|b| matches!(b, b'_' | b'$')),
         Some(c) => c.is_uppercase(),
         _ => false,
     }

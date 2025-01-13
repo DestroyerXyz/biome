@@ -32,7 +32,7 @@ fn run_test(input: &'static str, _: &str, _: &str, _: &str) {
     let mut snapshot = String::new();
 
     let input_code = read_to_string(input_file)
-        .unwrap_or_else(|err| panic!("failed to read {:?}: {:?}", input_file, err));
+        .unwrap_or_else(|err| panic!("failed to read {input_file:?}: {err:?}"));
 
     let quantity_diagnostics = analyze_and_snap(&mut snapshot, &input_code, file_name, input_file);
 
@@ -93,27 +93,30 @@ pub(crate) fn analyze_and_snap(
         input_code,
         diagnostics.as_slice(),
         code_fixes.as_slice(),
+        "json",
     );
 
     diagnostics.len()
 }
 
 fn check_code_action(path: &Path, source: &str, action: &AnalyzerAction<JsonLanguage>) {
-    let (_, text_edit) = action.mutation.as_text_edits().unwrap_or_default();
+    let (new_tree, text_edit) = match action
+        .mutation
+        .clone()
+        .commit_with_text_range_and_edit(true)
+    {
+        (new_tree, Some((_, text_edit))) => (new_tree, text_edit),
+        (new_tree, None) => (new_tree, Default::default()),
+    };
 
     let output = text_edit.new_string(source);
-
-    let new_tree = action.mutation.clone().commit();
 
     // Checks that applying the text edits returned by the BatchMutation
     // returns the same code as printing the modified syntax tree
     assert_eq!(new_tree.to_string(), output);
 
     if has_bogus_nodes_or_empty_slots(&new_tree) {
-        panic!(
-            "modified tree has bogus nodes or empty slots:\n{new_tree:#?} \n\n {}",
-            new_tree
-        )
+        panic!("modified tree has bogus nodes or empty slots:\n{new_tree:#?} \n\n {new_tree}")
     }
 
     // Checks the returned tree contains no missing children node

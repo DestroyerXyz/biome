@@ -28,17 +28,9 @@ format ━━━━━━━━━━━━━━━━━━━━━━━━�
 # Emitted Messages
 
 ```block
-format.yml files/missingHandler ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ! Biome could not determine the language for the file extension yml
-  
-
-```
-
-```block
 format.js format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  i Formatter would have printed the following content:
+  × Formatter would have printed the following content:
   
     1   │ - ··statement(··)··
       1 │ + statement();
@@ -48,7 +40,6 @@ format.js format ━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ```block
-Compared 1 file(s) in <TIME>
+Checked 1 file in <TIME>. No fixes applied.
+Found 1 error.
 ```
-
-

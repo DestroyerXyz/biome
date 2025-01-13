@@ -5,17 +5,15 @@ publish = false
 version = "0.0.0"
 
 [dependencies]
-regex = { version = "1.6.0" }
+regex = { workspace = true }
 
 [dev-dependencies]
-biome_js_analyze = { workspace = true }
-case             = "1.0.0"
-criterion        = "0.4.0"
-fastbloom-rs     = "0.3.0"
-fst              = "0.4.7"
-iai              = "0.1.1"
-memchr           = "2.5.0"
-qp-trie          = "0.8.0"
+criterion    = "0.5.1"
+fastbloom-rs = "0.5.9"
+fst          = "0.4.7"
+iai          = "0.1.1"
+memchr       = "2.7.4"
+qp-trie      = "0.8.2"
 
 [[bench]]
 harness = false

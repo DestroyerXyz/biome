@@ -121,3 +121,22 @@ export default function(a: number): number;
 export default function(a: number | boolean): number | boolean {
 	return a;
 }
+
+function g(A, { B }) {
+	interface A {}
+	interface B {}
+}
+
+export function h<a>(a: a) {
+	return a;
+}
+
+// Issue https://github.com/biomejs/biome/issues/2608
+type Overloads = {
+	(e: "change-kind", { kind }: { kind: "a" }): void;
+	(e: "change-kind", { kind, extra }: { kind: "b"; extra: number }): void;
+};
+
+// Issue https://github.com/biomejs/biome/issues/2372
+type F = number
+export default function F() {}
