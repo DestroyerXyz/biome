@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: valid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -114,17 +115,23 @@ function MyComponent6() {
 function MyComponent7() {
     let someObj = getObj();
     useEffect(() => {
-        console.log(someObj.name);
-        console.log(someObj.age)
+        console.log(
+					someObj
+							.name
+				);
+        console.log(someObj["age"])
     }, [someObj.name, someObj.age]);
 }
 
 // Specified dependency cover captures
 function MyComponent8({ a }) {
     useEffect(() => {
-      console.log(a.b);
+      console.log(
+				a
+			  		.b
+			);
     }, [a]);
-}
+}l
 
 // Capturing const outside of component
 // https://github.com/rome/tools/issues/3727
@@ -240,6 +247,58 @@ function MyComponent22() {
   }, [])
 }
 
+// Dynamic computed property access
+// https://github.com/biomejs/biome/issues/1637
+function MyComponent23 ({ arr })  {
+  useMemo(() => {
+    for (let i = 0; i < arr.length; i++) {
+       if (i + 1 === arr.length) {
+          // Do something with the last item
+       } else {
+           const _nextItem = arr[i + 1]
+       }
+    }
+  }, [arr])
+}
+
+// https://github.com/biomejs/biome/issues/2361
+function ComponentWithRecursiveCallback() {
+    const fib = useCallback((num) => {
+      if (num < 2) {
+        return num;
+      }
+      return fib(num - 1) + fib(num - 2);
+    }, []);
+}
+
+function func() {
+    setValue("some")
+}
+
+function OutsideFunctionDeclaration() {
+    useEffect(() => {
+      func()
+    }, [])
+}
+
+// Specific ignored dependencies
+// https://github.com/biomejs/biome/discussions/2509
+function IgnoredDependencies() {
+    const [foo, setFoo] = useState(1);
+    // biome-ignore lint/correctness/useExhaustiveDependencies(foo): foo should be listed, but we override it
+    // biome-ignore lint/correctness/useExhaustiveDependencies(setFoo): setFoo shouldn't be listed, but we override it
+    useEffect(() => {
+        setFoo(foo + 1);
+    }, [setFoo]);
+}
+
+// Make sure ignoring without specific value also works for this rule.
+function IgnoredDependencies2() {
+    const [foo, setFoo] = useState(1);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: both are ignored.
+    useEffect(() => {
+        setFoo(foo + 1);
+    }, [setFoo]);
+}
+
 ```
-
-

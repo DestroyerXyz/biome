@@ -236,7 +236,7 @@ impl<K: std::hash::Hash + Eq, V> CommentsMap<K, V> {
 
     /// Returns `true` if `key` has any leading, dangling, or trailing part.
     pub fn has(&self, key: &K) -> bool {
-        self.index.get(key).is_some()
+        self.index.contains_key(key)
     }
 
     /// Returns an iterator over all leading, dangling, and trailing parts of `key`.
@@ -248,7 +248,7 @@ impl<K: std::hash::Hash + Eq, V> CommentsMap<K, V> {
     }
 
     /// Returns an iterator over the parts of all keys.
-    #[allow(unused)]
+    #[cfg(debug_assertions)]
     pub fn all_parts(&self) -> impl Iterator<Item = &V> {
         self.index
             .values()

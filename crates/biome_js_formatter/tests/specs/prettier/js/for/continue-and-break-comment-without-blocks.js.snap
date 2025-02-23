@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: js/for/continue-and-break-comment-without-blocks.js
 ---
-
 # Input
 
 ```js
@@ -93,17 +92,16 @@ for (const f in {}) break
 label1: for (;;) continue label1 /* comment */
 ;
 
-// FIXME: TODO: reformat issue
-// label1: for (;;) continue label1
-// /* comment */
-// ;
+label1: for (;;) continue label1
+/* comment */
+;
 
-// label1: for (;;) continue label1 // comment
-// ;
+label1: for (;;) continue label1 // comment
+;
 
-// label1: for (;;) continue label1
-// // comment
-// ;
+label1: for (;;) continue label1
+// comment
+;
 
 ```
 
@@ -113,26 +111,15 @@ label1: for (;;) continue label1 /* comment */
 ```diff
 --- Prettier
 +++ Biome
-@@ -60,10 +60,14 @@
+@@ -58,7 +58,7 @@
+ for (const f in {}) break;
+ /* comment */
  
- label1: for (;;) continue label1 /* comment */;
+-label1: for (;;) continue label1 /* comment */;
++label1: for (;;) continue label1; /* comment */
  
--label1: for (;;) continue label1;
--/* comment */
-+// FIXME: TODO: reformat issue
-+// label1: for (;;) continue label1
-+// /* comment */
-+// ;
- 
--label1: for (;;) continue label1; // comment
-+// label1: for (;;) continue label1 // comment
-+// ;
- 
--label1: for (;;) continue label1;
--// comment
-+// label1: for (;;) continue label1
-+// // comment
-+// ;
+ label1: for (;;) continue label1;
+ /* comment */
 ```
 
 # Output
@@ -198,19 +185,13 @@ for (const f in {}) continue;
 for (const f in {}) break;
 /* comment */
 
-label1: for (;;) continue label1 /* comment */;
+label1: for (;;) continue label1; /* comment */
 
-// FIXME: TODO: reformat issue
-// label1: for (;;) continue label1
-// /* comment */
-// ;
+label1: for (;;) continue label1;
+/* comment */
 
-// label1: for (;;) continue label1 // comment
-// ;
+label1: for (;;) continue label1; // comment
 
-// label1: for (;;) continue label1
-// // comment
-// ;
+label1: for (;;) continue label1;
+// comment
 ```
-
-

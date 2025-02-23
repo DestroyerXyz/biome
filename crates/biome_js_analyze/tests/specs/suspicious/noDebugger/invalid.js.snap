@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -20,7 +21,7 @@ function test() {
 ```
 invalid.js:3:10 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This is an unexpected use of the debugger statement.
+  × This is an unexpected use of the debugger statement.
   
     1 │ const test = { debugger: 1 }; test.debugger;
     2 │ 
@@ -44,7 +45,7 @@ invalid.js:3:10 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━
 ```
 invalid.js:5:1 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This is an unexpected use of the debugger statement.
+  × This is an unexpected use of the debugger statement.
   
     3 │ if (foo) debugger
     4 │ 
@@ -55,12 +56,12 @@ invalid.js:5:1 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━�
   
   i Unsafe fix: Remove debugger statement
   
+     2 2 │   
      3 3 │   if (foo) debugger
-     4 4 │   
+     4   │ - 
      5   │ - debugger;
-     6   │ - 
+     6 4 │   
      7 5 │   function test() {
-     8 6 │     let a = 3;
   
 
 ```
@@ -68,7 +69,7 @@ invalid.js:5:1 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━�
 ```
 invalid.js:9:3 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This is an unexpected use of the debugger statement.
+  × This is an unexpected use of the debugger statement.
   
      7 │ function test() {
      8 │   let a = 3;
@@ -85,5 +86,3 @@ invalid.js:9:3 lint/suspicious/noDebugger  FIXABLE  ━━━━━━━━━�
   
 
 ```
-
-

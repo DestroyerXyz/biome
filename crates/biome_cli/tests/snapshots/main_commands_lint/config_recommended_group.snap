@@ -37,16 +37,14 @@ lint ━━━━━━━━━━━━━━━━━━━━━━━━━
 # Emitted Messages
 
 ```block
-check.js:1:1 lint/correctness/noInvalidNewBuiltin  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+check.js:1:1 lint/correctness/noInvalidBuiltinInstantiation  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Symbol cannot be called as a constructor.
+  × Use Symbol() instead of new Symbol().
   
   > 1 │ new Symbol("");
       │ ^^^^^^^^^^^^^^
   
-  i Calling Symbol with the new operator throws a TypeError.
-  
-  i Unsafe fix: Remove new.
+  i Unsafe fix: Remove new keyword.
   
     1 │ new·Symbol("");
       │ ----           
@@ -54,15 +52,6 @@ check.js:1:1 lint/correctness/noInvalidNewBuiltin  FIXABLE  ━━━━━━�
 ```
 
 ```block
-check.js lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
+Checked 1 file in <TIME>. No fixes applied.
+Found 1 error.
 ```
-
-```block
-Checked 1 file(s) in <TIME>
-```
-
-

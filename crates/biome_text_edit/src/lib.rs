@@ -8,29 +8,42 @@
     semicolon_in_expressions_from_macros
 )]
 
-use std::{cmp::Ordering, num::NonZeroU32};
-
 use biome_text_size::{TextRange, TextSize};
-use serde::{Deserialize, Serialize};
 pub use similar::ChangeTag;
 use similar::{utils::TextDiffRemapper, TextDiff};
+use std::{cmp::Ordering, num::NonZeroU32};
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct TextEdit {
     dictionary: String,
     ops: Vec<CompressedOp>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 pub enum CompressedOp {
     DiffOp(DiffOp),
     EqualLines { line_count: NonZeroU32 },
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 pub enum DiffOp {
     Equal { range: TextRange },
     Insert { range: TextRange },
@@ -72,27 +85,7 @@ impl TextEdit {
     /// Create a diff of `old` to `new`, tokenized by Unicode words
     pub fn from_unicode_words(old: &str, new: &str) -> Self {
         let mut builder = Self::builder();
-
-        let diff = TextDiff::configure()
-            .newline_terminated(true)
-            .diff_unicode_words(old, new);
-
-        let remapper = TextDiffRemapper::from_text_diff(&diff, old, new);
-
-        for (tag, text) in diff.ops().iter().flat_map(|op| remapper.iter_slices(op)) {
-            match tag {
-                ChangeTag::Equal => {
-                    builder.equal(text);
-                }
-                ChangeTag::Delete => {
-                    builder.delete(text);
-                }
-                ChangeTag::Insert => {
-                    builder.insert(text);
-                }
-            }
-        }
-
+        builder.with_unicode_words_diff(old, new);
         builder.finish()
     }
 
@@ -264,6 +257,31 @@ impl TextEditBuilder {
 
     pub fn finish(self) -> TextEdit {
         self.edit
+    }
+
+    /// A higher level utility function for the text edit builder to generate
+    /// mutiple text edit steps (equal, delete and insert) to represent the
+    /// diff from the old string to the new string.
+    pub fn with_unicode_words_diff(&mut self, old: &str, new: &str) {
+        let diff = TextDiff::configure()
+            .newline_terminated(true)
+            .diff_unicode_words(old, new);
+
+        let remapper = TextDiffRemapper::from_text_diff(&diff, old, new);
+
+        for (tag, text) in diff.ops().iter().flat_map(|op| remapper.iter_slices(op)) {
+            match tag {
+                ChangeTag::Equal => {
+                    self.equal(text);
+                }
+                ChangeTag::Delete => {
+                    self.delete(text);
+                }
+                ChangeTag::Insert => {
+                    self.insert(text);
+                }
+            }
+        }
     }
 }
 

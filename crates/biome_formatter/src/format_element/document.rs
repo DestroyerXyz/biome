@@ -1,3 +1,4 @@
+#![expect(clippy::mutable_key_type)]
 use super::tag::Tag;
 use crate::format_element::tag::DedentMode;
 use crate::prelude::tag::GroupMode;
@@ -128,7 +129,7 @@ impl Document {
         }
 
         let mut enclosing: Vec<Enclosing> = Vec::new();
-        let mut interned: FxHashMap<&Interned, bool> = FxHashMap::default();
+        let mut interned = FxHashMap::default();
         propagate_expands(self, &mut enclosing, &mut interned);
     }
 }
@@ -231,6 +232,7 @@ impl Format<IrFormatContext> for &[FormatElement] {
 
             match element {
                 element @ (FormatElement::Space
+                | FormatElement::HardSpace
                 | FormatElement::StaticText { .. }
                 | FormatElement::DynamicText { .. }
                 | FormatElement::LocatedTokenText { .. }) => {
@@ -241,14 +243,42 @@ impl Format<IrFormatContext> for &[FormatElement] {
                     in_text = true;
 
                     match element {
-                        FormatElement::Space => {
+                        FormatElement::Space | FormatElement::HardSpace => {
                             write!(f, [text(" ")])?;
                         }
-                        element if element.is_text() => f.write_element(element.clone())?,
+                        element if element.is_text() => {
+                            // escape quotes
+                            let new_element = match element {
+                                // except for static text because source_position is unknown
+                                FormatElement::StaticText { .. } => element.clone(),
+                                FormatElement::DynamicText {
+                                    text,
+                                    source_position,
+                                } => {
+                                    let text = text.to_string().replace('"', "\\\"");
+                                    FormatElement::DynamicText {
+                                        text: text.into(),
+                                        source_position: *source_position,
+                                    }
+                                }
+                                FormatElement::LocatedTokenText {
+                                    slice,
+                                    source_position,
+                                } => {
+                                    let text = slice.to_string().replace('"', "\\\"");
+                                    FormatElement::DynamicText {
+                                        text: text.into(),
+                                        source_position: *source_position,
+                                    }
+                                }
+                                _ => unreachable!(),
+                            };
+                            f.write_element(new_element)?;
+                        }
                         _ => unreachable!(),
                     }
 
-                    let is_next_text = iter.peek().map_or(false, |e| e.is_text() || e.is_space());
+                    let is_next_text = iter.peek().is_some_and(|e| e.is_text() || e.is_space());
 
                     if !is_next_text {
                         write!(f, [text("\"")])?;
@@ -508,12 +538,12 @@ impl Format<IrFormatContext> for &[FormatElement] {
                         EndFill
                         | EndLabelled
                         | EndConditionalContent
-                        | EndIndentIfGroupBreaks
+                        | EndIndentIfGroupBreaks(_)
                         | EndAlign
                         | EndIndent
                         | EndGroup
                         | EndLineSuffix
-                        | EndDedent
+                        | EndDedent(_)
                         | EndVerbatim => {
                             write!(f, [ContentArrayEnd, text(")")])?;
                         }
@@ -643,7 +673,7 @@ impl FormatElements for [FormatElement] {
 
     fn has_label(&self, expected: LabelId) -> bool {
         self.first()
-            .map_or(false, |element| element.has_label(expected))
+            .is_some_and(|element| element.has_label(expected))
     }
 
     fn start_tag(&self, kind: TagKind) -> Option<&Tag> {
@@ -704,6 +734,10 @@ impl FormatElements for [FormatElement] {
 
 #[cfg(test)]
 mod tests {
+    use biome_js_syntax::JsSyntaxKind;
+    use biome_js_syntax::JsSyntaxToken;
+    use biome_rowan::TextSize;
+
     use crate::prelude::*;
     use crate::SimpleFormatContext;
     use crate::{format, format_args, write};
@@ -830,5 +864,25 @@ mod tests {
   group(expand: propagated, [<ref interned *0>])
 ]"#
         );
+    }
+
+    #[test]
+    fn escapes_quotes() {
+        let token = JsSyntaxToken::new_detached(JsSyntaxKind::JS_STRING_LITERAL, "\"bar\"", [], []);
+        let token_text = FormatElement::LocatedTokenText {
+            source_position: TextSize::default(),
+            slice: token.token_text(),
+        };
+
+        let mut document = Document::from(vec![
+            FormatElement::DynamicText {
+                text: "\"foo\"".into(),
+                source_position: TextSize::default(),
+            },
+            token_text,
+        ]);
+        document.propagate_expand();
+
+        assert_eq!(&std::format!("{document}"), r#"["\"foo\"\"bar\""]"#);
     }
 }

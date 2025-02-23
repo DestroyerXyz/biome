@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -400,5 +401,3 @@ invalid.js:101:5 lint/style/noUselessElse  FIXABLE  ━━━━━━━━━�
   
 
 ```
-
-

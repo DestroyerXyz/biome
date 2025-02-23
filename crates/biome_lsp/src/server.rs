@@ -8,15 +8,17 @@ use crate::utils::{into_lsp_error, panic_to_lsp_error};
 use crate::{handlers, requests};
 use biome_console::markup;
 use biome_diagnostics::panic::PanicError;
-use biome_fs::{BIOME_JSON, ROME_JSON};
-use biome_service::workspace::{RageEntry, RageParams, RageResult};
+use biome_fs::{ConfigName, FileSystem, OsFileSystem};
+use biome_service::workspace::{
+    CloseProjectParams, OpenProjectParams, RageEntry, RageParams, RageResult,
+};
 use biome_service::{workspace, Workspace};
+use camino::Utf8PathBuf;
 use futures::future::ready;
 use futures::FutureExt;
 use rustc_hash::FxHashMap;
 use serde_json::json;
 use std::panic::RefUnwindSafe;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -25,16 +27,16 @@ use tokio::task::spawn_blocking;
 use tower_lsp::jsonrpc::Result as LspResult;
 use tower_lsp::{lsp_types::*, ClientSocket};
 use tower_lsp::{LanguageServer, LspService, Server};
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, warn};
 
 pub struct LSPServer {
-    session: SessionHandle,
+    pub(crate) session: SessionHandle,
     /// Map of all sessions connected to the same [ServerFactory] as this [LSPServer].
     sessions: Sessions,
     /// If this is true the server will broadcast a shutdown signal once the
     /// last client disconnected
     stop_on_disconnect: bool,
-    /// This shared flag is set to true once at least one sessions has been
+    /// This shared flag is set to true once at least one session has been
     /// initialized on this server instance
     is_initialized: Arc<AtomicBool>,
 }
@@ -57,12 +59,6 @@ impl LSPServer {
     }
 
     async fn syntax_tree_request(&self, params: SyntaxTreePayload) -> LspResult<String> {
-        trace!(
-            "Calling method: {}\n with params: {:?}",
-            SYNTAX_TREE_REQUEST,
-            &params
-        );
-
         let url = params.text_document.uri;
         requests::syntax_tree::syntax_tree(&self.session, &url).map_err(into_lsp_error)
     }
@@ -71,7 +67,7 @@ impl LSPServer {
     async fn rage(&self, params: RageParams) -> LspResult<RageResult> {
         let mut entries = vec![
             RageEntry::section("Server"),
-            RageEntry::pair("Version", biome_service::VERSION),
+            RageEntry::pair("Version", biome_configuration::VERSION),
             RageEntry::pair("Name", env!("CARGO_PKG_NAME")),
             RageEntry::pair("CPU Architecture", std::env::consts::ARCH),
             RageEntry::pair("OS", std::env::consts::OS),
@@ -137,15 +133,21 @@ impl LSPServer {
                         FileSystemWatcher {
                             glob_pattern: GlobPattern::String(format!(
                                 "{}/biome.json",
-                                base_path.display()
+                                base_path.as_str()
                             )),
                             kind: Some(WatchKind::all()),
                         },
-                        // TODO: Biome 2.0 remove it
                         FileSystemWatcher {
                             glob_pattern: GlobPattern::String(format!(
-                                "{}/rome.json",
-                                base_path.display()
+                                "{}/biome.jsonc",
+                                base_path.as_str()
+                            )),
+                            kind: Some(WatchKind::all()),
+                        },
+                        FileSystemWatcher {
+                            glob_pattern: GlobPattern::String(format!(
+                                "{}/.editorconfig",
+                                base_path.as_str()
                             )),
                             kind: Some(WatchKind::all()),
                         }
@@ -190,7 +192,7 @@ impl LSPServer {
 
         let rename = {
             let config = self.session.extension_settings.read().ok();
-            config.and_then(|x| x.settings.rename).unwrap_or(false)
+            config.is_some_and(|x| x.rename_enabled())
         };
 
         capabilities.add_capability(
@@ -224,7 +226,7 @@ impl LSPServer {
 #[tower_lsp::async_trait]
 impl LanguageServer for LSPServer {
     // The `root_path` field is deprecated, but we still read it so we can print a warning about it
-    #[allow(deprecated)]
+    #[expect(deprecated)]
     #[tracing::instrument(
         level = "debug",
         skip_all,
@@ -241,6 +243,10 @@ impl LanguageServer for LSPServer {
         self.is_initialized.store(true, Ordering::Relaxed);
 
         let server_capabilities = server_capabilities(&params.capabilities);
+        if params.root_path.is_some() {
+            warn!("The Biome Server was initialized with the deprecated `root_path` parameter: this is not supported, use `root_uri` instead");
+        }
+
         self.session.initialize(
             params.capabilities,
             params.client_info.map(|client_info| ClientInformation {
@@ -248,22 +254,15 @@ impl LanguageServer for LSPServer {
                 version: client_info.version,
             }),
             params.root_uri,
+            params.workspace_folders,
         );
-
-        if params.root_path.is_some() {
-            warn!("The Biome Server was initialized with the deprecated `root_path` parameter: this is not supported, use `root_uri` instead");
-        }
-
-        if params.workspace_folders.is_some() {
-            warn!("The Biome Server was initialized with the `workspace_folders` parameter: this is unsupported at the moment, use `root_uri` instead");
-        }
 
         //
         let init = InitializeResult {
             capabilities: server_capabilities,
             server_info: Some(ServerInfo {
                 name: String::from(env!("CARGO_PKG_NAME")),
-                version: Some(biome_service::VERSION.to_string()),
+                version: Some(biome_configuration::VERSION.to_string()),
             }),
         };
 
@@ -278,7 +277,7 @@ impl LanguageServer for LSPServer {
 
         futures::join!(
             self.session.load_extension_settings(),
-            self.session.load_workspace_settings()
+            self.session.load_workspace_settings(),
         );
 
         let msg = format!("Server initialized with PID: {}", std::process::id());
@@ -297,10 +296,10 @@ impl LanguageServer for LSPServer {
         Ok(())
     }
 
-    /// Called when the user changed the editor settings.
     #[tracing::instrument(level = "debug", skip(self))]
     async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
         let _ = params;
+        self.session.load_workspace_settings().await;
         self.session.load_extension_settings().await;
         self.setup_capabilities().await;
         self.session.update_all_diagnostics().await;
@@ -317,10 +316,11 @@ impl LanguageServer for LSPServer {
                 Ok(file_path) => {
                     let base_path = self.session.base_path();
                     if let Some(base_path) = base_path {
-                        let possible_rome_json = file_path.strip_prefix(&base_path);
-                        if let Ok(possible_rome_json) = possible_rome_json {
-                            if possible_rome_json.display().to_string() == ROME_JSON
-                                || possible_rome_json.display().to_string() == BIOME_JSON
+                        let possible_biome_json = file_path.strip_prefix(&base_path);
+                        if let Ok(watched_file) = possible_biome_json {
+                            if ConfigName::file_names()
+                                .contains(&&*watched_file.display().to_string())
+                                || watched_file.ends_with(".editorconfig")
                             {
                                 self.session.load_workspace_settings().await;
                                 self.setup_capabilities().await;
@@ -358,6 +358,64 @@ impl LanguageServer for LSPServer {
             .ok();
     }
 
+    async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
+        for removed in &params.event.removed {
+            if let Some(project_key) = self
+                .session
+                .file_path(&removed.uri)
+                .ok()
+                .and_then(|project_path| self.session.project_for_path(&project_path))
+            {
+                let result = self
+                    .session
+                    .workspace
+                    .close_project(CloseProjectParams { project_key })
+                    .map_err(into_lsp_error);
+
+                if let Err(err) = result {
+                    error!("Failed to remove project from the workspace: {}", err);
+                    self.session
+                        .client
+                        .log_message(MessageType::ERROR, err)
+                        .await;
+                }
+            }
+        }
+
+        for added in &params.event.added {
+            if let Ok(project_path) = self.session.file_path(&added.uri) {
+                let result = self
+                    .session
+                    .workspace
+                    .open_project(OpenProjectParams {
+                        path: project_path.clone(),
+                        open_uninitialized: true,
+                    })
+                    .map_err(into_lsp_error);
+
+                match result {
+                    Ok(project_key) => {
+                        self.session
+                            .insert_project(project_path.clone(), project_key);
+
+                        self.session
+                            .scan_project_folder(project_key, project_path)
+                            .await;
+
+                        self.session.update_all_diagnostics().await;
+                    }
+                    Err(err) => {
+                        error!("Failed to add project to the workspace: {err}");
+                        self.session
+                            .client
+                            .log_message(MessageType::ERROR, err)
+                            .await;
+                    }
+                }
+            }
+        }
+    }
+
     async fn code_action(&self, params: CodeActionParams) -> LspResult<Option<CodeActionResponse>> {
         biome_diagnostics::panic::catch_unwind(move || {
             handlers::analysis::code_actions(&self.session, params).map_err(into_lsp_error)
@@ -383,7 +441,6 @@ impl LanguageServer for LSPServer {
         let result = biome_diagnostics::panic::catch_unwind(move || {
             handlers::formatting::format_range(&self.session, params)
         });
-
         self.map_op_error(result).await
     }
 
@@ -510,12 +567,20 @@ impl ServerFactory {
         }
     }
 
+    pub fn create(&self, config_path: Option<Utf8PathBuf>) -> ServerConnection {
+        self.create_with_fs(config_path, Box::new(OsFileSystem::default()))
+    }
+
     /// Create a new [ServerConnection] from this factory
-    pub fn create(&self, config_path: Option<PathBuf>) -> ServerConnection {
+    pub fn create_with_fs(
+        &self,
+        config_path: Option<Utf8PathBuf>,
+        fs: Box<dyn FileSystem>,
+    ) -> ServerConnection {
         let workspace = self
             .workspace
             .clone()
-            .unwrap_or_else(workspace::server_sync);
+            .unwrap_or_else(|| workspace::server_sync(fs));
 
         let session_key = SessionKey(self.next_session_key.fetch_add(1, Ordering::Relaxed));
 
@@ -550,15 +615,17 @@ impl ServerFactory {
         builder = builder.custom_method("biome/rage", LSPServer::rage);
 
         workspace_method!(builder, file_features);
-        workspace_method!(builder, project_features);
         workspace_method!(builder, is_path_ignored);
         workspace_method!(builder, update_settings);
-        workspace_method!(builder, project_features);
+        workspace_method!(builder, open_project);
+        workspace_method!(builder, scan_project_folder);
+        workspace_method!(builder, close_project);
         workspace_method!(builder, open_file);
         workspace_method!(builder, get_syntax_tree);
         workspace_method!(builder, get_control_flow_graph);
         workspace_method!(builder, get_formatter_ir);
         workspace_method!(builder, change_file);
+        workspace_method!(builder, check_file_size);
         workspace_method!(builder, get_file_content);
         workspace_method!(builder, close_file);
         workspace_method!(builder, pull_diagnostics);
@@ -568,7 +635,9 @@ impl ServerFactory {
         workspace_method!(builder, format_on_type);
         workspace_method!(builder, fix_file);
         workspace_method!(builder, rename);
-        workspace_method!(builder, organize_imports);
+        workspace_method!(builder, parse_pattern);
+        workspace_method!(builder, search_pattern);
+        workspace_method!(builder, drop_pattern);
 
         let (service, socket) = builder.finish();
         ServerConnection { socket, service }

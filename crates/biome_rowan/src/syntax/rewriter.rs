@@ -112,7 +112,7 @@ use crate::{Language, SyntaxNode, SyntaxSlot, SyntaxToken};
 ///
 /// // It replaced the number literal expression with a bogus node.
 /// assert_eq!(bogus.len(), 1);
-/// assert_eq!(bogus.pop().unwrap().text(), "5");
+/// assert_eq!(bogus.pop().unwrap().text_with_trivia(), "5");
 /// ```
 pub trait SyntaxRewriter {
     type Language: Language;
@@ -135,10 +135,10 @@ pub trait SyntaxRewriter {
     /// Called for every node in the tree. The method should return a signal specifying what should be done with the node
     ///
     /// * [VisitNodeSignal::Traverse]: Recourse into `node` so that [`visit_node`](SyntaxRewriter::visit_node)
-    /// gets called for all children of `node`. The `node` will only be replaced if any node in its subtree changes.
+    ///   gets called for all children of `node`. The `node` will only be replaced if any node in its subtree changes.
     /// * [VisitNodeSignal::Replace]: Replaces `node` with the node specified in the [`Replace`](VisitNodeSignal::Replace) variant.
-    ///  It's your responsibility to call [`traverse`](SyntaxRewriter::transform) for any child of `node` for which you want the rewritter
-    ///  to recurse into its content.
+    ///   It's your responsibility to call [`traverse`](SyntaxRewriter::transform) for any child of `node` for which you want the rewritter
+    ///   to recurse into its content.
     fn visit_node(&mut self, node: SyntaxNode<Self::Language>) -> VisitNodeSignal<Self::Language> {
         VisitNodeSignal::Traverse(node)
     }
@@ -184,7 +184,7 @@ where
                     parent = parent.splice_slots(index..=index, [Some(updated.into())]);
                 }
             }
-            SyntaxSlot::Empty => {
+            SyntaxSlot::Empty { .. } => {
                 // Nothing to visit
             }
         }

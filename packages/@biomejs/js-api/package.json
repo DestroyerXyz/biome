@@ -1,28 +1,30 @@
 {
   "name": "@biomejs/js-api",
-  "version": "0.3.0",
+  "version": "0.7.1",
   "description": "JavaScript APIs for the Biome package",
   "scripts": {
     "tsc": "tsc --noEmit",
-    "format": "cargo biome-cli-dev format ./ --write",
+    "format": "cargo biome-cli-dev format --write .",
     "ci": "cargo biome-cli-dev ci ./src && tsc --noEmit",
     "check": "pnpm biome:check && tsc --noEmit",
-		"biome:check": "cargo biome-cli-dev check ./",
-		"check:apply": "cargo biome-cli-dev check ./ --apply-unsafe",
-    "build:wasm-bundler-dev": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-bundler --target bundler --dev --scope biomedev ../../../crates/biome_wasm",
-    "build:wasm-bundler": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-bundler --target bundler --release --scope biomedev ../../../crates/biome_wasm",
-    "build:wasm-node-dev": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-nodejs --target nodejs --dev --scope biomedev ../../../crates/biome_wasm",
-    "build:wasm-node": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-nodejs --target nodejs --release --scope biomedev ../../../crates/biome_wasm",
-    "build:wasm-web-dev": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-web --target web --dev --scope biomedev ../../../crates/biome_wasm",
-    "build:wasm-web": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-web --target web --release --scope biomedev ../../../crates/biome_wasm",
+    "biome:check": "cargo biome-cli-dev check .",
+    "check:apply": "cargo biome-cli-dev check --apply-unsafe .",
+    "build:wasm-dev": "pnpm run \"/^build:wasm-.+-dev$/\"",
+    "build:wasm": "pnpm run \"/^build:wasm-.+(?<!dev)$/\"",
+    "build:wasm-bundler-dev": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-bundler --target bundler --dev --scope biomejs ../../../crates/biome_wasm",
+    "build:wasm-bundler": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-bundler --target bundler --release --scope biomejs ../../../crates/biome_wasm",
+    "build:wasm-node-dev": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-nodejs --target nodejs --dev --scope biomejs ../../../crates/biome_wasm",
+    "build:wasm-node": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-nodejs --target nodejs --release --scope biomejs ../../../crates/biome_wasm",
+    "build:wasm-web-dev": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-web --target web --dev --scope biomejs ../../../crates/biome_wasm",
+    "build:wasm-web": "wasm-pack build --out-dir ../../packages/@biomejs/wasm-web --target web --release --scope biomejs ../../../crates/biome_wasm",
     "test": "vitest",
-    "test:ci": "vitest --run",
-    "build": "tsc "
+    "test:ci": "vitest run",
+    "build": "tsc"
   },
   "files": [
     "README.md",
-		"LICENSE-APACHE",
-		"LICENSE-MIT",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
     "ROME-LICENSE-MIT",
     "dist/"
   ],
@@ -38,23 +40,23 @@
   "homepage": "https://biomejs.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/biomejs/biome.git",
+    "url": "git+https://github.com/biomejs/biome.git",
     "directory": "packages/@biomejs/js-api"
   },
   "author": "Biome Developers and Contributors",
   "bugs": "https://github.com/biomejs/biome/issues",
   "devDependencies": {
-    "typescript": "^4.8.2",
-    "vitest": "^0.22.0",
-    "vite": "^3.0.8",
-    "@biomejs/wasm-bundler": "../wasm-bundler",
-    "@biomejs/wasm-nodejs": "../wasm-nodejs",
-    "@biomejs/wasm-web": "../wasm-web"
+    "@biomejs/wasm-bundler": "link:../wasm-bundler",
+    "@biomejs/wasm-nodejs": "link:../wasm-nodejs",
+    "@biomejs/wasm-web": "link:../wasm-web",
+    "typescript": "5.7.3",
+    "vite": "5.4.14",
+    "vitest": "1.6.1"
   },
   "peerDependencies": {
-    "@biomejs/wasm-bundler": "^10.0.0",
-    "@biomejs/wasm-nodejs": "^10.0.0",
-    "@biomejs/wasm-web": "^10.0.0"
+    "@biomejs/wasm-bundler": "^1.9.4",
+    "@biomejs/wasm-nodejs": "^1.9.4",
+    "@biomejs/wasm-web": "^1.9.4"
   },
   "peerDependenciesMeta": {
     "@biomejs/wasm-bundler": {

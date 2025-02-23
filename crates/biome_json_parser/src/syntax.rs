@@ -2,7 +2,7 @@ use crate::prelude::*;
 use biome_json_syntax::JsonSyntaxKind;
 use biome_json_syntax::JsonSyntaxKind::*;
 use biome_parser::diagnostic::{expected_any, expected_node};
-use biome_parser::parse_recovery::ParseRecovery;
+use biome_parser::parse_recovery::ParseRecoveryTokenSet;
 use biome_parser::parsed_syntax::ParsedSyntax::Absent;
 use biome_parser::prelude::ParsedSyntax::Present;
 use biome_parser::ParserProgress;
@@ -29,7 +29,7 @@ pub(crate) fn parse_root(p: &mut JsonParser) {
         Present(value) => Present(value),
         Absent => {
             p.error(expected_value(p, p.cur_range()));
-            match ParseRecovery::new(JSON_BOGUS_VALUE, VALUE_START).recover(p) {
+            match ParseRecoveryTokenSet::new(JSON_BOGUS_VALUE, VALUE_START).recover(p) {
                 Ok(value) => Present(value),
                 Err(_) => Absent,
             }
@@ -77,6 +77,13 @@ fn parse_value(p: &mut JsonParser) -> ParsedSyntax {
             let m = p.start();
             p.error(p.err_builder("String values must be double quoted.", p.cur_range()));
             p.bump(IDENT);
+            Present(m.complete(p, JSON_BOGUS_VALUE))
+        }
+
+        ERROR_TOKEN => {
+            // An error is already emitted by the lexer.
+            let m = p.start();
+            p.bump(ERROR_TOKEN);
             Present(m.complete(p, JSON_BOGUS_VALUE))
         }
 
@@ -189,7 +196,7 @@ fn parse_sequence(p: &mut JsonParser, root_kind: SequenceKind) -> ParsedSyntax {
                     let range = if p.at(T![,]) {
                         p.cur_range()
                     } else {
-                        match ParseRecovery::new(JSON_BOGUS_VALUE, current.recovery_set())
+                        match ParseRecoveryTokenSet::new(JSON_BOGUS_VALUE, current.recovery_set())
                             .enable_recovery_on_line_break()
                             .recover(p)
                         {
@@ -282,10 +289,10 @@ fn parse_member_name(p: &mut JsonParser) -> ParsedSyntax {
             p.bump(JSON_STRING_LITERAL);
             Present(m.complete(p, JSON_MEMBER_NAME))
         }
-        IDENT => {
+        IDENT | T![null] | T![true] | T![false] => {
             let m = p.start();
             p.error(p.err_builder("Property key must be double quoted", p.cur_range()));
-            p.bump(IDENT);
+            p.bump_remap(IDENT);
             Present(m.complete(p, JSON_MEMBER_NAME))
         }
         _ => Absent,
@@ -317,7 +324,7 @@ fn parse_rest(p: &mut JsonParser, value: ParsedSyntax) {
     while !p.at(EOF) {
         let range = match parse_value(p) {
             Present(value) => value.range(p),
-            Absent => ParseRecovery::new(JSON_BOGUS_VALUE, VALUE_START)
+            Absent => ParseRecoveryTokenSet::new(JSON_BOGUS_VALUE, VALUE_START)
                 .recover(p)
                 .expect("Expect recovery to succeed because parser isn't at EOF nor at a value.")
                 .range(p),

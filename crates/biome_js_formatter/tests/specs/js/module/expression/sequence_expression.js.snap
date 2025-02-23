@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: js/module/expression/sequence_expression.js
 ---
-
 # Input
 
 ```js
@@ -30,7 +29,7 @@ const object ={
 }
 
 a,
-	// rome-ignore format: Test suppression comments
+	// biome-ignore format: Test suppression comments
 	[
 		0,    1, 2
 	], d;
@@ -57,11 +56,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```js
@@ -109,7 +110,7 @@ const object = {
 };
 
 a,
-	// rome-ignore format: Test suppression comments
+	// biome-ignore format: Test suppression comments
 	[
 		0,    1, 2
 	],
@@ -120,5 +121,3 @@ aLongIdentifierName,
 	aLongIdentifierName,
 	aLongIdentifierName;
 ```
-
-

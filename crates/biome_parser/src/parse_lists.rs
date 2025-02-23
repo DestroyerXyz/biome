@@ -43,8 +43,8 @@ pub trait ParseNodeList {
         -> RecoveryResult;
 
     /// It creates a [ParsedSyntax] that will contain the list
-    fn finish_list(&mut self, p: &mut Self::Parser<'_>, m: Marker) {
-        m.complete(p, Self::LIST_KIND);
+    fn finish_list(&mut self, p: &mut Self::Parser<'_>, m: Marker) -> CompletedMarker {
+        m.complete(p, Self::LIST_KIND)
     }
 
     /// Parses a simple list
@@ -52,7 +52,7 @@ pub trait ParseNodeList {
     /// # Panics
     ///
     /// It panics if the parser doesn't advance at each cycle of the loop
-    fn parse_list(&mut self, p: &mut Self::Parser<'_>) {
+    fn parse_list(&mut self, p: &mut Self::Parser<'_>) -> CompletedMarker {
         let elements = self.start_list(p);
         let mut progress = ParserProgress::default();
 
@@ -68,7 +68,7 @@ pub trait ParseNodeList {
             }
         }
 
-        self.finish_list(p, elements);
+        self.finish_list(p, elements)
     }
 }
 
@@ -114,6 +114,11 @@ pub trait ParseSeparatedList {
         m.complete(p, Self::LIST_KIND)
     }
 
+    /// `false` if the list must have at least one element
+    fn allow_empty(&self) -> bool {
+        true
+    }
+
     /// The [SyntaxKind] of the element that separates the elements of the list
     fn separating_element_kind(&mut self) -> Self::Kind;
 
@@ -122,7 +127,7 @@ pub trait ParseSeparatedList {
         false
     }
 
-    /// Method called at each iteration of the the loop and checks if the expected
+    /// Method called at each iteration of the loop and checks if the expected
     /// separator is present.
     ///
     /// If present, it [parses](Self::separating_element_kind) it and continues with loop.
@@ -140,7 +145,9 @@ pub trait ParseSeparatedList {
         let elements = self.start_list(p);
         let mut progress = ParserProgress::default();
         let mut first = true;
-        while !p.at(<Self::Parser<'_> as Parser>::Kind::EOF) && !self.is_at_list_end(p) {
+        while (!self.allow_empty() && first)
+            || (!p.at(<Self::Parser<'_> as Parser>::Kind::EOF) && !self.is_at_list_end(p))
+        {
             if first {
                 first = false;
             } else {

@@ -8,16 +8,17 @@ keywords.workspace   = true
 license.workspace    = true
 name                 = "biome_text_edit"
 repository.workspace = true
-version              = "0.3.1"
+version              = "0.5.7"
 
 [dependencies]
-biome_text_size = { workspace = true, features = ["serde"] }
+biome_text_size = { workspace = true }
 schemars        = { workspace = true, optional = true }
-serde           = { workspace = true, features = ["derive"] }
-similar         = { version = "2.1.0", features = ["unicode"] }
+serde           = { workspace = true, features = ["derive"], optional = true }
+similar         = { workspace = true, features = ["unicode"] }
 
 [features]
-schemars = ["dep:schemars", "biome_text_size/schemars"]
+schema = ["dep:schemars", "biome_text_size/schema", "serde"]
+serde  = ["dep:serde", "biome_text_size/serde"]
 
 [lints]
 workspace = true

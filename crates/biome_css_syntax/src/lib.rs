@@ -1,6 +1,7 @@
 #[macro_use]
 mod file_source;
 mod generated;
+pub mod stmt_ext;
 mod syntax_node;
 
 pub use self::generated::*;
@@ -11,7 +12,7 @@ pub use file_source::CssFileSource;
 pub use syntax_node::*;
 
 use crate::CssSyntaxKind::*;
-use biome_rowan::{AstNode, RawSyntaxKind};
+use biome_rowan::{AstNode, RawSyntaxKind, SyntaxKind};
 
 impl From<u16> for CssSyntaxKind {
     fn from(d: u16) -> CssSyntaxKind {
@@ -27,16 +28,6 @@ impl From<CssSyntaxKind> for u16 {
 }
 
 impl CssSyntaxKind {
-    pub fn is_trivia(self) -> bool {
-        matches!(
-            self,
-            CssSyntaxKind::NEWLINE
-                | CssSyntaxKind::WHITESPACE
-                | CssSyntaxKind::COMMENT
-                | CssSyntaxKind::MULTILINE_COMMENT
-        )
-    }
-
     /// Returns `true` for any contextual or non-contextual keyword
     #[inline]
     pub const fn is_keyword(self) -> bool {
@@ -47,6 +38,12 @@ impl CssSyntaxKind {
     #[inline]
     pub const fn is_contextual_keyword(self) -> bool {
         (self as u16) >= (MEDIA_KW as u16) && (self as u16) <= (FONT_FACE_KW as u16)
+    }
+
+    /// Returns `true` for css-wide keywords
+    #[inline]
+    pub const fn is_css_wide_keyword(self) -> bool {
+        (self as u16) >= (INITIAL_KW as u16) && (self as u16) <= (DEFAULT_KW as u16)
     }
 
     /// Returns `true` for contextual attribute modifier keywords
@@ -60,6 +57,16 @@ impl CssSyntaxKind {
     #[inline]
     pub const fn is_non_contextual_keyword(self) -> bool {
         self.is_keyword() && !self.is_contextual_keyword()
+    }
+
+    /// Returns true for all _known_ dimension units.
+    ///
+    /// Note that dimensions allow any identifier as the unit value, but only
+    /// these known units will be parsed as a `CssRegularDimension`. All others
+    /// will be parsed as `CssUnknownDimension` instead.
+    #[inline]
+    pub const fn is_known_dimension_unit(self) -> bool {
+        (self as u16) >= (EM_KW as u16) && (self as u16) <= (FR_KW as u16)
     }
 }
 
@@ -83,6 +90,12 @@ impl biome_rowan::SyntaxKind for CssSyntaxKind {
                 | CSS_BOGUS_PAGE_SELECTOR_PSEUDO
                 | CSS_BOGUS_LAYER
                 | CSS_BOGUS_SCOPE_RANGE
+                | CSS_BOGUS_PROPERTY
+                | CSS_BOGUS_PROPERTY_VALUE
+                | CSS_BOGUS_DOCUMENT_MATCHER
+                | CSS_BOGUS_KEYFRAMES_NAME
+                | CSS_BOGUS_CUSTOM_IDENTIFIER
+                | CSS_BOGUS_UNICODE_RANGE_VALUE
         )
     }
 
@@ -95,12 +108,22 @@ impl biome_rowan::SyntaxKind for CssSyntaxKind {
             kind if AnyCssPseudoElement::can_cast(*kind) => CSS_BOGUS_PSEUDO_ELEMENT,
             kind if AnyCssAtRule::can_cast(*kind) => CSS_BOGUS_AT_RULE,
             kind if AnyCssMediaQuery::can_cast(*kind) => CSS_BOGUS_MEDIA_QUERY,
-            kind if AnyCssDeclarationListBlock::can_cast(*kind) => CSS_BOGUS_BLOCK,
-            kind if AnyCssRuleListBlock::can_cast(*kind) => CSS_BOGUS_BLOCK,
+            kind if AnyCssDeclarationBlock::can_cast(*kind) => CSS_BOGUS_BLOCK,
+            kind if AnyCssRuleBlock::can_cast(*kind) => CSS_BOGUS_BLOCK,
             kind if AnyCssKeyframesSelector::can_cast(*kind) => CSS_BOGUS_SELECTOR,
             kind if AnyCssPageSelectorPseudo::can_cast(*kind) => CSS_BOGUS_PAGE_SELECTOR_PSEUDO,
             kind if AnyCssLayer::can_cast(*kind) => CSS_BOGUS_LAYER,
             kind if AnyCssScopeRange::can_cast(*kind) => CSS_BOGUS_SCOPE_RANGE,
+            kind if AnyCssKeyframesItem::can_cast(*kind) => CSS_BOGUS_KEYFRAMES_ITEM,
+            kind if AnyCssProperty::can_cast(*kind) => CSS_BOGUS_PROPERTY,
+            kind if AnyCssDocumentMatcher::can_cast(*kind) => CSS_BOGUS_DOCUMENT_MATCHER,
+            kind if AnyCssKeyframesName::can_cast(*kind) => CSS_BOGUS_KEYFRAMES_NAME,
+            kind if AnyCssCustomIdentifier::can_cast(*kind) => CSS_BOGUS_CUSTOM_IDENTIFIER,
+            kind if AnyCssDeclarationOrAtRuleBlock::can_cast(*kind) => CSS_BOGUS_BLOCK,
+            kind if AnyCssDeclarationOrRuleBlock::can_cast(*kind) => CSS_BOGUS_BLOCK,
+            kind if AnyCssConditionalBlock::can_cast(*kind) => CSS_BOGUS_BLOCK,
+            kind if AnyCssFontFeatureValuesBlock::can_cast(*kind) => CSS_BOGUS_BLOCK,
+            kind if AnyCssUnicodeValue::can_cast(*kind) => CSS_BOGUS_UNICODE_RANGE_VALUE,
 
             _ => CSS_BOGUS,
         }
@@ -123,6 +146,16 @@ impl biome_rowan::SyntaxKind for CssSyntaxKind {
     #[inline]
     fn is_list(&self) -> bool {
         CssSyntaxKind::is_list(*self)
+    }
+
+    fn is_trivia(self) -> bool {
+        matches!(
+            self,
+            CssSyntaxKind::NEWLINE
+                | CssSyntaxKind::WHITESPACE
+                | CssSyntaxKind::COMMENT
+                | CssSyntaxKind::MULTILINE_COMMENT
+        )
     }
 
     fn to_string(&self) -> Option<&'static str> {

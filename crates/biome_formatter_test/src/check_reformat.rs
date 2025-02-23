@@ -12,12 +12,12 @@ pub struct CheckReformat<'a, L>
 where
     L: TestFormatLanguage,
 {
-    root: &'a SyntaxNode<L::SyntaxLanguage>,
+    root: &'a SyntaxNode<L::ServiceLanguage>,
     text: &'a str,
     file_name: &'a str,
 
     language: &'a L,
-    options: L::Options,
+    format_language: L::FormatLanguage,
 }
 
 impl<'a, L> CheckReformat<'a, L>
@@ -25,20 +25,18 @@ where
     L: TestFormatLanguage,
 {
     pub fn new(
-        root: &'a SyntaxNode<L::SyntaxLanguage>,
+        root: &'a SyntaxNode<L::ServiceLanguage>,
         text: &'a str,
         file_name: &'a str,
-
         language: &'a L,
-        options: L::Options,
+        format_language: L::FormatLanguage,
     ) -> Self {
         CheckReformat {
             root,
             text,
             file_name,
-
             language,
-            options,
+            format_language,
         }
     }
 
@@ -67,20 +65,25 @@ where
             )
         }
 
-        let formatted = self
+        let re_formatted = match self
             .language
-            .format_node(self.options.clone(), &re_parse.syntax())
-            .unwrap();
+            .format_node(self.format_language.clone(), &re_parse.syntax())
+        {
+            Ok(formatted) => formatted,
+            Err(err) => {
+                panic!("failed to format: {err}");
+            }
+        };
 
-        let printed = formatted.print().unwrap();
+        let re_printed = re_formatted.print().unwrap();
 
-        if self.text != printed.as_code() {
+        if self.text != re_printed.as_code() {
             let input_format_element = self
                 .language
-                .format_node(self.options.clone(), self.root)
+                .format_node(self.format_language.clone(), self.root)
                 .unwrap();
-            let pretty_input_ir = format!("{}", formatted.into_document());
-            let pretty_reformat_ir = format!("{}", input_format_element.into_document());
+            let pretty_reformat_ir = format!("{}", re_formatted.into_document());
+            let pretty_input_ir = format!("{}", input_format_element.into_document());
 
             // Print a diff of the Formatter IR emitted for the input and the output
             let diff = similar_asserts::SimpleDiff::from_str(
@@ -89,10 +92,18 @@ where
                 "input",
                 "output",
             );
-
             println!("{diff}");
 
-            similar_asserts::assert_eq!(self.text, printed.as_code());
+            similar_asserts::assert_eq!(
+                re_printed.as_code(),
+                self.text,
+                "left is the re-formatted"
+            );
+            similar_asserts::assert_eq!(
+                pretty_reformat_ir,
+                pretty_input_ir,
+                "left is the re-formatted"
+            );
         }
     }
 }

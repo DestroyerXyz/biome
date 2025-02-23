@@ -9,8 +9,10 @@ use biome_js_syntax::{
 };
 use biome_rowan::AstNode;
 use biome_service::workspace_types::{generate_type, methods, ModuleQueue};
+use biome_string_case::Case;
+use schemars::gen::{SchemaGenerator, SchemaSettings};
 use xtask::{project_root, Mode, Result};
-use xtask_codegen::{to_camel_case, update};
+use xtask_codegen::update;
 
 pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
     let bindings_path = project_root().join("packages/@biomejs/backend-jsonrpc/src/workspace.ts");
@@ -25,7 +27,7 @@ pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
         let params = generate_type(&mut declarations, &mut queue, &method.params);
         let result = generate_type(&mut declarations, &mut queue, &method.result);
 
-        let camel_case = to_camel_case(method.name);
+        let camel_case = Case::Camel.convert(method.name);
 
         member_definitions.push(AnyTsTypeMember::TsMethodSignatureTypeMember(
             make::ts_method_signature_type_member(
@@ -152,6 +154,17 @@ pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
             .build(),
         ));
     }
+    // HACK: these types doesn't get picked up in the loop above, so we add it manually
+    let support_kind_schema = SchemaGenerator::from(SchemaSettings::openapi3())
+        .root_schema_for::<biome_service::workspace::SupportKind>();
+    generate_type(&mut declarations, &mut queue, &support_kind_schema);
+    let rule_domain_schema = SchemaGenerator::from(SchemaSettings::openapi3())
+        .root_schema_for::<biome_analyze::RuleDomain>();
+    generate_type(&mut declarations, &mut queue, &rule_domain_schema);
+    let rule_domain_value_schema = SchemaGenerator::from(SchemaSettings::openapi3())
+        .root_schema_for::<biome_configuration::analyzer::RuleDomainValue>(
+    );
+    generate_type(&mut declarations, &mut queue, &rule_domain_value_schema);
 
     let leading_comment = [
         (
@@ -182,7 +195,7 @@ pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
                         make::token(T!['}']),
                     ),
                     make::token(T![from]),
-                    make::js_module_source(make::js_string_literal("./transport")),
+                    make::js_module_source(make::js_string_literal("./transport")).into(),
                 )
                 .with_type_token(make::token(T![type]))
                 .build(),
@@ -314,7 +327,7 @@ pub(crate) fn generate_workspace_bindings(mode: Mode) -> Result<()> {
         AnyJsExportClause::AnyJsDeclarationClause(AnyJsDeclarationClause::TsInterfaceDeclaration(
             make::ts_interface_declaration(
                 make::token(T![interface]),
-                make::ts_identifier_binding(make::ident("Workspace")),
+                make::ts_identifier_binding(make::ident("Workspace")).into(),
                 make::token(T!['{']),
                 make::ts_type_member_list(member_definitions),
                 make::token(T!['}']),

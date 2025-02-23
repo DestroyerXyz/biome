@@ -1,8 +1,6 @@
 use std::fmt::Display;
 
-use biome_js_syntax::{
-    AnyJsExpression, JsParenthesizedExpression, JsSyntaxKind, JsSyntaxToken, TriviaPieceKind,
-};
+use biome_js_syntax::{AnyJsExpression, JsParenthesizedExpression, JsSyntaxKind, JsSyntaxToken};
 use biome_rowan::TriviaPiece;
 
 pub use crate::generated::node_factory::*;
@@ -29,6 +27,16 @@ pub fn js_string_literal(text: &str) -> JsSyntaxToken {
     )
 }
 
+/// Create a new string literal token with no attached trivia, using single quotes
+pub fn js_string_literal_single_quotes(text: &str) -> JsSyntaxToken {
+    JsSyntaxToken::new_detached(
+        JsSyntaxKind::JS_STRING_LITERAL,
+        &format!("'{text}'"),
+        [],
+        [],
+    )
+}
+
 /// Create a new string literal token with no attached trivia
 pub fn jsx_string_literal(text: &str) -> JsSyntaxToken {
     JsSyntaxToken::new_detached(
@@ -39,10 +47,20 @@ pub fn jsx_string_literal(text: &str) -> JsSyntaxToken {
     )
 }
 
+/// Create a new string literal token with no attached trivia, using single quotes
+pub fn jsx_string_literal_single_quotes(text: &str) -> JsSyntaxToken {
+    JsSyntaxToken::new_detached(
+        JsSyntaxKind::JSX_STRING_LITERAL,
+        &format!("'{text}'"),
+        [],
+        [],
+    )
+}
+
 pub fn js_template_chunk(text: &str) -> JsSyntaxToken {
     JsSyntaxToken::new_detached(
         JsSyntaxKind::TEMPLATE_CHUNK,
-        &utils::escape(text, &["${", "`"], '\\'),
+        &utils::escape(text, &["${", "`"], b'\\'),
         [],
         [],
     )
@@ -72,8 +90,8 @@ pub fn token_decorated_with_space(kind: JsSyntaxKind) -> JsSyntaxToken {
         JsSyntaxToken::new_detached(
             kind,
             &format!(" {text} "),
-            [TriviaPiece::new(TriviaPieceKind::Whitespace, 1)],
-            [TriviaPiece::new(TriviaPieceKind::Whitespace, 1)],
+            [TriviaPiece::whitespace(1)],
+            [TriviaPiece::whitespace(1)],
         )
     } else {
         panic!("token kind {kind:?} cannot be transformed to text")

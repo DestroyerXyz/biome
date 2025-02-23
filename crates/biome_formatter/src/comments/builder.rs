@@ -442,7 +442,7 @@ impl<L: Language> CommentsBuilder<L> {
                                 // a /* comment */ b;   //  Comment is a trailing comment
                                 // a, /* comment */ b;  // Comment should be a leading comment
                                 // ```
-                                if preceding.text_range().end()
+                                if preceding.text_range_with_trivia().end()
                                     == comment.piece().as_piece().token().text_range().end()
                                 {
                                     self.push_trailing_comment(&preceding, comment);
@@ -549,13 +549,12 @@ impl<'a> SourceParentheses<'a> {
     /// Must be called with offsets in increasing order.
     ///
     /// Returns the source range of the `)` if there's any `)` in the deleted range at this offset. Returns `None` otherwise
-
     fn r_paren_source_range(&mut self, offset: TextSize) -> Option<TextRange> {
         match self {
             SourceParentheses::Empty => None,
             SourceParentheses::SourceMap { next, tail, .. } => {
                 while let Some(range) = next {
-                    #[allow(clippy::comparison_chain)]
+                    #[expect(clippy::comparison_chain)]
                     if range.transformed == offset {
                         // A deleted range can contain multiple tokens. See if there's any `)` in the deleted
                         // range and compute its source range.
@@ -607,6 +606,11 @@ impl<'a> SourceParentheses<'a> {
                 let ancestors = token.ancestors().take_while(|node| {
                     let source_range = self.parenthesized_range(node);
 
+                    // comments cannot be attached to lists
+                    if node.kind().is_list() {
+                        return false;
+                    }
+
                     if let Some(start) = start_offset {
                         TextRange::new(start, r_paren_source_end).contains_range(source_range)
                     }
@@ -642,13 +646,13 @@ mod tests {
     use biome_js_parser::{parse_module, JsParserOptions};
     use biome_js_syntax::{
         JsIdentifierExpression, JsLanguage, JsParameters, JsParenthesizedExpression,
-        JsPropertyObjectMember, JsReferenceIdentifier, JsShorthandPropertyObjectMember,
-        JsSyntaxKind, JsSyntaxNode, JsUnaryExpression,
+        JsPropertyObjectMember, JsReferenceIdentifier, JsSequenceExpression,
+        JsShorthandPropertyObjectMember, JsSyntaxKind, JsSyntaxNode, JsUnaryExpression,
     };
     use biome_rowan::syntax::SyntaxElementKey;
     use biome_rowan::{
-        chain_trivia_pieces, AstNode, BatchMutation, SyntaxNode, SyntaxTriviaPieceComments,
-        TextRange,
+        chain_trivia_pieces, AstNode, BatchMutation, SyntaxNode, SyntaxNodeOptionExt,
+        SyntaxTriviaPieceComments, TextRange,
     };
     use std::cell::RefCell;
 
@@ -986,6 +990,32 @@ b;"#;
         assert_eq!(second.enclosing_node().kind(), JsSyntaxKind::JS_MODULE);
 
         assert!(!comments.leading(&root.key()).is_empty());
+    }
+
+    #[test]
+    fn r_paren_inside_list() {
+        let (root, decorated, comments) = extract_comments(r#"console.log((a,b/* comment */));"#);
+        assert_eq!(decorated.len(), 1);
+        let comment = &decorated[0];
+        assert_eq!(comment.text_position(), CommentTextPosition::SameLine);
+        assert_eq!(comment.lines_before(), 0);
+        assert_eq!(comment.lines_after(), 0);
+        assert_eq!(
+            comment.preceding_node().kind().unwrap(),
+            JsSyntaxKind::JS_SEQUENCE_EXPRESSION
+        );
+        assert_eq!(comment.following_node(), None);
+        assert_eq!(
+            comment.enclosing_node().kind(),
+            JsSyntaxKind::JS_PARENTHESIZED_EXPRESSION
+        );
+
+        let sequence = root
+            .descendants()
+            .find_map(JsSequenceExpression::cast)
+            .unwrap();
+
+        assert!(!comments.trailing(&sequence.syntax().key()).is_empty());
     }
 
     fn extract_comments(

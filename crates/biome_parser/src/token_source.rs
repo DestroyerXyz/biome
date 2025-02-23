@@ -1,4 +1,5 @@
-use crate::diagnostic::ParseDiagnostic;
+use crate::lexer::{BufferedLexer, LexerWithCheckpoint};
+use crate::{diagnostic::ParseDiagnostic, lexer::LexerCheckpoint};
 use biome_rowan::{SyntaxKind, TextRange, TextSize, TriviaPieceKind};
 
 /// A comment or a whitespace trivia in the source code.
@@ -85,11 +86,69 @@ pub trait BumpWithContext: TokenSource {
     fn skip_as_trivia_with_context(&mut self, context: Self::Context);
 }
 
+pub trait TokenSourceWithBufferedLexer<Lex>: TokenSource {
+    fn lexer(&mut self) -> &mut BufferedLexer<Self::Kind, Lex>;
+}
+
 /// Token source that supports inspecting the 'nth' token (lookahead)
-pub trait NthToken: TokenSource {
+pub trait NthToken<Lex>: TokenSource {
     /// Gets the kind of the nth non-trivia token
     fn nth(&mut self, n: usize) -> Self::Kind;
 
     /// Returns true if the nth non-trivia token is preceded by a line break
     fn has_nth_preceding_line_break(&mut self, n: usize) -> bool;
+}
+
+impl<'l, Lex, T> NthToken<Lex> for T
+where
+    T: TokenSourceWithBufferedLexer<Lex>,
+    Lex: LexerWithCheckpoint<'l, Kind = T::Kind>,
+{
+    /// Gets the kind of the nth non-trivia token
+    fn nth(&mut self, n: usize) -> T::Kind {
+        if n == 0 {
+            self.current()
+        } else {
+            self.lexer()
+                .nth_non_trivia(n)
+                .map_or(T::Kind::EOF, |lookahead| lookahead.kind())
+        }
+    }
+
+    /// Returns true if the nth non-trivia token is preceded by a line break
+    fn has_nth_preceding_line_break(&mut self, n: usize) -> bool {
+        if n == 0 {
+            self.has_preceding_line_break()
+        } else {
+            self.lexer()
+                .nth_non_trivia(n)
+                .is_some_and(|lookahead| lookahead.has_preceding_line_break())
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct TokenSourceCheckpoint<K>
+where
+    K: SyntaxKind,
+{
+    pub lexer_checkpoint: LexerCheckpoint<K>,
+    /// A `u32` should be enough because `TextSize` is also limited to `u32`.
+    /// The worst case is a document where every character is its own token. This would
+    /// result in `u32::MAX` tokens
+    pub trivia_len: u32,
+}
+
+impl<K> TokenSourceCheckpoint<K>
+where
+    K: SyntaxKind,
+{
+    /// byte offset in the source text
+    pub fn current_start(&self) -> TextSize {
+        self.lexer_checkpoint.current_start()
+    }
+
+    pub fn trivia_position(&self) -> usize {
+        self.trivia_len as usize
+    }
 }

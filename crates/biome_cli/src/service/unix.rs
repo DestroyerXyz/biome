@@ -1,12 +1,11 @@
+use biome_lsp::{ServerConnection, ServerFactory};
+use camino::Utf8PathBuf;
 use std::{
     convert::Infallible,
     env, fs,
     io::{self, ErrorKind},
-    path::PathBuf,
     time::Duration,
 };
-
-use biome_lsp::{ServerConnection, ServerFactory};
 use tokio::{
     io::Interest,
     net::{
@@ -20,22 +19,21 @@ use tracing::{debug, info, Instrument};
 
 /// Returns the filesystem path of the global socket used to communicate with
 /// the server daemon
-fn get_socket_name() -> PathBuf {
-    biome_fs::ensure_cache_dir().join(format!("biome-socket-{}", biome_service::VERSION))
+fn get_socket_name() -> Utf8PathBuf {
+    biome_fs::ensure_cache_dir().join(format!("biome-socket-{}", biome_configuration::VERSION))
 }
 
-pub(crate) fn enumerate_pipes() -> io::Result<impl Iterator<Item = String>> {
+pub(crate) fn enumerate_pipes() -> io::Result<impl Iterator<Item = (String, Utf8PathBuf)>> {
     fs::read_dir(biome_fs::ensure_cache_dir()).map(|iter| {
         iter.filter_map(|entry| {
-            let entry = entry.ok()?.path();
+            let entry = Utf8PathBuf::from_path_buf(entry.ok()?.path()).ok()?;
             let file_name = entry.file_name()?;
-            let file_name = file_name.to_str()?;
 
             let version = file_name.strip_prefix("biome-socket")?;
             if version.is_empty() {
-                Some(String::new())
+                Some((String::new(), entry))
             } else {
-                Some(version.strip_prefix('-')?.to_string())
+                Some((version.strip_prefix('-')?.to_string(), entry))
             }
         })
     })
@@ -44,7 +42,7 @@ pub(crate) fn enumerate_pipes() -> io::Result<impl Iterator<Item = String>> {
 /// Try to connect to the global socket and wait for the connection to become ready
 async fn try_connect() -> io::Result<UnixStream> {
     let socket_name = get_socket_name();
-    info!("Trying to connect to socket {}", socket_name.display());
+    info!("Trying to connect to socket {}", socket_name.as_str());
     let stream = UnixStream::connect(socket_name).await?;
     stream
         .ready(Interest::READABLE | Interest::WRITABLE)
@@ -53,7 +51,12 @@ async fn try_connect() -> io::Result<UnixStream> {
 }
 
 /// Spawn the daemon server process in the background
-fn spawn_daemon(stop_on_disconnect: bool, config_path: Option<PathBuf>) -> io::Result<Child> {
+fn spawn_daemon(
+    stop_on_disconnect: bool,
+    config_path: Option<Utf8PathBuf>,
+    log_path: Option<Utf8PathBuf>,
+    log_file_name_prefix: Option<String>,
+) -> io::Result<Child> {
     let binary = env::current_exe()?;
 
     let mut cmd = Command::new(binary);
@@ -64,7 +67,14 @@ fn spawn_daemon(stop_on_disconnect: bool, config_path: Option<PathBuf>) -> io::R
         cmd.arg("--stop-on-disconnect");
     }
     if let Some(config_path) = config_path {
-        cmd.arg(format!("--config-path={}", config_path.display()));
+        cmd.arg(format!("--config-path={}", config_path));
+    }
+    if let Some(log_path) = log_path {
+        cmd.arg(format!("--log-path={}", log_path));
+    }
+
+    if let Some(log_file_name_prefix) = log_file_name_prefix {
+        cmd.arg(format!("--log-prefix-name={log_file_name_prefix}"));
     }
 
     // Create a new session for the process and make it the leader, this will
@@ -114,7 +124,9 @@ pub(crate) async fn open_socket() -> io::Result<Option<(OwnedReadHalf, OwnedWrit
 /// to be started
 pub(crate) async fn ensure_daemon(
     stop_on_disconnect: bool,
-    config_path: Option<PathBuf>,
+    config_path: Option<Utf8PathBuf>,
+    log_path: Option<Utf8PathBuf>,
+    log_file_name_prefix: Option<String>,
 ) -> io::Result<bool> {
     let mut current_child: Option<Child> = None;
     let mut last_error = None;
@@ -153,7 +165,12 @@ pub(crate) async fn ensure_daemon(
                 } else {
                     // Spawn the daemon process and wait a few milliseconds for
                     // it to become ready then retry the connection
-                    current_child = Some(spawn_daemon(stop_on_disconnect, config_path.clone())?);
+                    current_child = Some(spawn_daemon(
+                        stop_on_disconnect,
+                        config_path.clone(),
+                        log_path.clone(),
+                        log_file_name_prefix.clone(),
+                    )?);
                     time::sleep(Duration::from_millis(50)).await;
                 }
             }
@@ -175,8 +192,8 @@ pub(crate) async fn ensure_daemon(
 /// Ensure the server daemon is running and ready to receive connections and
 /// print the global socket name in the standard output
 pub(crate) async fn print_socket() -> io::Result<()> {
-    ensure_daemon(true, None).await?;
-    println!("{}", get_socket_name().display());
+    ensure_daemon(true, None, None, None).await?;
+    println!("{}", get_socket_name().as_str());
     Ok(())
 }
 
@@ -184,15 +201,15 @@ pub(crate) async fn print_socket() -> io::Result<()> {
 /// provided [ServerFactory]
 pub(crate) async fn run_daemon(
     factory: ServerFactory,
-    config_path: Option<PathBuf>,
+    config_path: Option<Utf8PathBuf>,
 ) -> io::Result<Infallible> {
     let path = get_socket_name();
 
-    info!("Trying to connect to socket {}", path.display());
+    info!("Trying to connect to socket {}", path.as_str());
 
     // Try to remove the socket file if it already exists
     if path.exists() {
-        info!("Remove socket folder {}", path.display());
+        info!("Remove socket folder {}", path.as_str());
         fs::remove_file(&path)?;
     }
 

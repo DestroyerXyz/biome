@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: validInnerUsed.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -10,5 +11,3 @@ const tid = setInterval(() => {
     clearInterval(tid);
 });
 ```
-
-

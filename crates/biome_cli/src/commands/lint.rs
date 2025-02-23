@@ -1,127 +1,151 @@
-use crate::changed::get_changed_files;
+use super::{determine_fix_file_mode, FixFileModeOptions};
 use crate::cli_options::CliOptions;
-use crate::commands::validate_configuration_diagnostics;
-use crate::{
-    execute_mode, setup_cli_subscriber, CliDiagnostic, CliSession, Execution, TraversalMode,
-};
-use biome_service::configuration::vcs::VcsConfiguration;
-use biome_service::configuration::{
-    load_configuration, FilesConfiguration, LinterConfiguration, LoadedConfiguration,
-};
-use biome_service::workspace::{FixFileMode, UpdateSettingsParams};
-use biome_service::{ConfigurationBasePath, MergeWith};
+use crate::commands::{get_files_to_process_with_cli_options, CommandRunner};
+use crate::{CliDiagnostic, Execution, TraversalMode};
+use biome_configuration::analyzer::RuleSelector;
+use biome_configuration::css::CssLinterConfiguration;
+use biome_configuration::graphql::GraphqlLinterConfiguration;
+use biome_configuration::javascript::JsLinterConfiguration;
+use biome_configuration::json::JsonLinterConfiguration;
+use biome_configuration::vcs::VcsConfiguration;
+use biome_configuration::{Configuration, FilesConfiguration, LinterConfiguration};
+use biome_console::Console;
+use biome_deserialize::Merge;
+use biome_fs::FileSystem;
+use biome_service::configuration::LoadedConfiguration;
+use biome_service::projects::ProjectKey;
+use biome_service::{Workspace, WorkspaceError};
 use std::ffi::OsString;
-use std::path::PathBuf;
 
 pub(crate) struct LintCommandPayload {
-    pub(crate) apply: bool,
-    pub(crate) apply_unsafe: bool,
-    pub(crate) cli_options: CliOptions,
+    pub(crate) write: bool,
+    pub(crate) fix: bool,
+    pub(crate) unsafe_: bool,
+    pub(crate) suppress: bool,
+    pub(crate) suppression_reason: Option<String>,
     pub(crate) linter_configuration: Option<LinterConfiguration>,
     pub(crate) vcs_configuration: Option<VcsConfiguration>,
     pub(crate) files_configuration: Option<FilesConfiguration>,
     pub(crate) paths: Vec<OsString>,
+    pub(crate) only: Vec<RuleSelector>,
+    pub(crate) skip: Vec<RuleSelector>,
     pub(crate) stdin_file_path: Option<String>,
+    pub(crate) staged: bool,
     pub(crate) changed: bool,
     pub(crate) since: Option<String>,
+    pub(crate) javascript_linter: Option<JsLinterConfiguration>,
+    pub(crate) json_linter: Option<JsonLinterConfiguration>,
+    pub(crate) css_linter: Option<CssLinterConfiguration>,
+    pub(crate) graphql_linter: Option<GraphqlLinterConfiguration>,
 }
 
-/// Handler for the "lint" command of the Biome CLI
-pub(crate) fn lint(
-    mut session: CliSession,
-    payload: LintCommandPayload,
-) -> Result<(), CliDiagnostic> {
-    let LintCommandPayload {
-        apply,
-        apply_unsafe,
-        cli_options,
-        linter_configuration,
-        mut paths,
-        stdin_file_path,
-        vcs_configuration,
-        files_configuration,
-        changed,
-        since,
-    } = payload;
-    setup_cli_subscriber(cli_options.log_level.clone(), cli_options.log_kind.clone());
+impl CommandRunner for LintCommandPayload {
+    const COMMAND_NAME: &'static str = "lint";
 
-    let fix_file_mode = if apply && apply_unsafe {
-        return Err(CliDiagnostic::incompatible_arguments(
-            "--apply",
-            "--apply-unsafe",
-        ));
-    } else if !apply && !apply_unsafe {
-        None
-    } else if apply && !apply_unsafe {
-        Some(FixFileMode::SafeFixes)
-    } else {
-        Some(FixFileMode::SafeAndUnsafeFixes)
-    };
+    fn merge_configuration(
+        &mut self,
+        loaded_configuration: LoadedConfiguration,
+        _fs: &dyn FileSystem,
+        _console: &mut dyn Console,
+    ) -> Result<Configuration, WorkspaceError> {
+        let LoadedConfiguration {
+            configuration: mut fs_configuration,
+            ..
+        } = loaded_configuration;
 
-    let base_path = match cli_options.config_path.as_ref() {
-        None => ConfigurationBasePath::default(),
-        Some(path) => ConfigurationBasePath::FromUser(PathBuf::from(path)),
-    };
+        fs_configuration.merge_with(Configuration {
+            linter: if fs_configuration
+                .linter
+                .as_ref()
+                .is_some_and(LinterConfiguration::is_enabled)
+            {
+                None
+            } else {
+                if let Some(linter) = self.linter_configuration.as_mut() {
+                    // Don't overwrite rules from the CLI configuration.
+                    linter.rules = None;
+                }
+                self.linter_configuration.clone()
+            },
+            files: self.files_configuration.clone(),
+            vcs: self.vcs_configuration.clone(),
+            ..Default::default()
+        });
 
-    let loaded_configuration = load_configuration(&session.app.fs, base_path)?;
-    validate_configuration_diagnostics(
-        &loaded_configuration,
-        session.app.console,
-        cli_options.verbose,
-    )?;
-
-    let LoadedConfiguration {
-        configuration: mut fs_configuration,
-        directory_path: configuration_path,
-        ..
-    } = loaded_configuration;
-    fs_configuration.merge_with(linter_configuration);
-    fs_configuration.merge_with(files_configuration);
-    fs_configuration.merge_with(vcs_configuration);
-
-    // check if support of git ignore files is enabled
-    let vcs_base_path = configuration_path.or(session.app.fs.working_directory());
-    let (vcs_base_path, gitignore_matches) =
-        fs_configuration.retrieve_gitignore_matches(&session.app.fs, vcs_base_path.as_deref())?;
-
-    if since.is_some() && !changed {
-        return Err(CliDiagnostic::incompatible_arguments("since", "changed"));
-    }
-
-    if changed {
-        paths = get_changed_files(&session.app.fs, &fs_configuration, since)?;
-    }
-
-    let stdin = if let Some(stdin_file_path) = stdin_file_path {
-        let console = &mut session.app.console;
-        let input_code = console.read();
-        if let Some(input_code) = input_code {
-            let path = PathBuf::from(stdin_file_path);
-            Some((path, input_code))
-        } else {
-            // we provided the argument without a piped stdin, we bail
-            return Err(CliDiagnostic::missing_argument("stdin", "lint"));
+        if self.css_linter.is_some() {
+            let css = fs_configuration.css.get_or_insert_with(Default::default);
+            css.linter.merge_with(self.css_linter.clone());
         }
-    } else {
-        None
-    };
 
-    session
-        .app
-        .workspace
-        .update_settings(UpdateSettingsParams {
-            configuration: fs_configuration,
-            vcs_base_path,
-            gitignore_matches,
+        if self.graphql_linter.is_some() {
+            let graphql = fs_configuration
+                .graphql
+                .get_or_insert_with(Default::default);
+            graphql.linter.merge_with(self.graphql_linter.clone());
+        }
+        if self.javascript_linter.is_some() {
+            let javascript = fs_configuration
+                .javascript
+                .get_or_insert_with(Default::default);
+            javascript.linter.merge_with(self.javascript_linter.clone());
+        }
+        if self.json_linter.is_some() {
+            let json = fs_configuration.json.get_or_insert_with(Default::default);
+            json.linter.merge_with(self.json_linter.clone());
+        }
+
+        Ok(fs_configuration)
+    }
+
+    fn get_files_to_process(
+        &self,
+        fs: &dyn FileSystem,
+        configuration: &Configuration,
+    ) -> Result<Vec<OsString>, CliDiagnostic> {
+        let paths = get_files_to_process_with_cli_options(
+            self.since.as_deref(),
+            self.changed,
+            self.staged,
+            fs,
+            configuration,
+        )?
+        .unwrap_or(self.paths.clone());
+
+        Ok(paths)
+    }
+
+    fn get_stdin_file_path(&self) -> Option<&str> {
+        self.stdin_file_path.as_deref()
+    }
+
+    fn should_write(&self) -> bool {
+        self.write || self.fix
+    }
+
+    fn get_execution(
+        &self,
+        cli_options: &CliOptions,
+        console: &mut dyn Console,
+        _workspace: &dyn Workspace,
+        project_key: ProjectKey,
+    ) -> Result<Execution, CliDiagnostic> {
+        let fix_file_mode = determine_fix_file_mode(FixFileModeOptions {
+            write: self.write,
+            fix: self.fix,
+            unsafe_: self.unsafe_,
+            suppress: self.suppress,
+            suppression_reason: self.suppression_reason.clone(),
         })?;
-
-    execute_mode(
-        Execution::new(TraversalMode::Lint {
+        Ok(Execution::new(TraversalMode::Lint {
+            project_key,
             fix_file_mode,
-            stdin,
-        }),
-        session,
-        &cli_options,
-        paths,
-    )
+            stdin: self.get_stdin(console)?,
+            only: self.only.clone(),
+            skip: self.skip.clone(),
+            vcs_targeted: (self.staged, self.changed).into(),
+            suppress: self.suppress,
+            suppression_reason: self.suppression_reason.clone(),
+        })
+        .set_report(cli_options))
+    }
 }

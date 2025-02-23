@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: validExportNamespace.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -12,5 +13,3 @@ export * as $ from ""
 
 export * as _ from ""
 ```
-
-

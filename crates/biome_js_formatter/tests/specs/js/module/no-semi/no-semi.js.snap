@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: js/module/no-semi/no-semi.js
 ---
-
 # Input
 
 ```js
@@ -104,11 +103,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```js
@@ -205,7 +206,7 @@ aReallyLongLine012345678901234567890123456789012345678901234567890123456789 *
 	(b + c);
 ```
 
-## Output 2
+## Output 1
 
 -----
 Indent style: Tab
@@ -215,11 +216,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: As needed
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```js
@@ -315,5 +318,3 @@ while (false) (function () {})()
 aReallyLongLine012345678901234567890123456789012345678901234567890123456789 *
 	(b + c)
 ```
-
-

@@ -22,9 +22,13 @@ format ━━━━━━━━━━━━━━━━━━━━━━━━�
 # Emitted Messages
 
 ```block
+Scanned project folder in <TIME>.
+```
+
+```block
 format.js format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  i Formatter would have printed the following content:
+  × Formatter would have printed the following content:
   
     1   │ - ··statement(··)··
       1 │ + statement();
@@ -34,7 +38,26 @@ format.js format ━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ```block
-Compared 1 file(s) in <TIME>
+Checked 1 file in <TIME>. No fixes applied.
+Found 1 error.
 ```
 
+```block
+ VERBOSE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  i Files processed:
+  
+  - format.js
+  
+
+```
+
+```block
+ VERBOSE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Files fixed:
+  
+  ! The list is empty.
+  
+
+```

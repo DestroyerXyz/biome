@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidBaseExpoentLowerPrecedence.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -279,5 +280,3 @@ invalidBaseExpoentLowerPrecedence.js:12:17 lint/style/useExponentiationOperator 
   
 
 ```
-
-

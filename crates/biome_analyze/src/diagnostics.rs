@@ -1,10 +1,11 @@
-use biome_console::MarkupBuf;
+use biome_console::{markup, MarkupBuf};
 use biome_diagnostics::{
     advice::CodeSuggestionAdvice, category, Advices, Category, Diagnostic, DiagnosticExt,
-    DiagnosticTags, Error, Location, Severity, Visit,
+    DiagnosticTags, Error, Location, LogCategory, MessageAndDescription, Severity, Visit,
 };
 use biome_rowan::TextRange;
-use std::fmt::{Debug, Display, Formatter};
+use std::borrow::Cow;
+use std::fmt::{Debug, Formatter};
 
 use crate::rule::RuleDiagnostic;
 
@@ -64,7 +65,7 @@ impl Diagnostic for AnalyzerDiagnostic {
 
     fn severity(&self) -> Severity {
         match &self.kind {
-            DiagnosticKind::Rule { .. } => Severity::Error,
+            DiagnosticKind::Rule(diagnostic) => diagnostic.severity(),
             DiagnosticKind::Raw(error) => error.severity(),
         }
     }
@@ -138,36 +139,119 @@ impl AnalyzerDiagnostic {
     }
 }
 
-#[derive(Debug, Diagnostic)]
+#[derive(Debug, Diagnostic, Clone)]
 #[diagnostic(severity = Warning)]
-pub(crate) struct SuppressionDiagnostic {
+pub struct AnalyzerSuppressionDiagnostic {
     #[category]
     category: &'static Category,
     #[location(span)]
     range: TextRange,
     #[message]
     #[description]
-    message: String,
+    message: MessageAndDescription,
     #[tags]
     tags: DiagnosticTags,
+
+    #[advice]
+    advice: SuppressionAdvice,
 }
 
-impl SuppressionDiagnostic {
+impl AnalyzerSuppressionDiagnostic {
     pub(crate) fn new(
         category: &'static Category,
         range: TextRange,
-        message: impl Display,
+        message: impl biome_console::fmt::Display,
     ) -> Self {
         Self {
             category,
             range,
-            message: message.to_string(),
+            message: MessageAndDescription::from(markup! { {message} }.to_owned()),
             tags: DiagnosticTags::empty(),
+            advice: SuppressionAdvice::default(),
         }
     }
 
-    pub(crate) fn with_tags(mut self, tags: DiagnosticTags) -> Self {
-        self.tags |= tags;
+    pub(crate) fn note(mut self, message: MarkupBuf, range: impl Into<TextRange>) -> Self {
+        self.advice.messages.push((message, Some(range.into())));
+        self
+    }
+
+    pub(crate) fn hint(mut self, message: MarkupBuf) -> Self {
+        self.advice.messages.push((message, None));
         self
     }
 }
+
+#[derive(Debug, Default, Clone)]
+struct SuppressionAdvice {
+    messages: Vec<(MarkupBuf, Option<TextRange>)>,
+}
+
+impl Advices for SuppressionAdvice {
+    fn record(&self, visitor: &mut dyn Visit) -> std::io::Result<()> {
+        for (message, range) in &self.messages {
+            visitor.record_log(LogCategory::Info, &markup! {{message}})?;
+            let location = Location::builder().span(range);
+
+            visitor.record_frame(location.build())?
+        }
+        Ok(())
+    }
+}
+
+/// Series of errors encountered when running rules on a file
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub enum RuleError {
+    /// The rule with the specified name replaced the root of the file with a node that is not a valid root for that language.
+    ReplacedRootWithNonRootError {
+        rule_name: Option<(Cow<'static, str>, Cow<'static, str>)>,
+    },
+}
+
+impl Diagnostic for RuleError {}
+
+impl std::fmt::Display for RuleError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            RuleError::ReplacedRootWithNonRootError {
+                rule_name: Some((group, rule)),
+            } => {
+                std::write!(
+                    fmt,
+                    "the rule '{group}/{rule}' replaced the root of the file with a non-root node."
+                )
+            }
+            RuleError::ReplacedRootWithNonRootError { rule_name: None } => {
+                std::write!(
+                    fmt,
+                    "a code action replaced the root of the file with a non-root node."
+                )
+            }
+        }
+    }
+}
+
+impl biome_console::fmt::Display for RuleError {
+    fn fmt(&self, fmt: &mut biome_console::fmt::Formatter) -> std::io::Result<()> {
+        match self {
+            RuleError::ReplacedRootWithNonRootError {
+                rule_name: Some((group, rule)),
+            } => {
+                std::write!(
+                    fmt,
+                    "the rule '{group}/{rule}' replaced the root of the file with a non-root node."
+                )
+            }
+            RuleError::ReplacedRootWithNonRootError { rule_name: None } => {
+                std::write!(
+                    fmt,
+                    "a code action replaced the root of the file with a non-root node."
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for RuleError {}

@@ -16,7 +16,6 @@ ci ━━━━━━━━━━━━━━━━━━━━━━━━━�
 # Emitted Messages
 
 ```block
-Checked 60 file(s) in <TIME>
+Checked 60 files in <TIME>. No fixes applied.
+Found 60 errors.
 ```
-
-

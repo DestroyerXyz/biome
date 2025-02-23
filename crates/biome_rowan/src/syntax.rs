@@ -6,10 +6,9 @@ mod trivia;
 
 use crate::{AstNode, RawSyntaxKind};
 pub use element::{SyntaxElement, SyntaxElementKey};
-pub(crate) use node::SyntaxSlots;
 pub use node::{
     Preorder, PreorderWithTokens, SendNode, SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren,
-    SyntaxNodeOptionExt, SyntaxSlot,
+    SyntaxNodeOptionExt, SyntaxSlot, SyntaxSlots,
 };
 pub use rewriter::{SyntaxRewriter, VisitNodeSignal};
 use std::fmt;
@@ -44,6 +43,9 @@ pub trait SyntaxKind: fmt::Debug + PartialEq + Copy {
 
     /// Returns `true` if this kind is a list node.
     fn is_list(&self) -> bool;
+
+    /// Returns `true` if this kind is a trivia.
+    fn is_trivia(self) -> bool;
 
     /// Returns a string for keywords and punctuation tokens or `None` otherwise.
     fn to_string(&self) -> Option<&'static str>;
@@ -163,15 +165,15 @@ mod tests {
 
         let first = list.first().and_then(|e| e.into_node()).unwrap();
         assert_eq!(first.kind(), RawLanguageKind::LITERAL_EXPRESSION);
-        assert_eq!(first.text(), "1");
+        assert_eq!(first.text_with_trivia(), "1");
 
         let last = list.last().and_then(|e| e.into_node()).unwrap();
         assert_eq!(last.kind(), RawLanguageKind::LITERAL_EXPRESSION);
-        assert_eq!(last.text(), "2");
+        assert_eq!(last.text_with_trivia(), "2");
 
         let node_texts: Vec<_> = list
             .iter()
-            .map(|e| e.into_node().map(|n| n.text().to_string()))
+            .map(|e| e.into_node().map(|n| n.text_with_trivia().to_string()))
             .collect();
 
         assert_eq!(
@@ -206,11 +208,11 @@ mod tests {
 
         let first = list.first().and_then(|e| e.into_node()).unwrap();
         assert_eq!(first.kind(), RawLanguageKind::LITERAL_EXPRESSION);
-        assert_eq!(first.text(), "1");
+        assert_eq!(first.text_with_trivia(), "1");
 
         let last = list.last().and_then(|e| e.into_node()).unwrap();
         assert_eq!(last.kind(), RawLanguageKind::LITERAL_EXPRESSION);
-        assert_eq!(last.text(), "2");
+        assert_eq!(last.text_with_trivia(), "2");
 
         let kinds: Vec<_> = list.iter().map(|e| e.kind()).collect();
 
@@ -253,45 +255,52 @@ mod tests {
         let root = builder.finish();
 
         let first = root.children().next().unwrap();
-        assert_eq!(first.text().to_string(), "a");
+        assert_eq!(first.text_with_trivia().to_string(), "a");
         assert_eq!(
-            first.next_sibling().map(|e| e.text().to_string()),
+            first
+                .next_sibling()
+                .map(|e| e.text_with_trivia().to_string()),
             Some(String::from("b"))
         );
 
         let second = root.children().nth(1).unwrap();
-        assert_eq!(second.text().to_string(), "b");
+        assert_eq!(second.text_with_trivia().to_string(), "b");
 
         // Skips the missing element
         assert_eq!(
-            second.next_sibling().map(|e| e.text().to_string()),
+            second
+                .next_sibling()
+                .map(|e| e.text_with_trivia().to_string()),
             Some(String::from("c"))
         );
 
         assert_eq!(
-            second.prev_sibling().map(|e| e.text().to_string()),
+            second
+                .prev_sibling()
+                .map(|e| e.text_with_trivia().to_string()),
             Some(String::from("a"))
         );
 
         let last = root.children().last().unwrap();
-        assert_eq!(last.text(), "c");
+        assert_eq!(last.text_with_trivia(), "c");
         assert_eq!(last.next_sibling(), None);
         assert_eq!(
-            last.prev_sibling().map(|e| e.text().to_string()),
+            last.prev_sibling()
+                .map(|e| e.text_with_trivia().to_string()),
             Some(String::from("b"))
         );
 
         assert_eq!(
             first
                 .siblings(Direction::Next)
-                .map(|s| s.text().to_string())
+                .map(|s| s.text_with_trivia().to_string())
                 .collect::<Vec<_>>(),
             vec!["a", "b", "c"]
         );
 
         assert_eq!(
             last.siblings(Direction::Prev)
-                .map(|s| s.text().to_string())
+                .map(|s| s.text_with_trivia().to_string())
                 .collect::<Vec<_>>(),
             vec!["c", "b", "a"]
         );
@@ -359,7 +368,7 @@ mod tests {
         // // Node texts
 
         let node = builder.finish();
-        assert_eq!("\n\t let \t\t", node.text());
+        assert_eq!("\n\t let \t\t", node.text_with_trivia());
         assert_eq!("let", node.text_trimmed());
         assert_eq!("\n\t ", node.first_leading_trivia().unwrap().text());
         assert_eq!(" \t\t", node.last_trailing_trivia().unwrap().text());
@@ -408,7 +417,10 @@ mod tests {
 
         // Node Ranges
 
-        assert_eq!(TextRange::new(0.into(), 18.into()), node.text_range());
+        assert_eq!(
+            TextRange::new(0.into(), 18.into()),
+            node.text_range_with_trivia()
+        );
         assert_eq!(
             TextRange::new(3.into(), 16.into()),
             node.text_trimmed_range()

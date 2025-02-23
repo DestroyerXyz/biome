@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -42,7 +43,7 @@ test2: do {
 ```
 invalid.js:2:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unnecessary continue statement
+  × Unnecessary continue statement
   
     1 │ loop: for (let i = 0; i < 5; i++) {
   > 2 │ 	continue loop;
@@ -63,7 +64,7 @@ invalid.js:2:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━�
 ```
 invalid.js:6:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unnecessary continue statement
+  × Unnecessary continue statement
   
     5 │ while (i--) {
   > 6 │ 	continue;
@@ -85,7 +86,7 @@ invalid.js:6:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━�
 ```
 invalid.js:10:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unnecessary continue statement
+  × Unnecessary continue statement
   
      9 │ while (1) {
   > 10 │ 	continue;
@@ -107,7 +108,7 @@ invalid.js:10:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━
 ```
 invalid.js:16:3 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unnecessary continue statement
+  × Unnecessary continue statement
   
     14 │ 	if (i > 5) {
     15 │ 		console.log("foo");
@@ -121,10 +122,8 @@ invalid.js:16:3 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━
     14 14 │   	if (i > 5) {
     15 15 │   		console.log("foo");
     16    │ - → → continue;
-    17    │ - → }·else·if·(i·>=·5·&&·i·<·8)·{
-       16 │ + → }·else·if·(i·>=·5·&&·i·<·8)·{
+    17 16 │   	} else if (i >= 5 && i < 8) {
     18 17 │   		console.log("test");
-    19 18 │   	} else {
   
 
 ```
@@ -132,7 +131,7 @@ invalid.js:16:3 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━
 ```
 invalid.js:25:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unnecessary continue statement
+  × Unnecessary continue statement
   
     24 │ for (let i = 0; i < 9; i++) {
   > 25 │ 	continue;
@@ -154,7 +153,7 @@ invalid.js:25:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━
 ```
 invalid.js:28:35 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unnecessary continue statement
+  × Unnecessary continue statement
   
     26 │ }
     27 │ 
@@ -173,7 +172,7 @@ invalid.js:28:35 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━�
 ```
 invalid.js:31:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unnecessary continue statement
+  × Unnecessary continue statement
   
     30 │ test2: do {
   > 31 │ 	continue test2;
@@ -189,5 +188,3 @@ invalid.js:31:2 lint/correctness/noUnnecessaryContinue  FIXABLE  ━━━━━
   
 
 ```
-
-

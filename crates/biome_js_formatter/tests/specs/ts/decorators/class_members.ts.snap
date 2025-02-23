@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: ts/decorators/class_members.ts
 ---
-
 # Input
 
 ```ts
@@ -36,6 +35,8 @@ class Foo {
 	public get getter() {}
 	@dec
 	public set setter(val) {}
+	@dec
+	public set setter(val,) {}
 
 	// two decorators without a newline
 	@dec
@@ -116,11 +117,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```ts
@@ -154,6 +157,8 @@ class Foo {
 	public get getter() {}
 	@dec
 	public set setter(val) {}
+	@dec
+	public set setter(val,) {}
 
 	// two decorators without a newline
 	@dec
@@ -228,5 +233,3 @@ class Foo {
 	public set setter(val) {}
 }
 ```
-
-

@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: fromImportInvalid.jsx
+snapshot_kind: text
 ---
 # Input
-```js
+```jsx
 import React, { Fragment } from "react";
 
 <>
@@ -17,13 +18,15 @@ import React, { Fragment } from "react";
 ```
 fromImportInvalid.jsx:4:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Avoid using unnecessary Fragment.
+  i This fragment is unnecessary.
   
     3 │ <>
   > 4 │     <Fragment></Fragment>
       │     ^^^^^^^^^^^^^^^^^^^^^
     5 │     <React.Fragment></React.Fragment>
     6 │ </>
+  
+  i A fragment is redundant if it contains only one child, or if it is the child of a html element, and is not a keyed fragment.
   
   i Unsafe fix: Remove the Fragment
   
@@ -35,7 +38,7 @@ fromImportInvalid.jsx:4:5 lint/complexity/noUselessFragments  FIXABLE  ━━━
 ```
 fromImportInvalid.jsx:5:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Avoid using unnecessary Fragment.
+  i This fragment is unnecessary.
   
     3 │ <>
     4 │     <Fragment></Fragment>
@@ -44,11 +47,11 @@ fromImportInvalid.jsx:5:5 lint/complexity/noUselessFragments  FIXABLE  ━━━
     6 │ </>
     7 │ 
   
+  i A fragment is redundant if it contains only one child, or if it is the child of a html element, and is not a keyed fragment.
+  
   i Unsafe fix: Remove the Fragment
   
     5 │ ····<React.Fragment></React.Fragment>
       │     ---------------------------------
 
 ```
-
-

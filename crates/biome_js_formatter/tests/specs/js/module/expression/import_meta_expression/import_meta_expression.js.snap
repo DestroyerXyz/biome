@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: js/module/expression/import_meta_expression/import_meta_expression.js
 ---
-
 # Input
 
 ```js
@@ -27,11 +26,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```js
@@ -47,7 +48,7 @@ import.meta.aReallyLongVariableName.andAnotherReallyLongVariableName
     3: 	obj.aReallyLongVariableName.andAnotherReallyLongVariableName.andAnotherReallyLongVariableName.andAnotherReallyLongVariable;
 ```
 
-## Output 2
+## Output 1
 
 -----
 Indent style: Space
@@ -57,11 +58,13 @@ Line width: 120
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```js
@@ -76,5 +79,3 @@ import.meta.aReallyLongVariableName.andAnotherReallyLongVariableName.andAnotherR
 ```
     3:     obj.aReallyLongVariableName.andAnotherReallyLongVariableName.andAnotherReallyLongVariableName.andAnotherReallyLongVariable;
 ```
-
-

@@ -1,4 +1,4 @@
-use crate::context::trailing_comma::FormatTrailingComma;
+use crate::context::trailing_commas::FormatTrailingCommas;
 use crate::js::bindings::parameters::has_only_simple_parameters;
 use crate::js::declarations::function_declaration::FormatFunctionOptions;
 use crate::js::expressions::arrow_function_expression::{
@@ -8,15 +8,14 @@ use crate::js::lists::array_element_list::can_concisely_print_array_list;
 use crate::prelude::*;
 use crate::utils::function_body::FunctionBodyCacheMode;
 use crate::utils::member_chain::SimpleArgument;
-use crate::utils::test_call::is_test_call_expression;
 use crate::utils::{is_long_curried_call, write_arguments_multi_line};
 use biome_formatter::{format_args, format_element, write, VecBuffer};
 use biome_js_syntax::{
     AnyJsCallArgument, AnyJsExpression, AnyJsFunctionBody, AnyJsLiteralExpression, AnyJsStatement,
     AnyTsReturnType, AnyTsType, JsBinaryExpressionFields, JsCallArgumentList, JsCallArguments,
     JsCallArgumentsFields, JsCallExpression, JsExpressionStatement, JsFunctionExpression,
-    JsImportCallExpression, JsLanguage, JsLogicalExpressionFields, TsAsExpressionFields,
-    TsSatisfiesExpressionFields,
+    JsImportCallExpression, JsLanguage, JsLogicalExpressionFields, JsSyntaxKind,
+    TsAsExpressionFields, TsSatisfiesExpressionFields,
 };
 use biome_rowan::{AstSeparatedElement, AstSeparatedList, SyntaxResult};
 
@@ -50,14 +49,27 @@ impl FormatNodeRule<JsCallArguments> for FormatJsCallArguments {
                 .map_or((Ok(false), Ok(false)), |call| {
                     (
                         is_commonjs_or_amd_call(node, call),
-                        is_test_call_expression(call),
+                        call.is_test_call_expression(),
                     )
                 });
+
+        let is_first_arg_string_literal_or_template = if args.len() != 2 {
+            true
+        } else {
+            matches!(
+            args.iter().next(),
+            Some(Ok(AnyJsCallArgument::AnyJsExpression(first)))
+                if matches!(
+                    first.syntax().kind(),
+                    JsSyntaxKind::JS_STRING_LITERAL_EXPRESSION | JsSyntaxKind::JS_TEMPLATE_EXPRESSION
+                )
+            )
+        };
 
         if is_commonjs_or_amd_call?
             || is_multiline_template_only_args(node)
             || is_react_hook_with_deps_array(node, f.comments())
-            || is_test_call?
+            || (is_test_call? && is_first_arg_string_literal_or_template)
         {
             return write!(
                 f,
@@ -712,7 +724,7 @@ struct FormatAllArgsBrokenOut<'a> {
     node: &'a JsCallArguments,
 }
 
-impl<'a> Format<JsFormatContext> for FormatAllArgsBrokenOut<'a> {
+impl Format<JsFormatContext> for FormatAllArgsBrokenOut<'_> {
     fn fmt(&self, f: &mut Formatter<JsFormatContext>) -> FormatResult<()> {
         let is_inside_import = self.node.parent::<JsImportCallExpression>().is_some();
 
@@ -733,7 +745,7 @@ impl<'a> Format<JsFormatContext> for FormatAllArgsBrokenOut<'a> {
                     }
 
                     if !is_inside_import {
-                        write!(f, [FormatTrailingComma::All])?;
+                        write!(f, [FormatTrailingCommas::All])?;
                     }
                     Ok(())
                 })),
@@ -766,7 +778,7 @@ fn arguments_grouped_layout(
     }
 }
 
-/// Checks if the the first argument requires grouping
+/// Checks if the first argument requires grouping
 fn should_group_first_argument(
     list: &JsCallArgumentList,
     comments: &JsComments,
@@ -1206,21 +1218,28 @@ fn is_multiline_template_only_args(arguments: &JsCallArguments) -> bool {
 /// useMemo(() => {}, [])
 /// ```
 fn is_react_hook_with_deps_array(arguments: &JsCallArguments, comments: &JsComments) -> bool {
+    if arguments.args().len() > 3 || arguments.args().len() < 2 {
+        return false;
+    };
+
     use AnyJsExpression::*;
     let mut args = arguments.args().iter();
+    if arguments.args().len() == 3 {
+        args.next();
+    }
 
     match (args.next(), args.next()) {
         (
             Some(Ok(AnyJsCallArgument::AnyJsExpression(JsArrowFunctionExpression(callback)))),
             Some(Ok(AnyJsCallArgument::AnyJsExpression(JsArrayExpression(deps)))),
-        ) if arguments.args().len() == 2 => {
+        ) => {
             if comments.has_comments(callback.syntax()) || comments.has_comments(deps.syntax()) {
                 return false;
             }
 
             if !callback
                 .parameters()
-                .map_or(false, |parameters| parameters.is_empty())
+                .is_ok_and(|parameters| parameters.is_empty())
             {
                 return false;
             }
@@ -1259,7 +1278,7 @@ fn is_function_composition_args(arguments: &JsCallArguments) -> bool {
                 has_seen_function_like = true;
             }
             AnyJsCallArgument::AnyJsExpression(JsCallExpression(call)) => {
-                if call.arguments().map_or(false, |call_arguments| {
+                if call.arguments().is_ok_and(|call_arguments| {
                     call_arguments.args().iter().flatten().any(|arg| {
                         matches!(
                             arg,

@@ -5,7 +5,7 @@ use quote::quote;
 
 mod paths {
     pub const DERIVED_CORE_PROPERTIES: &str = "target/DerivedCoreProperties.txt";
-    pub const TABLES: &str = "crates/biome_js_unicode_table/src/tables.rs";
+    pub const TABLES: &str = "crates/biome_unicode_table/src/tables.rs";
 }
 
 pub fn generate_tables() -> Result<()> {
@@ -90,7 +90,8 @@ impl Properties {
     fn fetch() -> Result<Self> {
         let raw = ureq::get("http://www.unicode.org/Public/UNIDATA/DerivedCoreProperties.txt")
             .call()?
-            .into_string()?;
+            .into_body()
+            .read_to_string()?;
 
         println!("Loaded properties from `unicode.org`");
 

@@ -14,12 +14,8 @@ declare_node_union! {
 impl Format<JsFormatContext> for AnyJsMemberName {
     fn fmt(&self, f: &mut Formatter<JsFormatContext>) -> FormatResult<()> {
         match self {
-            AnyJsMemberName::AnyJsObjectMemberName(node) => {
-                write!(f, [node.format()])
-            }
-            AnyJsMemberName::AnyJsClassMemberName(node) => {
-                write!(f, [node.format()])
-            }
+            Self::AnyJsObjectMemberName(name) => name.format().fmt(f),
+            Self::AnyJsClassMemberName(name) => name.format().fmt(f),
         }
     }
 }
@@ -59,7 +55,7 @@ pub(crate) fn write_member_name(
         }
         name => {
             write!(f, [&name])?;
-            Ok(name.text().width())
+            Ok(name.to_trimmed_string().width())
         }
     }
 }

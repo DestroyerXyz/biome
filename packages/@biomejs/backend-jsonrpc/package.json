@@ -1,24 +1,24 @@
 {
   "name": "@biomejs/backend-jsonrpc",
-  "version": "0.0.0",
+  "version": "1.9.4",
   "main": "dist/index.js",
   "scripts": {
     "test": "vitest",
-    "test:ci": "pnpm build && vitest --run",
+    "test:ci": "pnpm build && vitest run",
     "tsc": "tsc --noEmit",
     "build": "tsc"
   },
-	"files": [
-		"dist/",
-		"README.md",
-		"LICENSE-APACHE",
-		"LICENSE-MIT",
-		"ROME-LICENSE-MIT"
-	],
-	"homepage": "https://biomejs.dev",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "ROME-LICENSE-MIT"
+  ],
+  "homepage": "https://biomejs.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/biomejs/biome.git",
+    "url": "git+https://github.com/biomejs/biome.git",
     "directory": "npm/backend-jsonrpc"
   },
   "author": "Biome Developers and Contributors",
@@ -32,13 +32,26 @@
     "toolchain"
   ],
   "engines": {
-    "node": ">=14.*"
+    "node": ">=14.21.3"
   },
   "license": "MIT OR Apache-2.0",
   "devDependencies": {
-    "@types/node": "^18.7.2",
-    "typescript": "^4.8.2",
-    "vite": "^3.0.8",
-    "vitest": "^0.22.0"
+    "@types/node": "20.17.19",
+    "typescript": "5.7.3",
+    "vite": "5.4.14",
+    "vitest": "1.6.1"
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "optionalDependencies": {
+    "@biomejs/cli-win32-x64": "1.9.4",
+    "@biomejs/cli-win32-arm64": "1.9.4",
+    "@biomejs/cli-darwin-x64": "1.9.4",
+    "@biomejs/cli-darwin-arm64": "1.9.4",
+    "@biomejs/cli-linux-x64": "1.9.4",
+    "@biomejs/cli-linux-arm64": "1.9.4",
+    "@biomejs/cli-linux-x64-musl": "1.9.4",
+    "@biomejs/cli-linux-arm64-musl": "1.9.4"
   }
 }

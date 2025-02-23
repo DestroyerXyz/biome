@@ -1,12 +1,13 @@
 ---
 source: crates/biome_cli/tests/snap_test.rs
 expression: content
+snapshot_kind: text
 ---
 ## `biome.json`
 
 ```json
 {
-  "organizeImports": {
+  "assist": {
     "enabled": false
   },
   "linter": {
@@ -66,15 +67,6 @@ fix.js:3:1 lint/complexity/useFlatMap  FIXABLE  ━━━━━━━━━━�
 ```
 
 ```block
-fix.js lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
+Checked 1 file in <TIME>. No fixes applied.
+Found 1 error.
 ```
-
-```block
-Checked 1 file(s) in <TIME>
-```
-
-

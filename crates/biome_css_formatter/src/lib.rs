@@ -14,12 +14,11 @@ pub(crate) use crate::context::CssFormatContext;
 use crate::context::CssFormatOptions;
 use crate::cst::FormatCssSyntaxNode;
 use biome_css_syntax::{
-    AnyCssDeclarationListBlock, AnyCssRule, AnyCssRuleListBlock, AnyCssValue, CssLanguage,
-    CssSyntaxKind, CssSyntaxNode, CssSyntaxToken,
+    AnyCssDeclarationBlock, AnyCssRule, AnyCssRuleBlock, AnyCssValue, CssLanguage, CssSyntaxKind,
+    CssSyntaxNode, CssSyntaxToken,
 };
 use biome_formatter::comments::Comments;
 use biome_formatter::prelude::*;
-use biome_formatter::token::string::ToAsciiLowercaseCow;
 use biome_formatter::trivia::format_skipped_token_trivia;
 use biome_formatter::{
     write, CstFormatContext, FormatContext, FormatLanguage, FormatOwnedWithRule, FormatRefWithRule,
@@ -27,6 +26,7 @@ use biome_formatter::{
 };
 use biome_formatter::{Formatted, Printed};
 use biome_rowan::{AstNode, SyntaxNode, TextRange};
+use biome_string_case::StrLikeExtension;
 
 /// Used to get an object that knows how to format this object.
 pub(crate) trait AsFormat<Context> {
@@ -43,7 +43,10 @@ impl<T, C> AsFormat<C> for &T
 where
     T: AsFormat<C>,
 {
-    type Format<'a> = T::Format<'a> where Self: 'a;
+    type Format<'a>
+        = T::Format<'a>
+    where
+        Self: 'a;
 
     fn format(&self) -> Self::Format<'_> {
         AsFormat::format(&**self)
@@ -57,7 +60,10 @@ impl<T, C> AsFormat<C> for biome_rowan::SyntaxResult<T>
 where
     T: AsFormat<C>,
 {
-    type Format<'a> = biome_rowan::SyntaxResult<T::Format<'a>> where Self: 'a;
+    type Format<'a>
+        = biome_rowan::SyntaxResult<T::Format<'a>>
+    where
+        Self: 'a;
 
     fn format(&self) -> Self::Format<'_> {
         match self {
@@ -74,7 +80,10 @@ impl<T, C> AsFormat<C> for Option<T>
 where
     T: AsFormat<C>,
 {
-    type Format<'a> = Option<T::Format<'a>> where Self: 'a;
+    type Format<'a>
+        = Option<T::Format<'a>>
+    where
+        Self: 'a;
 
     fn format(&self) -> Self::Format<'_> {
         self.as_ref().map(|value| value.format())
@@ -253,8 +262,8 @@ impl FormatLanguage for CssFormatLanguage {
     // - any individual value
     // - a complete value definition for a declaration
     fn is_range_formatting_node(&self, node: &SyntaxNode<Self::SyntaxLanguage>) -> bool {
-        AnyCssDeclarationListBlock::can_cast(node.kind())
-            || AnyCssRuleListBlock::can_cast(node.kind())
+        AnyCssDeclarationBlock::can_cast(node.kind())
+            || AnyCssRuleBlock::can_cast(node.kind())
             || AnyCssValue::can_cast(node.kind())
             || AnyCssRule::can_cast(node.kind())
             || matches!(
@@ -367,16 +376,6 @@ pub fn format_node(
 /// Returns the [Printed] code.
 pub fn format_sub_tree(options: CssFormatOptions, root: &CssSyntaxNode) -> FormatResult<Printed> {
     biome_formatter::format_sub_tree(root, CssFormatLanguage::new(options))
-}
-
-/// Whether the CSS formatter is allowed to be used at all.
-///
-/// Until the formatter is sufficiently ready, we're disabling its use in any
-/// external projects, but we still want to be able to run test suites in the
-/// meantime. This flag controls that visibility, and only returns true for
-/// non-release builds.
-pub const fn can_format_css_yet() -> bool {
-    cfg!(debug_assertions)
 }
 
 #[cfg(test)]

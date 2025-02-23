@@ -1,33 +1,25 @@
-use std::io;
-
-use biome_console::{fmt, markup, MarkupBuf};
-
 use crate::display::frame::SourceFile;
 use crate::{diagnostic::internal::AsDiagnostic, Diagnostic, Resource, Severity};
+use biome_console::{fmt, markup, MarkupBuf};
+use biome_text_size::{TextRange, TextSize};
+use std::io;
 
 /// Helper struct for printing a diagnostic as markup into any formatter
 /// implementing [biome_console::fmt::Write].
-pub struct PrintGitHubDiagnostic<'fmt, D: ?Sized> {
-    diag: &'fmt D,
-}
+pub struct PrintGitHubDiagnostic<'fmt, D: ?Sized>(pub &'fmt D);
 
-impl<'fmt, D: AsDiagnostic + ?Sized> PrintGitHubDiagnostic<'fmt, D> {
-    pub fn simple(diag: &'fmt D) -> Self {
-        Self { diag }
-    }
-}
-
-impl<'fmt, D: AsDiagnostic + ?Sized> fmt::Display for PrintGitHubDiagnostic<'fmt, D> {
+impl<D: AsDiagnostic + ?Sized> fmt::Display for PrintGitHubDiagnostic<'_, D> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> io::Result<()> {
-        let diagnostic = self.diag.as_diagnostic();
+        let diagnostic = self.0.as_diagnostic();
         let location = diagnostic.location();
 
         // Docs:
         // https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+        let span = location
+            .span
+            // We fall back to 1:1. This usually covers diagnostics that belong to the formatter or organize imports
+            .unwrap_or(TextRange::new(TextSize::from(1), TextSize::from(1)));
 
-        let Some(span) = location.span else {
-            return Ok(());
-        };
         let Some(source_code) = location.source_code else {
             return Ok(());
         };
@@ -47,23 +39,31 @@ impl<'fmt, D: AsDiagnostic + ?Sized> fmt::Display for PrintGitHubDiagnostic<'fmt
             Severity::Hint | Severity::Information => "notice",
         };
 
-        let title = {
+        let message = {
             let mut message = MarkupBuf::default();
             let mut fmt = fmt::Formatter::new(&mut message);
             fmt.write_markup(markup!({ PrintDiagnosticMessage(diagnostic) }))?;
             markup_to_string(&message)
         };
 
+        let title = {
+            diagnostic
+                .category()
+                .map(|category| category.name())
+                .unwrap_or_default()
+        };
+
         fmt.write_str(
             format! {
-                "::{} file={},line={},endLine={},col={},endColumn={}::{}",
+                "::{} title={},file={},line={},endLine={},col={},endColumn={}::{}",
                 command, // constant, doesn't need escaping
+                title, // the diagnostic category
                 escape_property(file_name_unescaped),
                 start.line_number, // integer, doesn't need escaping
                 end.line_number, // integer, doesn't need escaping
                 start.column_number, // integer, doesn't need escaping
                 end.column_number, // integer, doesn't need escaping
-                title.map(escape_data).unwrap_or(String::new()),
+                message.map_or_else(String::new, escape_data),
             }
             .as_str(),
         )?;
@@ -74,7 +74,7 @@ impl<'fmt, D: AsDiagnostic + ?Sized> fmt::Display for PrintGitHubDiagnostic<'fmt
 
 struct PrintDiagnosticMessage<'fmt, D: ?Sized>(&'fmt D);
 
-impl<'fmt, D: Diagnostic + ?Sized> fmt::Display for PrintDiagnosticMessage<'fmt, D> {
+impl<D: Diagnostic + ?Sized> fmt::Display for PrintDiagnosticMessage<'_, D> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> io::Result<()> {
         let Self(diagnostic) = *self;
         diagnostic.message(fmt)?;

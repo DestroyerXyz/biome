@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: withJsxElementInvalid.jsx
+snapshot_kind: text
 ---
 # Input
-```js
+```jsx
 <><Component /></>
 ```
 
@@ -11,10 +12,12 @@ expression: withJsxElementInvalid.jsx
 ```
 withJsxElementInvalid.jsx:1:1 lint/complexity/noUselessFragments  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Avoid using unnecessary Fragment.
+  i This fragment is unnecessary.
   
   > 1 │ <><Component /></>
       │ ^^^^^^^^^^^^^^^^^^
+  
+  i A fragment is redundant if it contains only one child, or if it is the child of a html element, and is not a keyed fragment.
   
   i Unsafe fix: Remove the Fragment
   
@@ -22,5 +25,3 @@ withJsxElementInvalid.jsx:1:1 lint/complexity/noUselessFragments  FIXABLE  ━�
       │  --          ---  
 
 ```
-
-

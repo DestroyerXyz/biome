@@ -3,7 +3,7 @@ use crate::utils::sort_modifiers_by_precedence;
 use crate::{AsFormat, IntoFormat};
 use biome_formatter::{format_args, write};
 use biome_js_syntax::JsSyntaxKind::JS_DECORATOR;
-use biome_js_syntax::{JsLanguage, Modifiers};
+use biome_js_syntax::{JsLanguage, Modifier};
 use biome_rowan::{AstNode, AstNodeList, NodeOrToken};
 
 pub(crate) struct FormatModifiers<List> {
@@ -20,7 +20,7 @@ impl<List, Node> Format<JsFormatContext> for FormatModifiers<List>
 where
     Node: AstNode<Language = JsLanguage> + AsFormat<JsFormatContext> + IntoFormat<JsFormatContext>,
     List: AstNodeList<Language = JsLanguage, Node = Node>,
-    Modifiers: for<'a> From<&'a Node>,
+    Modifier: for<'a> From<&'a Node>,
 {
     fn fmt(&self, f: &mut Formatter<JsFormatContext>) -> FormatResult<()> {
         let modifiers = sort_modifiers_by_precedence(&self.list);
@@ -115,7 +115,7 @@ where
     list.syntax_list()
         .node()
         .next_sibling_or_token()
-        .map_or(false, |node| match node {
+        .is_some_and(|node| match node {
             NodeOrToken::Node(node) => node.has_leading_newline(),
             NodeOrToken::Token(token) => token.has_leading_newline(),
         })

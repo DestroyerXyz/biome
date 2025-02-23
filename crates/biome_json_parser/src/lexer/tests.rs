@@ -1,5 +1,5 @@
 #![cfg(test)]
-#![allow(unused_mut, unused_variables, unused_assignments)]
+#![expect(unused_mut)]
 
 use super::{Lexer, TextSize};
 use biome_json_syntax::JsonSyntaxKind::{self, EOF};
@@ -76,12 +76,7 @@ fn losslessness(string: String) -> bool {
     });
     let token_ranges = receiver
         .recv_timeout(Duration::from_secs(2))
-        .unwrap_or_else(|_| {
-            panic!(
-                "Lexer is infinitely recursing with this code: ->{}<-",
-                string
-            )
-        });
+        .unwrap_or_else(|_| panic!("Lexer is infinitely recursing with this code: ->{string}<-"));
 
     let mut new_str = String::with_capacity(string.len());
     let mut idx = TextSize::from(0);
@@ -243,7 +238,7 @@ fn single_quote_string() {
 fn unterminated_string() {
     assert_lex! {
         r#""A string without the closing quote"#,
-        JSON_STRING_LITERAL:35,
+        ERROR_TOKEN:35,
         EOF:0
     }
 }

@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -54,7 +55,7 @@ if (test) {
 ```
 invalid.js:1:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
   > 1 │ if (x) x;
       │ ^^^^^^^^^
@@ -71,7 +72,7 @@ invalid.js:1:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━�
 ```
 invalid.js:4:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     2 │ if (x) {
     3 │   x;
@@ -90,7 +91,7 @@ invalid.js:4:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━�
 ```
 invalid.js:7:8 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     5 │ if (x) {
     6 │   x;
@@ -109,7 +110,7 @@ invalid.js:7:8 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━�
 ```
 invalid.js:8:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
      6 │   x;
      7 │ } else if (y) y;
@@ -133,7 +134,7 @@ invalid.js:8:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━�
 ```
 invalid.js:9:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
      7 │ } else if (y) y;
      8 │ for (;;);
@@ -157,7 +158,7 @@ invalid.js:9:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━�
 ```
 invalid.js:10:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
      8 │ for (;;);
      9 │ for (p in obj);
@@ -181,7 +182,7 @@ invalid.js:10:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:11:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
      9 │ for (p in obj);
     10 │ for (x of xs);
@@ -207,7 +208,7 @@ invalid.js:11:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:13:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     11 │ do;
     12 │ while (x);
@@ -231,7 +232,7 @@ invalid.js:13:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:15:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     13 │ while (x);
     14 │ 
@@ -255,7 +256,7 @@ invalid.js:15:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:17:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     15 │ if (x);
     16 │ 
@@ -282,7 +283,7 @@ invalid.js:17:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:18:6 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     17 │ if (test);
   > 18 │ else if (test);
@@ -307,7 +308,7 @@ invalid.js:18:6 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:19:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     17 │ if (test);
     18 │ else if (test);
@@ -331,7 +332,7 @@ invalid.js:19:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:21:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     19 │ else;
     20 │ 
@@ -347,8 +348,9 @@ invalid.js:21:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
     19 19 │   else;
     20 20 │   
     21    │ - while·(test)
+    22    │ - ··bar
        21 │ + while·(test)·{
-    22 22 │     bar
+       22 │ + ··bar
        23 │ + }
     23 24 │   
     24 25 │     while (test)
@@ -359,7 +361,7 @@ invalid.js:21:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:24:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     22 │   bar
     23 │ 
@@ -375,8 +377,9 @@ invalid.js:24:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
     22 22 │     bar
     23 23 │   
     24    │ - ··while·(test)
+    25    │ - ····bar
        24 │ + ··while·(test)·{
-    25 25 │       bar
+       25 │ + ····bar
        26 │ + ··}
     26 27 │   
     27 28 │   if (test)
@@ -387,7 +390,7 @@ invalid.js:24:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:27:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     25 │     bar
     26 │ 
@@ -407,8 +410,9 @@ invalid.js:27:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
     25 25 │       bar
     26 26 │   
     27    │ - if·(test)
+    28    │ - ··bar
        27 │ + if·(test)·{
-    28 28 │     bar
+       28 │ + ··bar
        29 │ + }
     29 30 │   else if(test)
     30 31 │     bar
@@ -419,7 +423,7 @@ invalid.js:27:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:29:6 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     27 │ if (test)
     28 │   bar
@@ -437,8 +441,9 @@ invalid.js:29:6 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
     27 27 │   if (test)
     28 28 │     bar
     29    │ - else·if(test)
+    30    │ - ··bar
        29 │ + else·if(test)·{
-    30 30 │     bar
+       30 │ + ··bar
        31 │ + }
     31 32 │   else
     32 33 │     bar
@@ -449,7 +454,7 @@ invalid.js:29:6 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:31:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     29 │ else if(test)
     30 │   bar
@@ -465,8 +470,9 @@ invalid.js:31:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
     29 29 │   else if(test)
     30 30 │     bar
     31    │ - else
+    32    │ - ··bar
        31 │ + else·{
-    32 32 │     bar
+       32 │ + ··bar
        33 │ + }
     33 34 │   
     34 35 │     if (test)
@@ -477,7 +483,7 @@ invalid.js:31:1 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:34:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     32 │   bar
     33 │ 
@@ -497,13 +503,12 @@ invalid.js:34:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
     32 32 │     bar
     33 33 │   
     34    │ - ··if·(test)
+    35    │ - ····bar
        34 │ + ··if·(test)·{
-    35 35 │       bar
-    36    │ - ··else·if(test)
+       35 │ + ····bar
        36 │ + ··}
-       37 │ + ··else·if(test)
+    36 37 │     else if(test)
     37 38 │       bar
-    38 39 │     else
   
 
 ```
@@ -511,7 +516,7 @@ invalid.js:34:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:36:8 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     34 │   if (test)
     35 │     bar
@@ -529,13 +534,12 @@ invalid.js:36:8 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
     34 34 │     if (test)
     35 35 │       bar
     36    │ - ··else·if(test)
+    37    │ - ····bar
        36 │ + ··else·if(test)·{
-    37 37 │       bar
-    38    │ - ··else
+       37 │ + ····bar
        38 │ + ··}
-       39 │ + ··else
+    38 39 │     else
     39 40 │       bar
-    40 41 │   
   
 
 ```
@@ -543,7 +547,7 @@ invalid.js:36:8 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:38:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     36 │   else if(test)
     37 │     bar
@@ -559,8 +563,9 @@ invalid.js:38:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
     36 36 │     else if(test)
     37 37 │       bar
     38    │ - ··else
+    39    │ - ····bar
        38 │ + ··else·{
-    39 39 │       bar
+       39 │ + ····bar
        40 │ + ··}
     40 41 │   
     41 42 │   if (test) {
@@ -571,7 +576,7 @@ invalid.js:38:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
 ```
 invalid.js:43:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Block statements are preferred in this position.
+  i Block statements are preferred in this position.
   
     41 │ if (test) {
     42 │   correct;
@@ -590,5 +595,3 @@ invalid.js:43:3 lint/style/useBlockStatements  FIXABLE  ━━━━━━━━
   
 
 ```
-
-

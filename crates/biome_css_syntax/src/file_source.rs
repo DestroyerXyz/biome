@@ -1,11 +1,13 @@
-use crate::CssLanguage;
-use biome_rowan::{FileSource, FileSourceError};
-use std::path::Path;
+use biome_rowan::FileSourceError;
+use biome_string_case::StrLikeExtension;
+use camino::Utf8Path;
 
-#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(
+    Debug, Clone, Default, Copy, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub struct CssFileSource {
-    // Unused until we potentially support postcss/less/sass
-    #[allow(unused)]
     variant: CssVariant,
 }
 
@@ -13,7 +15,11 @@ pub struct CssFileSource {
 ///
 /// Currently, Biome only supports plain CSS, and aims to be compatible with
 /// the latest Recommendation level standards.
-#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(
+    Debug, Clone, Default, Copy, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 enum CssVariant {
     #[default]
     Standard,
@@ -25,47 +31,49 @@ impl CssFileSource {
             variant: CssVariant::Standard,
         }
     }
-}
 
-impl<'a> FileSource<'a, CssLanguage> for CssFileSource {}
+    /// Try to return the CSS file source corresponding to this file name from well-known files
+    pub fn try_from_well_known(_: &Utf8Path) -> Result<Self, FileSourceError> {
+        // TODO: to be implemented
+        Err(FileSourceError::UnknownFileName)
+    }
 
-impl TryFrom<&Path> for CssFileSource {
-    type Error = FileSourceError;
+    /// Try to return the CSS file source corresponding to this file extension
+    pub fn try_from_extension(extension: &str) -> Result<Self, FileSourceError> {
+        // We assume the file extension is normalized to lowercase
+        match extension {
+            "css" => Ok(Self::css()),
+            _ => Err(FileSourceError::UnknownExtension),
+        }
+    }
 
-    fn try_from(path: &Path) -> Result<Self, Self::Error> {
-        let file_name = path
-            .file_name()
-            .ok_or_else(|| FileSourceError::MissingFileName(path.into()))?
-            .to_str()
-            .ok_or_else(|| FileSourceError::MissingFileName(path.into()))?;
-
-        let extension = path
-            .extension()
-            .ok_or_else(|| FileSourceError::MissingFileExtension(path.into()))?
-            .to_str()
-            .ok_or_else(|| FileSourceError::MissingFileExtension(path.into()))?;
-
-        compute_source_type_from_path_or_extension(file_name, extension)
+    /// Try to return the CSS file source corresponding to this language ID
+    ///
+    /// See the [LSP spec] and [VS Code spec] for a list of language identifiers
+    ///
+    /// [LSP spec]: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentItem
+    /// [VS Code spec]: https://code.visualstudio.com/docs/languages/identifiers
+    pub fn try_from_language_id(language_id: &str) -> Result<Self, FileSourceError> {
+        match language_id {
+            "css" => Ok(Self::css()),
+            _ => Err(FileSourceError::UnknownLanguageId),
+        }
     }
 }
 
-/// It deduce the [CssFileSource] from the file name and its extension
-fn compute_source_type_from_path_or_extension(
-    file_name: &str,
-    extension: &str,
-) -> Result<CssFileSource, FileSourceError> {
-    let source_type = if file_name.ends_with(".css") {
-        CssFileSource::css()
-    } else {
-        match extension {
-            "css" => CssFileSource::css(),
-            _ => {
-                return Err(FileSourceError::UnknownExtension(
-                    file_name.into(),
-                    extension.into(),
-                ))
-            }
+impl TryFrom<&Utf8Path> for CssFileSource {
+    type Error = FileSourceError;
+
+    fn try_from(path: &Utf8Path) -> Result<Self, Self::Error> {
+        if let Ok(file_source) = Self::try_from_well_known(path) {
+            return Ok(file_source);
         }
-    };
-    Ok(source_type)
+
+        let Some(extension) = path.extension() else {
+            return Err(FileSourceError::MissingFileExtension);
+        };
+        // We assume the file extensions are case-insensitive
+        // and we use the lowercase form of them for pattern matching
+        Self::try_from_extension(&extension.to_ascii_lowercase_cow())
+    }
 }

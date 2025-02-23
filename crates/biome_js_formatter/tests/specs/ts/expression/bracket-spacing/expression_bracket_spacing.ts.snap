@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: ts/expression/bracket-spacing/expression_bracket_spacing.ts
 ---
-
 # Input
 
 ```ts
@@ -91,11 +90,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```ts
@@ -197,7 +198,7 @@ type GenericTypeExpression<A extends { a: string }> =
 	}>;
 ```
 
-## Output 2
+## Output 1
 
 -----
 Indent style: Tab
@@ -207,11 +208,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: false
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```ts
@@ -312,5 +315,3 @@ type GenericTypeExpression<A extends {a: string}> =
 		zzz: boolean;
 	}>;
 ```
-
-

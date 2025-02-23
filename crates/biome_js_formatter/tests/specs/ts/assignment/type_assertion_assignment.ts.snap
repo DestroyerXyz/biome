@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: ts/assignment/type_assertion_assignment.ts
 ---
-
 # Input
 
 ```ts
@@ -38,11 +37,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```ts
@@ -57,5 +58,3 @@ for (<boolean>x of []) {
 }
 ({ x: <string>x } = { x: "test" });
 ```
-
-

@@ -8,8 +8,9 @@ use crate::syntax::stmt::{
     VariableDeclarationParent,
 };
 use crate::syntax::typescript::{
-    is_nth_at_any_ts_namespace_declaration, parse_any_ts_namespace_declaration_clause,
-    parse_ts_enum_declaration, parse_ts_interface_declaration, parse_ts_type_alias_declaration,
+    is_nth_at_any_ts_namespace_declaration, is_nth_at_ts_interface_declaration,
+    parse_any_ts_namespace_declaration_clause, parse_ts_enum_declaration,
+    parse_ts_interface_declaration, parse_ts_type_alias_declaration,
 };
 use crate::{Absent, JsParser, ParsedSyntax};
 use biome_js_syntax::JsSyntaxKind::{JS_BOGUS_STATEMENT, JS_VARIABLE_DECLARATION_CLAUSE};
@@ -47,6 +48,10 @@ pub(crate) fn is_nth_at_declaration_clause(p: &mut JsParser, n: usize) -> bool {
         return true;
     }
 
+    if is_nth_at_any_ts_namespace_declaration(p, n) {
+        return true;
+    }
+
     if p.has_nth_preceding_line_break(n + 1) {
         return false;
     }
@@ -55,15 +60,11 @@ pub(crate) fn is_nth_at_declaration_clause(p: &mut JsParser, n: usize) -> bool {
         return true;
     }
 
-    if p.nth_at(n, T![interface]) {
+    if is_nth_at_ts_interface_declaration(p, n) {
         return true;
     }
 
     if p.nth_at(n, T![async]) && p.nth_at(n + 1, T![function]) {
-        return true;
-    }
-
-    if is_nth_at_any_ts_namespace_declaration(p, n) {
         return true;
     }
 

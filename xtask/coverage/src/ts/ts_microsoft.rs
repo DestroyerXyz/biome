@@ -5,10 +5,16 @@ use crate::runner::{
 use biome_js_parser::JsParserOptions;
 use biome_js_syntax::{JsFileSource, ModuleKind};
 use biome_rowan::{AstNode, SyntaxKind};
+use biome_string_case::StrOnlyExtension;
+use camino::Utf8Path;
 use regex::Regex;
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::Write;
+use std::io;
 use std::path::Path;
+use std::process::Command;
+use xtask::project_root;
 
 const CASES_PATH: &str = "xtask/coverage/Typescript/tests/cases";
 const REFERENCE_PATH: &str = "xtask/coverage/Typescript/tests/baselines/reference";
@@ -95,6 +101,25 @@ impl TestSuite for MicrosoftTypescriptTestSuite {
         let code = check_file_encoding(path)?;
         Some(Box::new(MicrosoftTypeScriptTestCase::new(path, code)))
     }
+
+    fn checkout(&self) -> io::Result<()> {
+        let base_path = project_root().join("xtask/coverage/Typescript");
+        let mut command = Command::new("git");
+        command
+            .arg("clone")
+            .arg("https://github.com/microsoft/Typescript.git")
+            .arg("--depth")
+            .arg("1")
+            .arg(base_path.display().to_string());
+        command.output()?;
+        let mut command = Command::new("git");
+        command
+            .arg("reset")
+            .arg("--hard")
+            .arg("61a96b1641abe24c4adc3633eb936df89eb991f2");
+        command.output()?;
+        Ok(())
+    }
 }
 
 struct TestCaseMetadata {
@@ -118,12 +143,13 @@ fn extract_metadata(code: &str, path: &str) -> TestCaseMetadata {
 
     for line in code.lines() {
         if let Some(option) = options_regex.captures(line) {
-            let option_name = option.name("name").unwrap().as_str().to_lowercase();
+            let option_name = option.name("name").unwrap().as_str().to_lowercase_cow();
             let option_value = option.name("value").unwrap().as_str().trim();
 
             if option_name == "alwaysstrict" {
-                write!(current_file_content, "\"use strict\";{}", line_ending).unwrap();
-            } else if matches!(option_name.as_str(), "module" | "target") && files.is_empty() {
+                write!(current_file_content, "\"use strict\";{line_ending}").unwrap();
+            } else if matches!(option_name, Cow::Borrowed("module" | "target")) && files.is_empty()
+            {
                 run_options.extend(
                     option_value
                         .split(',')
@@ -150,7 +176,7 @@ fn extract_metadata(code: &str, path: &str) -> TestCaseMetadata {
                 // skip leading whitespace
                 continue;
             }
-            write!(current_file_content, "{}{}", line, line_ending).unwrap();
+            write!(current_file_content, "{line}{line_ending}").unwrap();
         }
     }
 
@@ -170,7 +196,7 @@ fn extract_metadata(code: &str, path: &str) -> TestCaseMetadata {
 }
 
 fn add_file_if_supported(files: &mut TestCaseFiles, name: String, content: String) {
-    let path = Path::new(&name);
+    let path = Utf8Path::new(&name);
     // Skip files that aren't JS/TS files (JSON, CSS...)
     if let Ok(mut source_type) = JsFileSource::try_from(path) {
         let is_module_regex = Regex::new("(import|export)\\s").unwrap();

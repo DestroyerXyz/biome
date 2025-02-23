@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: ts/no-semi/non-null.ts
 ---
-
 # Input
 
 ```ts
@@ -27,11 +26,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```ts
@@ -40,7 +41,7 @@ const el = ReactDOM.findDOMNode(ref);
 (el as HTMLElement)!.style.cursor = "pointer";
 ```
 
-## Output 2
+## Output 1
 
 -----
 Indent style: Tab
@@ -50,11 +51,13 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: As needed
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```ts
@@ -62,5 +65,3 @@ Bracket same line: false
 const el = ReactDOM.findDOMNode(ref)
 ;(el as HTMLElement)!.style.cursor = "pointer"
 ```
-
-

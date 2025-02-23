@@ -2,23 +2,18 @@ use crate::run_cli;
 use crate::snap_test::{assert_cli_snapshot, CliSnapshot, SnapshotPayload};
 use biome_cli::CliDiagnostic;
 use biome_console::{BufferConsole, Console};
-use biome_fs::{FileSystem, MemoryFileSystem};
-use biome_service::DynRef;
+use biome_fs::MemoryFileSystem;
 use bpaf::Args;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::{env, fs};
 
 #[test]
 fn rage_help() {
-    let mut fs = MemoryFileSystem::default();
+    let fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
-    let result = run_cli(
-        DynRef::Borrowed(&mut fs),
-        &mut console,
-        Args::from([("rage"), "--help"].as_slice()),
-    );
+    let (fs, result) = run_cli(fs, &mut console, Args::from(["rage", "--help"].as_slice()));
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
@@ -33,14 +28,10 @@ fn rage_help() {
 
 #[test]
 fn ok() {
-    let mut fs = MemoryFileSystem::default();
+    let fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
-    let result = run_rage(
-        DynRef::Borrowed(&mut fs),
-        &mut console,
-        Args::from([("rage")].as_slice()),
-    );
+    let (fs, result) = run_rage(fs, &mut console, Args::from(["rage"].as_slice()));
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
@@ -58,7 +49,7 @@ fn with_configuration() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
     fs.insert(
-        Path::new("biome.json").to_path_buf(),
+        Utf8Path::new("biome.json").to_path_buf(),
         r#"{
   "formatter": {
     "enabled": false
@@ -66,11 +57,7 @@ fn with_configuration() {
 }"#,
     );
 
-    let result = run_rage(
-        DynRef::Borrowed(&mut fs),
-        &mut console,
-        Args::from([("rage")].as_slice()),
-    );
+    let (fs, result) = run_rage(fs, &mut console, Args::from(["rage"].as_slice()));
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
@@ -84,11 +71,56 @@ fn with_configuration() {
 }
 
 #[test]
+fn with_no_configuration() {
+    let fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let (fs, result) = run_rage(fs, &mut console, Args::from(["rage"].as_slice()));
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_rage_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "with_no_configuration",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn with_jsonc_configuration() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    fs.insert(
+        Utf8Path::new("biome.jsonc").to_path_buf(),
+        r#"{
+  "formatter": {
+    // disable formatter
+    "enabled": false,
+  }
+}"#,
+    );
+
+    let (fs, result) = run_rage(fs, &mut console, Args::from(["rage"].as_slice()));
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_rage_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "with_jsonc_configuration",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn with_malformed_configuration() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
     fs.insert(
-        Path::new("biome.json").to_path_buf(),
+        Utf8Path::new("biome.json").to_path_buf(),
         r#"{
   "formatter": {
     "enabled":
@@ -96,11 +128,7 @@ fn with_malformed_configuration() {
 }"#,
     );
 
-    let result = run_rage(
-        DynRef::Borrowed(&mut fs),
-        &mut console,
-        Args::from([("rage")].as_slice()),
-    );
+    let (fs, result) = run_rage(fs, &mut console, Args::from(["rage"].as_slice()));
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
@@ -115,10 +143,10 @@ fn with_malformed_configuration() {
 
 #[test]
 fn with_server_logs() {
-    let mut fs = MemoryFileSystem::default();
+    let fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
 
-    let result = {
+    let (fs, result) = {
         let log_dir = TestLogDir::new("biome-test-logs");
         fs::create_dir_all(&log_dir.path).expect("Failed to create test log directory");
 
@@ -164,9 +192,9 @@ Not most recent log file
         .expect("Failed to write configuration file");
 
         run_cli(
-            DynRef::Borrowed(&mut fs),
+            fs,
             &mut console,
-            Args::from([("rage"), "--daemon-logs"].as_slice()),
+            Args::from(["rage", "--daemon-logs"].as_slice()),
         )
     };
 
@@ -181,12 +209,127 @@ Not most recent log file
     ));
 }
 
+#[test]
+fn with_formatter_configuration() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    fs.insert(
+        Utf8Path::new("biome.json").to_path_buf(),
+        r#"{
+  "formatter": {
+    "attributePosition": "multiline",
+    "enabled": true,
+    "formatWithErrors": true,
+    "includes": [
+      "**/*.html",
+      "**/*.css",
+      "**/*.js",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.jsx",
+      "**/*.json",
+      "**/*.md",
+      "!configuration-schema.json"
+    ],
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 120
+  },
+  "javascript": {
+    "formatter": {
+        "enabled": true,
+        "arrowParentheses": "always",
+        "jsxQuoteStyle": "single",
+        "indentWidth": 2,
+        "indentStyle":"tab",
+        "lineEnding": "lf",
+        "lineWidth": 100
+    }
+  },
+  "json": {
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 2,
+        "lineEnding": "lf",
+        "lineWidth": 100
+    }
+  }
+}"#,
+    );
+
+    let (fs, result) = run_rage(
+        fs,
+        &mut console,
+        Args::from(["rage", "--formatter"].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_rage_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "with_formatter_configuration",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn with_linter_configuration() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+    fs.insert(
+        Utf8Path::new("biome.json").to_path_buf(),
+        r#"{
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "a11y": {
+        "noAccessKey": "off",
+        "noAutofocus": "off"
+      },
+      "complexity": {
+        "recommended": true
+      },
+      "suspicious": {
+        "noCommentText": {
+          "level": "warn"
+        }
+      },
+      "style": {
+        "noNonNullAssertion": "off"
+      }
+    }
+  }
+}"#,
+    );
+
+    let (fs, result) = run_rage(
+        fs,
+        &mut console,
+        Args::from(["rage", "--linter"].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_rage_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "with_linter_configuration",
+        fs,
+        console,
+        result,
+    ));
+}
+
 /// Runs the `rage` command mocking out the log directory.
-fn run_rage<'app>(
-    fs: DynRef<'app, dyn FileSystem>,
-    console: &'app mut dyn Console,
+fn run_rage(
+    fs: MemoryFileSystem,
+    console: &mut dyn Console,
     args: Args,
-) -> Result<(), CliDiagnostic> {
+) -> (MemoryFileSystem, Result<(), CliDiagnostic>) {
     let _test_dir = TestLogDir::new("biome-rage-test");
     run_cli(fs, console, args)
 }
@@ -203,7 +346,7 @@ fn assert_rage_snapshot(payload: SnapshotPayload<'_>) {
             .lines()
             .map(|line| match line.trim_start().split_once(':') {
                 Some((
-                    "CPU Architecture" | "OS" | "NO_COLOR" | "TERM" | "BIOME_LOG_DIR"
+                    "CPU Architecture" | "OS" | "NO_COLOR" | "TERM" | "BIOME_LOG_PATH"
                     | "Color support",
                     value,
                 )) => line.replace(value.trim_start(), "**PLACEHOLDER**"),
@@ -216,7 +359,7 @@ fn assert_rage_snapshot(payload: SnapshotPayload<'_>) {
     let content = snapshot.emit_content_snapshot();
 
     let module_path = module_path.replace("::", "_");
-    let snapshot_path = PathBuf::from("../snapshots").join(module_path);
+    let snapshot_path = Utf8PathBuf::from("../snapshots").join(module_path);
 
     insta::with_settings!({
         prepend_module_to_snapshot => false,
@@ -234,7 +377,7 @@ static RAGE_GUARD: Mutex<()> = Mutex::new(());
 /// Mocks out the directory from which `rage` reads the server logs. Ensures that the test directory
 /// gets removed at the end of the test.
 struct TestLogDir {
-    path: PathBuf,
+    path: Utf8PathBuf,
     _guard: MutexGuard<'static, ()>,
 }
 
@@ -243,10 +386,10 @@ impl TestLogDir {
         let guard = RAGE_GUARD.lock().unwrap();
         let path = env::temp_dir().join(name);
 
-        env::set_var("BIOME_LOG_DIR", &path);
+        env::set_var("BIOME_LOG_PATH", &path);
 
         Self {
-            path,
+            path: Utf8PathBuf::from_path_buf(path).unwrap(),
             _guard: guard,
         }
     }
@@ -255,6 +398,6 @@ impl TestLogDir {
 impl Drop for TestLogDir {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.path).ok();
-        env::remove_var("BIOME_LOG_DIR");
+        env::remove_var("BIOME_LOG_PATH");
     }
 }

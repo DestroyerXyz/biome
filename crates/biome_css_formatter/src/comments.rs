@@ -1,8 +1,12 @@
 use crate::prelude::*;
-use biome_css_syntax::{CssLanguage, TextLen};
+use biome_css_syntax::{
+    AnyCssDeclarationName, CssComplexSelector, CssFunction, CssIdentifier, CssLanguage,
+    CssSyntaxKind, TextLen,
+};
 use biome_diagnostics::category;
 use biome_formatter::comments::{
-    is_doc_comment, CommentKind, CommentStyle, Comments, SourceComment,
+    is_doc_comment, CommentKind, CommentPlacement, CommentStyle, CommentTextPosition, Comments,
+    DecoratedComment, SourceComment,
 };
 use biome_formatter::formatter::Formatter;
 use biome_formatter::{write, FormatResult, FormatRule};
@@ -82,4 +86,68 @@ impl CommentStyle for CssCommentStyle {
             CommentKind::Line
         }
     }
+
+    fn place_comment(
+        &self,
+        comment: DecoratedComment<Self::Language>,
+    ) -> CommentPlacement<Self::Language> {
+        match comment.text_position() {
+            CommentTextPosition::EndOfLine => handle_function_comment(comment)
+                .or_else(handle_declaration_name_comment)
+                .or_else(handle_complex_selector_comment),
+            CommentTextPosition::OwnLine => handle_function_comment(comment)
+                .or_else(handle_declaration_name_comment)
+                .or_else(handle_complex_selector_comment),
+            CommentTextPosition::SameLine => handle_function_comment(comment)
+                .or_else(handle_declaration_name_comment)
+                .or_else(handle_complex_selector_comment),
+        }
+    }
+}
+
+fn handle_declaration_name_comment(
+    comment: DecoratedComment<CssLanguage>,
+) -> CommentPlacement<CssLanguage> {
+    match comment.preceding_node() {
+        Some(following_node) if AnyCssDeclarationName::can_cast(following_node.kind()) => {
+            if following_node
+                .parent()
+                .is_some_and(|p| p.kind() == CssSyntaxKind::CSS_GENERIC_COMPONENT_VALUE_LIST)
+            {
+                CommentPlacement::Default(comment)
+            } else {
+                CommentPlacement::leading(following_node.clone(), comment)
+            }
+        }
+        _ => CommentPlacement::Default(comment),
+    }
+}
+
+fn handle_function_comment(
+    comment: DecoratedComment<CssLanguage>,
+) -> CommentPlacement<CssLanguage> {
+    let (Some(preceding_node), Some(following_node)) =
+        (comment.preceding_node(), comment.following_node())
+    else {
+        return CommentPlacement::Default(comment);
+    };
+
+    let is_inside_function = CssFunction::can_cast(comment.enclosing_node().kind());
+    let is_after_name = CssIdentifier::can_cast(preceding_node.kind());
+    if is_inside_function && is_after_name {
+        CommentPlacement::leading(following_node.clone(), comment)
+    } else {
+        CommentPlacement::Default(comment)
+    }
+}
+
+fn handle_complex_selector_comment(
+    comment: DecoratedComment<CssLanguage>,
+) -> CommentPlacement<CssLanguage> {
+    if let Some(complex) = CssComplexSelector::cast_ref(comment.enclosing_node()) {
+        if let Ok(right) = complex.right() {
+            return CommentPlacement::leading(right.into_syntax(), comment);
+        }
+    }
+    CommentPlacement::Default(comment)
 }

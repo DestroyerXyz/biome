@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: area.jsx
+snapshot_kind: text
 ---
 # Input
-```js
+```jsx
 // invalid
 
 <>
@@ -16,6 +17,8 @@ expression: area.jsx
   <area aria-label={undefined} />
   <area aria-labelledby="" />
   <area aria-labelledby={undefined} />
+  <area aria-hidden={false} />
+  <area aria-hidden={undefined} />
 </>;
 
 //valid
@@ -23,6 +26,8 @@ expression: area.jsx
 <>
   <area aria-label="foo" />
   <area aria-labelledby="id1" />
+  <area aria-hidden />
+  <area aria-hidden={true} />
   <area alt="" />
   <area alt="This is descriptive!" />
   <area alt={altText} />
@@ -35,7 +40,7 @@ expression: area.jsx
 ```
 area.jsx:4:2 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
     3 │ <>
   > 4 │ 	<area />
@@ -45,13 +50,15 @@ area.jsx:4:2 lint/a11y/useAltText ━━━━━━━━━━━━━━━�
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
   
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
 
 ```
 
 ```
 area.jsx:5:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
     3 │ <>
     4 │ 	<area />
@@ -62,13 +69,15 @@ area.jsx:5:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━�
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
   
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
 
 ```
 
 ```
 area.jsx:6:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
     4 │ 	<area />
     5 │   <area alt />
@@ -79,13 +88,15 @@ area.jsx:6:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━�
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
   
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
 
 ```
 
 ```
 area.jsx:7:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
     5 │   <area alt />
     6 │   <area alt={undefined} />
@@ -96,13 +107,15 @@ area.jsx:7:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━�
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
   
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
 
 ```
 
 ```
 area.jsx:8:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
      6 │   <area alt={undefined} />
      7 │   <area src="xyz" />
@@ -113,13 +126,15 @@ area.jsx:8:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━�
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
   
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
 
 ```
 
 ```
 area.jsx:9:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
      7 │   <area src="xyz" />
      8 │   <area {...this.props} />
@@ -130,13 +145,15 @@ area.jsx:9:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━�
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
   
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
 
 ```
 
 ```
 area.jsx:10:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
      8 │   <area {...this.props} />
      9 │   <area aria-label="" />
@@ -147,22 +164,26 @@ area.jsx:10:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
   
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
 
 ```
 
 ```
 area.jsx:11:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
      9 │   <area aria-label="" />
     10 │   <area aria-label={undefined} />
   > 11 │   <area aria-labelledby="" />
        │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
     12 │   <area aria-labelledby={undefined} />
-    13 │ </>;
+    13 │   <area aria-hidden={false} />
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
+  
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
   
 
 ```
@@ -170,18 +191,56 @@ area.jsx:11:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━
 ```
 area.jsx:12:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
   
     10 │   <area aria-label={undefined} />
     11 │   <area aria-labelledby="" />
   > 12 │   <area aria-labelledby={undefined} />
        │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    13 │ </>;
-    14 │ 
+    13 │   <area aria-hidden={false} />
+    14 │   <area aria-hidden={undefined} />
   
   i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
+  
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
   
 
 ```
 
+```
+area.jsx:13:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  
+    11 │   <area aria-labelledby="" />
+    12 │   <area aria-labelledby={undefined} />
+  > 13 │   <area aria-hidden={false} />
+       │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    14 │   <area aria-hidden={undefined} />
+    15 │ </>;
+  
+  i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
+  
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
+
+```
+
+```
+area.jsx:14:3 lint/a11y/useAltText ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Provide a text alternative through the alt, aria-label or aria-labelledby attribute
+  
+    12 │   <area aria-labelledby={undefined} />
+    13 │   <area aria-hidden={false} />
+  > 14 │   <area aria-hidden={undefined} />
+       │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    15 │ </>;
+    16 │ 
+  
+  i Meaningful alternative text on elements helps users relying on screen readers to understand content's purpose within a page.
+  
+  i If the content is decorative, redundant, or obscured, consider hiding it from assistive technologies with the aria-hidden attribute.
+  
+
+```

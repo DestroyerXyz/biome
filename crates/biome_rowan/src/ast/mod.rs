@@ -29,7 +29,7 @@ pub use mutation::{AstNodeExt, AstNodeListExt, AstSeparatedListExt};
 /// bitfield here being twice as large as it needs to cover all nodes as well
 /// as all token kinds
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SyntaxKindSet<L: ?Sized + Language>([u128; 4], PhantomData<L>);
+pub struct SyntaxKindSet<L: Language>([u128; 4], PhantomData<L>);
 
 impl<L> SyntaxKindSet<L>
 where
@@ -105,10 +105,18 @@ where
     }
 }
 
-/// The main trait to go from untyped `SyntaxNode`  to a typed ast. The
+/// The main trait to go from untyped `SyntaxNode` to a typed ast. The
 /// conversion itself has zero runtime cost: ast and syntax nodes have exactly
 /// the same representation: a pointer to the tree root and a pointer to the
 /// node itself.
+///
+/// The only exception to this is for Dynamic nodes, which allow the fields
+/// of the AstNode to be mapped to any slot of the SyntaxNode using an additional
+/// `slot_map`. This must get built every time the untyped syntax node is
+/// converted into the typed ast node, and is determined by the order of fields
+/// in the original grammar. Even still, this cost is relatively low and should
+/// not be considered prohibitive, as the only work done is checking
+/// [AstNode::can_cast] for each of the children to their respective slots.
 pub trait AstNode: Clone {
     type Language: Language;
 
@@ -161,7 +169,7 @@ pub trait AstNode: Clone {
     /// builder.finish_node();
     ///
     /// let root_syntax = builder.finish();
-    /// let root = RawLanguageRoot::cast(root_syntax.clone()).expect("Root to be a raw language root");
+    /// let root = RawLanguageRoot::cast_ref(&root_syntax).expect("Root to be a raw language root");
     ///
     /// // Returns `OK` because syntax is a `RawLanguageRoot`
     /// assert_eq!(RawLanguageRoot::try_cast(root.syntax().clone()), Ok(root.clone()));
@@ -170,44 +178,9 @@ pub trait AstNode: Clone {
     /// ```
     fn try_cast(syntax: SyntaxNode<Self::Language>) -> Result<Self, SyntaxNode<Self::Language>> {
         if Self::can_cast(syntax.kind()) {
-            Ok(Self::cast(syntax).expect("Expected casted node because 'can_cast' returned true."))
+            Ok(Self::unwrap_cast(syntax))
         } else {
             Err(syntax)
-        }
-    }
-
-    /// Tries to cast the AST `node` into this node.
-    ///
-    /// # Returns
-    /// * [Ok] if the passed node can be cast into this [AstNode]
-    /// * [Err] if the node is of another kind
-    /// ```
-    /// # use biome_rowan::AstNode;
-    /// # use biome_rowan::raw_language::{LiteralExpression, RawLanguageKind, RawLanguageRoot, RawSyntaxTreeBuilder};
-    ///
-    /// let mut builder = RawSyntaxTreeBuilder::new();
-    ///
-    /// builder.start_node(RawLanguageKind::ROOT);
-    /// builder.start_node(RawLanguageKind::LITERAL_EXPRESSION);
-    /// builder.token(RawLanguageKind::STRING_TOKEN, "'abcd'");
-    /// builder.finish_node();
-    /// builder.finish_node();
-    ///
-    /// let root_syntax = builder.finish();
-    /// let root = RawLanguageRoot::cast(root_syntax.clone()).expect("Root to be a raw language root");
-    ///
-    /// // Returns `OK` because syntax is a `RawLanguageRoot`
-    /// assert_eq!(RawLanguageRoot::try_cast_node(root.clone()), Ok(root.clone()));
-    ///
-    /// // Returns `Err` with the node passed to `try_cast_node` because `root` isn't a `LiteralExpression`
-    /// assert_eq!(LiteralExpression::try_cast_node(root.clone()), Err(root.clone()));
-    /// ```
-    fn try_cast_node<T: AstNode<Language = Self::Language>>(node: T) -> Result<Self, T> {
-        if Self::can_cast(node.syntax().kind()) {
-            Ok(Self::cast(node.into_syntax())
-                .expect("Expected casted node because 'can_cast' returned true."))
-        } else {
-            Err(node)
         }
     }
 
@@ -236,7 +209,11 @@ pub trait AstNode: Clone {
     }
 
     /// Returns the string representation of this node without the leading and trailing trivia
-    fn text(&self) -> std::string::String {
+    ///
+    /// ## Warning
+    ///
+    /// This function allocates a [String]
+    fn to_trimmed_string(&self) -> std::string::String {
         self.syntax().text_trimmed().to_string()
     }
 
@@ -311,6 +288,83 @@ pub trait AstNode: Clone {
     }
 }
 
+/// An AstNode that supports dynamic ordering of the fields it contains uses a
+/// `slot_map` to map the _declared_ order of fields to the _concrete_ order
+/// as parsed from the source content. Implementing this trait lets consumers
+///
+pub trait AstNodeSlotMap<const N: usize> {
+    /// Return the internal slot_map that was built when constructed from the
+    /// underlying [SyntaxNode].
+    fn slot_map(&self) -> &[u8; N];
+
+    /// Invert and sort the `slot_map` for the [AstNode] to return a mapping of
+    /// _concrete_ field ordering from the source to the _declared_ ordering of
+    /// the [AstNode].
+    ///
+    /// Note that the _entire_ slot map is inverted and returned, including
+    /// both the ordered and the unordered fields. Ordered fields will have
+    /// their slot positions fixed in both the original and the inverted slot
+    /// maps, since they can't be moved. Ordered fields also act as boundary
+    /// points for unordered fields, meaning the concrete order will never
+    /// allow the concrete slot of an unordered field to appear on the opposite
+    /// side of an ordered field, even if the field is empty, and the ordered
+    /// fields will _always_ have the same slot in both maps.
+    ///
+    /// Example: Given a grammar like:
+    ///   MultiplyVectorsNode =
+    ///     (Color
+    ///     || Number
+    ///     || String)
+    ///     'x'
+    ///     (Color
+    ///     || Number
+    ///     || String)
+    /// There are two sets of unordered fields here (the groups combined with
+    /// `||` operators). Each contains three fields, and then there is a single
+    /// ordered field between them, the `x` token. This Node declares a
+    /// `slot_map` with 7 indices. The first three can be mapped in any order,
+    /// and the last three can be mapped in any order, but the `x` token will
+    /// _always_ occupy the fourth slot (zero-based index 3).
+    ///
+    /// Now, given an input like `10 "hello" #fff x "bye" #000 20`, the
+    /// constructed [AstNode]'s slot_map would look like
+    /// `[2, 0, 1, 3, 6, 4, 5]`. The first `Color` field, declared as index 0,
+    /// appears at the 2nd index in the concrete source, so the value at index
+    /// 0 is 2, and so on for the rest of the fields.
+    ///
+    /// The inversion of this slot map, then, is `[1, 2, 0, 3, 5, 6, 4]`. To
+    /// compare these, think: the value 0 in the original `slot_map` appeared
+    /// at index 1, so index 0 in the inverted map has the _value_ 1, then
+    /// apply that for of the slots. As you can see `3` is still in the same
+    /// position, because it is an ordered field.
+    ///
+    /// ## Optional Fields
+    ///
+    /// It's also possible for unordered fields to be _optional_, meaning they
+    /// are not present in the concrete source. In this case, the sentinel
+    /// value of `255` ([`std::u8::MAX`]) is placed in the slot map. When
+    /// inverting the map, if a slot index cannot be found in the map, it is
+    /// preserved as the same sentinel value in the inverted map.
+    ///
+    /// Using the same grammar as before, the input `10 x #000` is also valid,
+    /// but is missing many of the optional fields. The `slot_map` for this
+    /// node would include sentinel values for all of the missing fields, like:
+    /// `[255, 0, 255, 3, 4, 255, 255]`. Inverting this map would then yield:
+    /// `[1, 255, 255, 3, 4, 255, 255]`. Each declared slot is still
+    /// represented in the inverted map, but only the fields that exist in the
+    /// concrete source have usable values.
+    fn concrete_order_slot_map(&self) -> [u8; N] {
+        let mut inverted = [u8::MAX; N];
+        for (declared_slot, concrete_slot) in self.slot_map().iter().enumerate() {
+            if *concrete_slot != u8::MAX {
+                inverted[*concrete_slot as usize] = declared_slot as u8;
+            }
+        }
+
+        inverted
+    }
+}
+
 pub trait SyntaxNodeCast<L: Language> {
     /// Tries to cast the current syntax node to specified AST node.
     ///
@@ -378,7 +432,7 @@ where
 impl<L: Language, N: AstNode<Language = L>> AstNodeListIterator<L, N> {
     fn slot_to_node(slot: &SyntaxSlot<L>) -> N {
         match slot {
-            SyntaxSlot::Empty => panic!("Node isn't permitted to contain empty slots"),
+            SyntaxSlot::Empty { .. } => panic!("Node isn't permitted to contain empty slots"),
             SyntaxSlot::Node(node) => N::unwrap_cast(node.clone()),
             SyntaxSlot::Token(token) => panic!(
                 "Expected node of type `{:?}` but found token `{:?}` instead.",
@@ -598,20 +652,20 @@ impl<L: Language, N: AstNode<Language = L>> Iterator for AstSeparatedListElement
 
         let node = match slot {
             // The node for this element is missing if the next child is a token instead of a node.
-            SyntaxSlot::Token(token) => panic!("Malformed list, node expected but found token {:?} instead. You must add missing markers for missing elements.", token),
+            SyntaxSlot::Token(token) => panic!("Malformed list, node expected but found token {token:?} instead. You must add missing markers for missing elements."),
             // Missing element
-            SyntaxSlot::Empty => Err(SyntaxError::MissingRequiredChild),
+            SyntaxSlot::Empty { .. } => Err(SyntaxError::MissingRequiredChild),
             SyntaxSlot::Node(node) => Ok(N::unwrap_cast(node))
         };
 
         let separator = match self.slots.next() {
-            Some(SyntaxSlot::Empty) => Err(
+            Some(SyntaxSlot::Empty { .. }) => Err(
                 SyntaxError::MissingRequiredChild,
             ),
             Some(SyntaxSlot::Token(token)) => Ok(Some(token)),
             // End of list, no trailing separator
             None => Ok(None),
-            Some(SyntaxSlot::Node(node)) => panic!("Malformed separated list, separator expected but found node {:?} instead. You must add missing markers for missing separators.", node),
+            Some(SyntaxSlot::Node(node)) => panic!("Malformed separated list, separator expected but found node {node:?} instead. You must add missing markers for missing separators."),
         };
 
         Some(AstSeparatedElement {
@@ -643,13 +697,13 @@ impl<L: Language, N: AstNode<Language = L>> DoubleEndedIterator
                 });
             }
             SyntaxSlot::Token(token) => Ok(Some(token)),
-            SyntaxSlot::Empty => Ok(None),
+            SyntaxSlot::Empty { .. } => Ok(None),
         };
 
         let node = match self.slots.next_back() {
             None => panic!("Malformed separated list, expected a node but found none"),
-            Some(SyntaxSlot::Empty) => Err(SyntaxError::MissingRequiredChild),
-            Some(SyntaxSlot::Token(token)) => panic!("Malformed list, node expected but found token {:?} instead. You must add missing markers for missing elements.", token),
+            Some(SyntaxSlot::Empty{ .. }) => Err(SyntaxError::MissingRequiredChild),
+            Some(SyntaxSlot::Token(token)) => panic!("Malformed list, node expected but found token {token:?} instead. You must add missing markers for missing elements."),
             Some(SyntaxSlot::Node(node)) => {
                 Ok(N::unwrap_cast(node))
             }
@@ -692,12 +746,20 @@ pub type SyntaxResult<ResultType> = Result<ResultType, SyntaxError>;
 pub enum SyntaxError {
     /// Error thrown when a mandatory node is not found
     MissingRequiredChild,
+
+    /// Error thrown when a bogus node is encountered in an unexpected position
+    UnexpectedBogusNode,
+
+    /// Error thrown when a metavariable node is found in an unexpected context
+    UnexpectedMetavariable,
 }
 
 impl Display for SyntaxError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
         match self {
             SyntaxError::MissingRequiredChild => fmt.write_str("missing required child"),
+            SyntaxError::UnexpectedBogusNode => fmt.write_str("unexpected bogus node"),
+            SyntaxError::UnexpectedMetavariable => fmt.write_str("unexpected metavariable node"),
         }
     }
 }
@@ -717,12 +779,11 @@ pub mod support {
         slot_index: usize,
     ) -> Option<N> {
         match parent.slots().nth(slot_index)? {
-            SyntaxSlot::Empty => None,
+            SyntaxSlot::Empty { .. } => None,
             SyntaxSlot::Node(node) => Some(N::unwrap_cast(node)),
-            SyntaxSlot::Token(token) => panic!(
-                "expected a node in the slot {} but found token {:?}",
-                slot_index, token
-            ),
+            SyntaxSlot::Token(token) => {
+                panic!("expected a node in the slot {slot_index} but found token {token:?}")
+            }
         }
     }
 
@@ -742,17 +803,16 @@ pub mod support {
         slot_index: usize,
     ) -> N {
         required_node(parent, slot_index)
-            .unwrap_or_else(|_| panic!("expected a list in slot {} of {:?}", slot_index, parent))
+            .unwrap_or_else(|_| panic!("expected a list in slot {slot_index} of {parent:?}"))
     }
 
     pub fn token<L: Language>(parent: &SyntaxNode<L>, slot_index: usize) -> Option<SyntaxToken<L>> {
         match parent.slots().nth(slot_index)? {
-            SyntaxSlot::Empty => None,
+            SyntaxSlot::Empty { .. } => None,
             SyntaxSlot::Token(token) => Some(token),
-            SyntaxSlot::Node(node) => panic!(
-                "expected a token in the slot {} but found node {:?}",
-                slot_index, node
-            ),
+            SyntaxSlot::Node(node) => {
+                panic!("expected a token in the slot {slot_index} but found node {node:?}")
+            }
         }
     }
 
@@ -772,6 +832,8 @@ pub mod support {
             match &self.0 {
                 Ok(node) => std::fmt::Debug::fmt(node, f),
                 Err(SyntaxError::MissingRequiredChild) => f.write_str("missing (required)"),
+                Err(SyntaxError::UnexpectedBogusNode) => f.write_str("bogus node"),
+                Err(SyntaxError::UnexpectedMetavariable) => f.write_str("metavariable"),
             }
         }
     }
@@ -829,8 +891,7 @@ mod tests {
     type MappedElement = Vec<(Option<f64>, Option<String>)>;
 
     fn map_elements<'a>(
-        actual: impl Iterator<Item = AstSeparatedElement<RawLanguage, LiteralExpression>>
-            + DoubleEndedIterator,
+        actual: impl DoubleEndedIterator<Item = AstSeparatedElement<RawLanguage, LiteralExpression>>,
         expected: impl IntoIterator<Item = (Option<f64>, Option<&'a str>)>,
         revert: bool,
     ) -> (MappedElement, MappedElement) {
@@ -843,7 +904,10 @@ mod tests {
             .into_iter()
             .map(|element| {
                 (
-                    element.node.ok().map(|n| n.text().parse::<f64>().unwrap()),
+                    element
+                        .node
+                        .ok()
+                        .map(|n| n.to_trimmed_string().parse::<f64>().unwrap()),
                     element
                         .trailing_separator
                         .ok()
@@ -862,8 +926,7 @@ mod tests {
     }
 
     fn assert_elements<'a>(
-        actual: impl Iterator<Item = AstSeparatedElement<RawLanguage, LiteralExpression>>
-            + DoubleEndedIterator,
+        actual: impl DoubleEndedIterator<Item = AstSeparatedElement<RawLanguage, LiteralExpression>>,
         expected: impl IntoIterator<Item = (Option<f64>, Option<&'a str>)>,
     ) {
         let (actual, expected) = map_elements(actual, expected, false);
@@ -872,8 +935,7 @@ mod tests {
     }
 
     fn assert_rev_elements<'a>(
-        actual: impl Iterator<Item = AstSeparatedElement<RawLanguage, LiteralExpression>>
-            + DoubleEndedIterator,
+        actual: impl DoubleEndedIterator<Item = AstSeparatedElement<RawLanguage, LiteralExpression>>,
         expected: impl IntoIterator<Item = (Option<f64>, Option<&'a str>)>,
     ) {
         let (actual, expected) = map_elements(actual, expected, true);
@@ -887,7 +949,7 @@ mod tests {
     ) {
         assert_eq!(
             actual
-                .map(|literal| literal.unwrap().text().parse::<f64>().unwrap())
+                .map(|literal| literal.unwrap().to_trimmed_string().parse::<f64>().unwrap())
                 .collect::<Vec<_>>(),
             expected.into_iter().collect::<Vec<_>>()
         );
@@ -954,14 +1016,14 @@ mod tests {
         let mut iter = list.elements();
 
         let element = iter.next().unwrap();
-        assert_eq!(element.node().unwrap().text(), "1");
+        assert_eq!(element.node().unwrap().to_trimmed_string(), "1");
         let element = iter.next_back().unwrap();
-        assert_eq!(element.node().unwrap().text(), "4");
+        assert_eq!(element.node().unwrap().to_trimmed_string(), "4");
 
         let element = iter.next().unwrap();
-        assert_eq!(element.node().unwrap().text(), "2");
+        assert_eq!(element.node().unwrap().to_trimmed_string(), "2");
         let element = iter.next_back().unwrap();
-        assert_eq!(element.node().unwrap().text(), "3");
+        assert_eq!(element.node().unwrap().to_trimmed_string(), "3");
 
         assert!(iter.next().is_none());
         assert!(iter.next_back().is_none());

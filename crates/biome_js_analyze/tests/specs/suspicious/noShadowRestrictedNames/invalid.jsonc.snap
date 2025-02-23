@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.jsonc
+snapshot_kind: text
 ---
 # Input
-```js
+```cjs
 function NaN() {}
 ```
 
@@ -11,7 +12,7 @@ function NaN() {}
 ```
 invalid.jsonc:1:10 lint/suspicious/noShadowRestrictedNames ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Do not shadow the global "NaN" property.
+  × Do not shadow the global "NaN" property.
   
   > 1 │ function NaN() {}
       │          ^^^
@@ -22,7 +23,7 @@ invalid.jsonc:1:10 lint/suspicious/noShadowRestrictedNames ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 function undefined() {}
 ```
 
@@ -30,7 +31,7 @@ function undefined() {}
 ```
 invalid.jsonc:1:10 lint/suspicious/noShadowRestrictedNames ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Do not shadow the global "undefined" property.
+  × Do not shadow the global "undefined" property.
   
   > 1 │ function undefined() {}
       │          ^^^^^^^^^
@@ -41,7 +42,7 @@ invalid.jsonc:1:10 lint/suspicious/noShadowRestrictedNames ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 function Infinity() {}
 ```
 
@@ -49,7 +50,7 @@ function Infinity() {}
 ```
 invalid.jsonc:1:10 lint/suspicious/noShadowRestrictedNames ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Do not shadow the global "Infinity" property.
+  × Do not shadow the global "Infinity" property.
   
   > 1 │ function Infinity() {}
       │          ^^^^^^^^
@@ -60,7 +61,7 @@ invalid.jsonc:1:10 lint/suspicious/noShadowRestrictedNames ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 function Array() {}
 ```
 
@@ -68,7 +69,7 @@ function Array() {}
 ```
 invalid.jsonc:1:10 lint/suspicious/noShadowRestrictedNames ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Do not shadow the global "Array" property.
+  × Do not shadow the global "Array" property.
   
   > 1 │ function Array() {}
       │          ^^^^^
@@ -79,7 +80,7 @@ invalid.jsonc:1:10 lint/suspicious/noShadowRestrictedNames ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 function test(JSON) { console.log(JSON); }
 ```
 
@@ -87,7 +88,7 @@ function test(JSON) { console.log(JSON); }
 ```
 invalid.jsonc:1:15 lint/suspicious/noShadowRestrictedNames ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Do not shadow the global "JSON" property.
+  × Do not shadow the global "JSON" property.
   
   > 1 │ function test(JSON) { console.log(JSON); }
       │               ^^^^
@@ -98,7 +99,7 @@ invalid.jsonc:1:15 lint/suspicious/noShadowRestrictedNames ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 let Set;
 ```
 
@@ -106,7 +107,7 @@ let Set;
 ```
 invalid.jsonc:1:5 lint/suspicious/noShadowRestrictedNames ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Do not shadow the global "Set" property.
+  × Do not shadow the global "Set" property.
   
   > 1 │ let Set;
       │     ^^^
@@ -117,7 +118,7 @@ invalid.jsonc:1:5 lint/suspicious/noShadowRestrictedNames ━━━━━━━�
 ```
 
 # Input
-```js
+```cjs
 try {} catch (Object) {}
 ```
 
@@ -125,7 +126,7 @@ try {} catch (Object) {}
 ```
 invalid.jsonc:1:15 lint/suspicious/noShadowRestrictedNames ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Do not shadow the global "Object" property.
+  × Do not shadow the global "Object" property.
   
   > 1 │ try {} catch (Object) {}
       │               ^^^^^^
@@ -134,5 +135,3 @@ invalid.jsonc:1:15 lint/suspicious/noShadowRestrictedNames ━━━━━━━
   
 
 ```
-
-

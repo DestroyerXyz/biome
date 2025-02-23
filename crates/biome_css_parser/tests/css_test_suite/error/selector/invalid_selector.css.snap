@@ -2,7 +2,6 @@
 source: crates/biome_css_parser/tests/spec_test.rs
 expression: snapshot
 ---
-
 ## Input
 
 ```css
@@ -24,10 +23,10 @@ CssRoot {
                 BANG@0..1 "!" [] [],
             ],
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssClassSelector {
@@ -39,9 +38,9 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@11..12 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@12..15 "}" [Newline("\n"), Newline("\n")] [],
             },
         },
@@ -58,19 +57,19 @@ CssRoot {
   1: CSS_RULE_LIST@0..15
     0: CSS_BOGUS_RULE@0..1
       0: BANG@0..1 "!" [] []
-    1: CSS_RULE@1..15
+    1: CSS_QUALIFIED_RULE@1..15
       0: CSS_SELECTOR_LIST@1..11
         0: CSS_COMPOUND_SELECTOR@1..11
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@1..1
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@1..11
             0: CSS_CLASS_SELECTOR@1..11
               0: DOT@1..2 "." [] []
               1: CSS_CUSTOM_IDENTIFIER@2..11
                 0: IDENT@2..11 "selector" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@11..15
+      1: CSS_DECLARATION_OR_RULE_BLOCK@11..15
         0: L_CURLY@11..12 "{" [] []
-        1: CSS_DECLARATION_LIST@12..12
+        1: CSS_DECLARATION_OR_RULE_LIST@12..12
         2: R_CURLY@12..15 "}" [Newline("\n"), Newline("\n")] []
   2: EOF@15..16 "" [Newline("\n")] []
 
@@ -81,14 +80,14 @@ CssRoot {
 ```
 invalid_selector.css:1:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Expected a rule, or an at rule but instead found '!'.
+  × Expected a qualified rule, or an at rule but instead found '!'.
   
   > 1 │ !.selector {
       │ ^
     2 │ 
     3 │ }
   
-  i Expected a rule, or an at rule here.
+  i Expected a qualified rule, or an at rule here.
   
   > 1 │ !.selector {
       │ ^
@@ -96,5 +95,3 @@ invalid_selector.css:1:1 parse ━━━━━━━━━━━━━━━━�
     3 │ }
   
 ```
-
-

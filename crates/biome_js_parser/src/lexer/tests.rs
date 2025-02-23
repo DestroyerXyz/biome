@@ -1,5 +1,5 @@
 #![cfg(test)]
-#![allow(unused_mut, unused_variables, unused_assignments)]
+#![expect(unused_mut, unused_variables)]
 
 use super::{JsLexContext, JsLexer, TextRange, TextSize};
 use crate::span::Span;
@@ -88,12 +88,7 @@ fn losslessness(string: String) -> bool {
     });
     let token_ranges = receiver
         .recv_timeout(Duration::from_secs(2))
-        .unwrap_or_else(|_| {
-            panic!(
-                "Lexer is infinitely recursing with this code: ->{}<-",
-                string
-            )
-        });
+        .unwrap_or_else(|_| panic!("Lexer is infinitely recursing with this code: ->{string}<-"));
 
     let mut new_str = String::with_capacity(string.len());
     let mut idx = TextSize::from(0);
@@ -118,6 +113,33 @@ fn identifier() {
     assert_lex! {
         "Abcdefg",
         IDENT:7
+    }
+}
+
+#[test]
+fn unicode_identifier() {
+    assert_lex! {
+        r#"\uD83D\uDCA9"#,
+        ERROR_TOKEN:5,
+        IDENT: 1,
+        ERROR_TOKEN:5,
+        JS_NUMBER_LITERAL: 1,
+    }
+
+    assert_lex! {
+        r#"a\uD83D\uDCA9"#,
+        IDENT:1,
+        ERROR_TOKEN:5,
+        IDENT: 1,
+        ERROR_TOKEN:5,
+        JS_NUMBER_LITERAL: 1,
+    }
+
+    assert_lex! {
+        r#"a\uD83D"#,
+        IDENT:1,
+        ERROR_TOKEN:5,
+        IDENT: 1,
     }
 }
 
@@ -299,6 +321,19 @@ fn string_unicode_escape_valid() {
     assert_lex! {
         r"'abcd\u2000a'",
         JS_STRING_LITERAL:13
+    }
+}
+
+#[test]
+fn string_unicode_escape_surrogates() {
+    assert_lex! {
+        r#""\uD83D\uDCA9""#,
+        JS_STRING_LITERAL:14
+    }
+
+    assert_lex! {
+        r#""\uD83D""#,
+        JS_STRING_LITERAL:8
     }
 }
 
@@ -1357,8 +1392,7 @@ fn keywords() {
         let lexed_kind = lexer.current();
         assert_eq!(
             lexed_kind, kind,
-            "Expected token '{keyword}' to be of kind {:?} but is {:?}.",
-            kind, lexed_kind
+            "Expected token '{keyword}' to be of kind {kind:?} but is {lexed_kind:?}."
         );
 
         let lexed_range = lexer.current_range();
@@ -1415,7 +1449,10 @@ fn lookahead() {
     );
 
     {
-        let lookahead = buffered.lookahead().map(|l| l.kind()).collect::<Vec<_>>();
+        let lookahead = buffered
+            .lookahead_iter()
+            .map(|l| l.kind())
+            .collect::<Vec<_>>();
 
         assert_eq!(
             lookahead,
@@ -1436,7 +1473,7 @@ fn lookahead() {
     assert_eq!(buffered.next_token(JsLexContext::default()), WHITESPACE);
 
     {
-        let mut lookahead = buffered.lookahead();
+        let mut lookahead = buffered.lookahead_iter();
         let nth1 = lookahead.next().unwrap();
         let nth2 = lookahead.next().unwrap();
         let nth3 = lookahead.next().unwrap();

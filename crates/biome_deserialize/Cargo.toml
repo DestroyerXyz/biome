@@ -8,9 +8,7 @@ keywords.workspace   = true
 license.workspace    = true
 name                 = "biome_deserialize"
 repository.workspace = true
-version              = "0.3.1"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version              = "0.6.0"
 
 [dependencies]
 biome_console     = { workspace = true }
@@ -18,15 +16,24 @@ biome_diagnostics = { workspace = true }
 biome_json_parser = { workspace = true }
 biome_json_syntax = { workspace = true }
 biome_rowan       = { workspace = true }
-bitflags          = { workspace = true }
-indexmap          = { workspace = true, features = ["serde"] }
-schemars          = { workspace = true, optional = true }
-serde             = { workspace = true }
-serde_json        = { workspace = true }
-tracing           = { workspace = true }
+camino            = { workspace = true, optional = true }
+enumflags2        = { workspace = true }
+indexmap          = { workspace = true, optional = true }
+serde             = { workspace = true, optional = true }
+serde_json        = { workspace = true, optional = true }
+smallvec          = { workspace = true, optional = true }
+
+[dev-dependencies]
+biome_deserialize_macros = { workspace = true }
 
 [features]
-schema = ["schemars", "schemars/indexmap"]
+camino   = ["dep:camino"]
+indexmap = ["dep:indexmap"]
+serde    = ["dep:serde", "dep:serde_json"]
+smallvec = ["dep:smallvec"]
+
+[package.metadata.cargo-udeps.ignore]
+development = ["biome_deserialize_macros"]
 
 [lints]
 workspace = true

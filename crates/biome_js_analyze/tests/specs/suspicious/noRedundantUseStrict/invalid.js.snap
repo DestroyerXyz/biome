@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -31,7 +32,7 @@ const C2 = class {
 ```
 invalid.js:2:1 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Redundant use strict directive.
+  × Redundant use strict directive.
   
     1 │ // js module
   > 2 │ "use strict"; // Associated comment
@@ -43,8 +44,9 @@ invalid.js:2:1 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━━
   
   i Safe fix: Remove the redundant use strict directive.
   
-     1  1 │   // js module
+     1    │ - //·js·module
      2    │ - "use·strict";·//·Associated·comment
+        1 │ + 
      3  2 │   
      4  3 │   function foo() {
   
@@ -54,7 +56,7 @@ invalid.js:2:1 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━━
 ```
 invalid.js:5:2 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Redundant use strict directive.
+  × Redundant use strict directive.
   
     4 │ function foo() {
   > 5 │ 	"use strict";
@@ -69,10 +71,8 @@ invalid.js:5:2 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━━
      3  3 │   
      4  4 │   function foo() {
      5    │ - → "use·strict";
-     6    │ - }
-        5 │ + → }
+     6  5 │   }
      7  6 │   
-     8  7 │   class C1 {
   
 
 ```
@@ -80,7 +80,7 @@ invalid.js:5:2 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━━
 ```
 invalid.js:11:3 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Redundant use strict directive.
+  × Redundant use strict directive.
   
      9 │ 	// All code here is evaluated in strict mode
     10 │ 	test() {
@@ -96,10 +96,8 @@ invalid.js:11:3 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━�
      9  9 │   	// All code here is evaluated in strict mode
     10 10 │   	test() {
     11    │ - → → "use·strict";
-    12    │ - → }
-       11 │ + → → → }
+    12 11 │   	}
     13 12 │   }
-    14 13 │   
   
 
 ```
@@ -107,7 +105,7 @@ invalid.js:11:3 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━�
 ```
 invalid.js:18:3 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Redundant use strict directive.
+  × Redundant use strict directive.
   
     16 │ 	// All code here is evaluated in strict mode
     17 │ 	test() {
@@ -123,12 +121,8 @@ invalid.js:18:3 lint/suspicious/noRedundantUseStrict  FIXABLE  ━━━━━�
     16 16 │   	// All code here is evaluated in strict mode
     17 17 │   	test() {
     18    │ - → → "use·strict";
-    19    │ - → }
-       18 │ + → → → }
+    19 18 │   	}
     20 19 │   };
-    21 20 │   
   
 
 ```
-
-

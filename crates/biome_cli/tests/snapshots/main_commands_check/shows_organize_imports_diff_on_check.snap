@@ -1,6 +1,7 @@
 ---
 source: crates/biome_cli/tests/snap_test.rs
 expression: content
+snapshot_kind: text
 ---
 ## `check.js`
 
@@ -24,9 +25,9 @@ check ━━━━━━━━━━━━━━━━━━━━━━━━�
 # Emitted Messages
 
 ```block
-check.js organizeImports ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+check.js assist ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  i Import statements could be sorted:
+  × Not all actions were applied:
   
     1   │ - import·{·lorem,·foom,·bar·}·from·"foo";
       1 │ + import·{·bar,·foom,·lorem·}·from·"foo";
@@ -37,15 +38,6 @@ check.js organizeImports ━━━━━━━━━━━━━━━━━━�
 ```
 
 ```block
-check.js check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
+Checked 1 file in <TIME>. No fixes applied.
+Found 1 error.
 ```
-
-```block
-Checked 1 file(s) in <TIME>
-```
-
-

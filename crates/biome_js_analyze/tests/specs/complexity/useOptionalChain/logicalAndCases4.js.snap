@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: logicalAndCases4.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -912,5 +913,3 @@ logicalAndCases4.js:64:1 lint/complexity/useOptionalChain  FIXABLE  ━━━━
   
 
 ```
-
-

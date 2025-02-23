@@ -5,7 +5,7 @@ use crate::{
     Location,
 };
 use biome_console::fmt::{self, Display};
-use biome_console::markup;
+use biome_console::{markup, MarkupBuf};
 use biome_text_edit::TextEdit;
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -66,12 +66,27 @@ pub trait Visit {
         let _ = (title, advice);
         Ok(())
     }
+
+    /// ## Warning
+    ///
+    /// The implementation of the table, for now, is tailored for two columns, and it assumes that
+    /// the longest cell is on top.
+    fn record_table(
+        &mut self,
+        padding: usize,
+        headers: &[MarkupBuf],
+        columns: &[&[MarkupBuf]],
+    ) -> io::Result<()> {
+        let _ = (headers, columns, padding);
+        Ok(())
+    }
 }
 
 /// The category for a log advice, defines how the message should be presented
 /// to the user.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
 pub enum LogCategory {
     /// The advice doesn't have any specific category, the message will be
     /// printed as plain markup.
@@ -95,6 +110,28 @@ pub struct LogAdvice<T> {
 impl<T: Display> Advices for LogAdvice<T> {
     fn record(&self, visitor: &mut dyn Visit) -> io::Result<()> {
         visitor.record_log(self.category, &self.text)
+    }
+}
+
+/// Utility advice that prints a list of items.
+#[derive(Debug)]
+pub struct ListAdvice<T> {
+    pub list: Vec<T>,
+}
+
+impl<T: Display> Advices for ListAdvice<T> {
+    fn record(&self, visitor: &mut dyn Visit) -> io::Result<()> {
+        if self.list.is_empty() {
+            visitor.record_log(LogCategory::Warn, &"The list is empty.")
+        } else {
+            let pattern_list: Vec<_> = self
+                .list
+                .iter()
+                .map(|pattern| pattern as &dyn Display)
+                .collect();
+
+            visitor.record_list(&pattern_list)
+        }
     }
 }
 
@@ -158,16 +195,16 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 /// Utility type implementing [Advices] that emits a
 /// code suggestion with the provided text
-pub struct CodeSuggestionAdvice<M> {
+pub struct CodeSuggestionAdvice<M: Clone> {
     pub applicability: Applicability,
     pub msg: M,
     pub suggestion: TextEdit,
 }
 
-impl<M> Advices for CodeSuggestionAdvice<M>
+impl<M: Clone> Advices for CodeSuggestionAdvice<M>
 where
     M: Display,
 {

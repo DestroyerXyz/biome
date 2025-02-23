@@ -3,6 +3,9 @@
 //!
 //! See the [ECMAScript spec](https://www.ecma-international.org/ecma-262/5.1/#sec-11).
 
+use std::ops::{BitOr, BitOrAssign, Sub};
+
+use super::metavariable::{is_at_metavariable, parse_metavariable};
 use super::typescript::*;
 use crate::lexer::{JsLexContext, JsReLexContext};
 use crate::parser::rewrite_parser::{RewriteMarker, RewriteParser};
@@ -29,12 +32,12 @@ use crate::syntax::stmt::{is_semi, STMT_RECOVERY_SET};
 use crate::syntax::typescript::ts_parse_error::{expected_ts_type, ts_only_syntax_error};
 use crate::JsSyntaxFeature::{Jsx, StrictMode, TypeScript};
 use crate::ParsedSyntax::{Absent, Present};
-use crate::{syntax, JsParser, ParseRecovery, ParsedSyntax};
+use crate::{syntax, JsParser, ParseRecoveryTokenSet, ParsedSyntax};
 use biome_js_syntax::{JsSyntaxKind::*, *};
 use biome_parser::diagnostic::expected_token;
 use biome_parser::parse_lists::ParseSeparatedList;
 use biome_parser::ParserProgress;
-use bitflags::bitflags;
+use enumflags2::{bitflags, make_bitflags, BitFlags};
 
 pub const EXPR_RECOVERY_SET: TokenSet<JsSyntaxKind> =
     token_set![VAR_KW, R_PAREN, L_PAREN, L_BRACK, R_BRACK];
@@ -42,27 +45,65 @@ pub const EXPR_RECOVERY_SET: TokenSet<JsSyntaxKind> =
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) struct ExpressionContext(ExpressionContextFlags);
 
-bitflags! {
-    #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-    struct ExpressionContextFlags: u8 {
-        /// Whether `in` should be counted in a binary expression.
-        /// This is for `for...in` statements to prevent ambiguity.
-        /// Corresponds to `[+In]` in the EcmaScript spec if true
-        const INCLUDE_IN = 1 << 0;
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[bitflags]
+#[repr(u8)]
+enum ExpressionContextFlag {
+    IncludeIn = 1 << 0,
+    AllowObjectExpression = 1 << 1,
+    InDecorator = 1 << 2,
+    AllowTSTypeAssertion = 1 << 3,
+}
 
-        /// If false, object expressions are not allowed to be parsed
-        /// inside an expression.
-        ///
-        /// Also applies for object patterns
-        const ALLOW_OBJECT_EXPRESSION = 1 << 1;
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct ExpressionContextFlags(BitFlags<ExpressionContextFlag>);
 
-        /// If `true` then, don't parse computed member expressions because they can as well indicate
-        /// the start of a computed class member.
-        const IN_DECORATOR = 1 << 2;
+impl ExpressionContextFlags {
+    /// Whether `in` should be counted in a binary expression.
+    /// This is for `for...in` statements to prevent ambiguity.
+    /// Corresponds to `[+In]` in the EcmaScript spec if true
+    const INCLUDE_IN: Self = Self(make_bitflags!(ExpressionContextFlag::{IncludeIn}));
 
-        /// If `true` allows a typescript type assertion.
-        /// Currently disabled on "new" expressions.
-        const ALLOW_TS_TYPE_ASSERTION = 1 << 3;
+    /// If false, object expressions are not allowed to be parsed
+    /// inside an expression.
+    ///
+    /// Also applies for object patterns
+    const ALLOW_OBJECT_EXPRESSION: Self =
+        Self(make_bitflags!(ExpressionContextFlag::{AllowObjectExpression}));
+
+    /// If `true` then, don't parse computed member expressions because they can as well indicate
+    /// the start of a computed class member.
+    const IN_DECORATOR: Self = Self(make_bitflags!(ExpressionContextFlag::{InDecorator}));
+
+    /// If `true` allows a typescript type assertion.
+    /// Currently disabled on "new" expressions.
+    const ALLOW_TS_TYPE_ASSERTION: Self =
+        Self(make_bitflags!(ExpressionContextFlag::{AllowTSTypeAssertion}));
+
+    pub fn contains(&self, other: impl Into<ExpressionContextFlags>) -> bool {
+        self.0.contains(other.into().0)
+    }
+}
+
+impl BitOr for ExpressionContextFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        ExpressionContextFlags(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for ExpressionContextFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl Sub for ExpressionContextFlags {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 & !rhs.0)
     }
 }
 
@@ -84,18 +125,18 @@ impl ExpressionContext {
     }
 
     /// Returns true if object expressions or object patterns are valid in this context
-    pub(crate) const fn is_object_expression_allowed(&self) -> bool {
+    pub(crate) fn is_object_expression_allowed(&self) -> bool {
         self.0
             .contains(ExpressionContextFlags::ALLOW_OBJECT_EXPRESSION)
     }
 
     /// Returns `true` if the expression parsing includes binary in expressions.
-    pub(crate) const fn is_in_included(&self) -> bool {
+    pub(crate) fn is_in_included(&self) -> bool {
         self.0.contains(ExpressionContextFlags::INCLUDE_IN)
     }
 
     /// Returns `true` if currently parsing a decorator expression `@<expr>`.
-    pub(crate) const fn is_in_decorator(&self) -> bool {
+    pub(crate) fn is_in_decorator(&self) -> bool {
         self.0.contains(ExpressionContextFlags::IN_DECORATOR)
     }
 
@@ -129,9 +170,9 @@ pub(crate) fn parse_expression_or_recover_to_next_statement(
         syntax::expr::parse_expression
     };
 
-    func(p, context).or_recover(
+    func(p, context).or_recover_with_token_set(
         p,
-        &ParseRecovery::new(
+        &ParseRecoveryTokenSet::new(
             JsSyntaxKind::JS_BOGUS_EXPRESSION,
             STMT_RECOVERY_SET.union(token_set![T!['}']]),
         )
@@ -156,13 +197,12 @@ pub(crate) fn parse_expression_or_recover_to_next_statement(
 // new-line";
 // /^[يفمئامئ‍ئاسۆند]/i; //regex with unicode
 // /[\p{Control}--[\t\n]]/v;
-
+// /\’/; // regex with escaped non-ascii chars (issue #1941)
 // test_err js literals
 // 00, 012, 08, 091, 0789 // parser errors
 // 01n, 0_0, 01.2 // lexer errors
 // "test
 // continues" // unterminated string literal
-
 // test_err js regex
 // /[\p{Control}--[\t\n]]/vv;
 // /[\p{Control}--[\t\n]]/uv;
@@ -212,10 +252,9 @@ pub(crate) fn parse_number_literal_expression(p: &mut JsParser) -> ParsedSyntax 
     if p.state().strict().is_some()
         && cur_src.starts_with('0')
         && cur_src
-            .chars()
-            .nth(1)
-            .filter(|c| c.is_ascii_digit())
-            .is_some()
+            .as_bytes()
+            .get(1)
+            .is_some_and(|b| b.is_ascii_digit())
     {
         let err_msg = if cur_src.contains(['8', '9']) {
             "Decimals with leading zeros are not allowed in strict mode."
@@ -311,7 +350,10 @@ fn parse_assign_expr_recursive(
             target.change_kind(p, JS_BOGUS_ASSIGNMENT);
             target
         } else {
-            expression_to_assignment_pattern(p, target, checkpoint)
+            match expression_to_assignment_pattern(p, target, checkpoint) {
+                Present(target) => target,
+                Absent => return Absent,
+            }
         };
 
         let m = target.precede(p);
@@ -407,7 +449,6 @@ fn parse_yield_expression(p: &mut JsParser, context: ExpressionContext) -> Compl
 // test js conditional_expr
 // foo ? bar : baz
 // foo ? bar : baz ? bar : baz
-
 pub(super) fn parse_conditional_expr(p: &mut JsParser, context: ExpressionContext) -> ParsedSyntax {
     // test_err js conditional_expr_err
     // foo ? bar baz
@@ -439,10 +480,8 @@ pub(super) fn parse_conditional_expr(p: &mut JsParser, context: ExpressionContex
 /// the next token is `:`.
 // test js arrow_expr_in_alternate
 // a ? (b) : a => {};
-
 // test ts ts_arrow_exrp_in_alternate
 // a ? (b) : a => {};
-
 // test jsx jsx_arrow_exrp_in_alternate
 // bar ? (foo) : (<a>{() => {}}</a>);
 fn parse_conditional_expr_consequent(p: &mut JsParser, context: ExpressionContext) -> ParsedSyntax {
@@ -472,116 +511,69 @@ fn parse_binary_or_logical_expression(
     left_precedence: OperatorPrecedence,
     context: ExpressionContext,
 ) -> ParsedSyntax {
-    // test js private_name_presence_check
-    // class A {
-    // 	#prop;
-    // 	test() {
-    //    #prop in this
-    //  }
-    // }
-    let left = parse_unary_expr(p, context).or_else(|| parse_private_name(p));
+    let mut left = parse_unary_expr(p, context).or_else(|| parse_private_name(p));
 
-    parse_binary_or_logical_expression_recursive(p, left, left_precedence, context)
-}
+    let mut stack: Vec<(OperatorPrecedence, Option<(JsSyntaxKind, Marker)>)> =
+        vec![(left_precedence, None)];
 
-// test js binary_expressions
-// 5 * 5
-// 6 ** 6 ** 7
-// 1 + 2 * 3
-// (1 + 2) * 3
-// 1 / 2
-// 74 in foo
-// foo instanceof Array
-// foo ?? bar
-// a >> b
-// a >>> b
-// 1 + 1 + 1 + 1
-// 5 + 6 - 1 * 2 / 1 ** 6
-// class Test { #name; test() { true && #name in {} } }
+    while let Some((mut left_precedence, previous_marker)) = stack.pop() {
+        if let Some((expression_kind, m)) = previous_marker {
+            left.or_add_diagnostic(p, expected_expression);
 
-// test_err js binary_expressions_err
-// foo(foo +);
-// foo + * 2;
-// !foo * bar;
-fn parse_binary_or_logical_expression_recursive(
-    p: &mut JsParser,
-    mut left: ParsedSyntax,
-    left_precedence: OperatorPrecedence,
-    context: ExpressionContext,
-) -> ParsedSyntax {
-    // Use a loop to eat all binary expressions with the same precedence.
-    // At first, the algorithm makes the impression that it recurse for every right-hand side expression.
-    // This is true, but `parse_binary_or_logical_expression` immediately returns if the
-    // current operator has the same or a lower precedence than the left-hand side expression. Thus,
-    // the algorithm goes at most `count(OperatorPrecedence)` levels deep.
-    loop {
-        // test_err js js_right_shift_comments
-        // 1 >> /* a comment */ > 2;
-        let op = p.re_lex(JsReLexContext::BinaryOperator);
-
-        if (op == T![as] && p.has_preceding_line_break())
-            || (op == T![satisfies] && p.has_preceding_line_break())
-            || (op == T![in] && !context.is_in_included())
-        {
-            break;
+            left = Present(m.complete(p, expression_kind));
         }
 
-        // This isn't spec compliant but improves error recovery in case the `}` is missing
-        // inside of a JSX attribute expression value or an expression child.
-        // Prevents that it parses `</` as less than followed by a RegEx if JSX is enabled and only if
-        // there's no whitespace between the two tokens.
-        // The downside of this is that `a </test/` will be incorrectly left unparsed. I think this is
-        // a worth compromise and compatible with what TypeScript's doing.
-        if Jsx.is_supported(p)
-            && op == T![<]
-            && p.nth_at(1, T![/])
-            && !p.source_mut().has_next_preceding_trivia()
-        {
-            // test_err jsx jsx_child_expression_missing_r_curly
-            // <test>{ 4 + 3</test>
-            break;
-        }
+        // Use a loop to eat all binary expressions with the same precedence.
+        // At first, the algorithm makes the impression that it recurse for every right-hand side expression.
+        // This is true, but `parse_binary_or_logical_expression` immediately returns if the
+        // current operator has the same or a lower precedence than the left-hand side expression. Thus,
+        // the algorithm goes at most `count(OperatorPrecedence)` levels deep.
+        loop {
+            let op = p.re_lex(JsReLexContext::BinaryOperator);
 
-        let new_precedence = match OperatorPrecedence::try_from_binary_operator(op) {
-            Some(precedence) => precedence,
-            // Not a binary operator
-            None => break,
-        };
+            if (op == T![as] && p.has_preceding_line_break())
+                || (op == T![satisfies] && p.has_preceding_line_break())
+                || (op == T![in] && !context.is_in_included())
+            {
+                break;
+            }
 
-        let stop_at_current_operator = if new_precedence.is_right_to_left() {
-            new_precedence < left_precedence
-        } else {
-            new_precedence <= left_precedence
-        };
+            // This isn't spec compliant but improves error recovery in case the `}` is missing
+            // inside of a JSX attribute expression value or an expression child.
+            // Prevents that it parses `</` as less than followed by a RegEx if JSX is enabled and only if
+            // there's no whitespace between the two tokens.
+            // The downside of this is that `a </test/` will be incorrectly left unparsed. I think this is
+            // a worth compromise and compatible with what TypeScript's doing.
+            if Jsx.is_supported(p)
+                && op == T![<]
+                && p.nth_at(1, T![/])
+                && !p.source_mut().has_next_preceding_trivia()
+            {
+                break;
+            }
 
-        if stop_at_current_operator {
-            break;
-        }
+            let new_precedence = match OperatorPrecedence::try_from_binary_operator(op) {
+                Some(precedence) => precedence,
+                // Not a binary operator
+                None => break,
+            };
 
-        let op_range = p.cur_range();
+            let stop_at_current_operator = if new_precedence.is_right_to_left() {
+                new_precedence < left_precedence
+            } else {
+                new_precedence <= left_precedence
+            };
 
-        let mut is_bogus = false;
-        if let Present(left) = &mut left {
-            // test js exponent_unary_parenthesized
-            // (delete a.b) ** 2;
-            // (void ident) ** 2;
-            // (typeof ident) ** 2;
-            // (-3) ** 2;
-            // (+3) ** 2;
-            // (~3) ** 2;
-            // (!true) ** 2;
+            if stop_at_current_operator {
+                break;
+            }
 
-            // test_err js exponent_unary_unparenthesized
-            // delete a.b ** 2;
-            // void ident ** 2;
-            // typeof ident ** 2;
-            // -3 ** 2;
-            // +3 ** 2;
-            // ~3 ** 2;
-            // !true ** 2;
+            let op_range = p.cur_range();
 
-            if op == T![**] && left.kind(p) == JS_UNARY_EXPRESSION {
-                let err = p
+            let mut is_bogus = false;
+            if let Present(left) = &mut left {
+                if op == T![**] && left.kind(p) == JS_UNARY_EXPRESSION {
+                    let err = p
 					.err_builder(
 						"unparenthesized unary expression can't appear on the left-hand side of '**'",
                         left.range(p)
@@ -589,129 +581,91 @@ fn parse_binary_or_logical_expression_recursive(
 					.with_detail(op_range, "The operation")
 					.with_detail(left.range(p), "The left-hand side");
 
+                    p.error(err);
+                    is_bogus = true;
+                } else if op != T![in] && left.kind(p) == JS_PRIVATE_NAME {
+                    p.error(private_names_only_allowed_on_left_side_of_in_expression(
+                        p,
+                        left.range(p),
+                    ));
+                    left.change_kind(p, JS_BOGUS_EXPRESSION);
+                }
+            } else {
+                let err = p
+                    .err_builder(
+                        format!(
+                            "Expected an expression for the left hand side of the `{}` operator.",
+                            p.text(op_range),
+                        ),
+                        op_range,
+                    )
+                    .with_hint("This operator requires a left hand side value");
                 p.error(err);
-                is_bogus = true;
-            } else if op != T![in] && left.kind(p) == JS_PRIVATE_NAME {
+            }
+
+            let m = left.precede(p);
+            p.bump(op);
+
+            if op == T![as] {
+                parse_ts_type(p, TypeContext::default()).or_add_diagnostic(p, expected_ts_type);
+                let mut as_expression = m.complete(p, TS_AS_EXPRESSION);
+
+                if TypeScript.is_unsupported(p) {
+                    p.error(ts_only_syntax_error(
+                        p,
+                        "'as' expression",
+                        as_expression.range(p),
+                    ));
+                    as_expression.change_to_bogus(p);
+                }
+                left = Present(as_expression);
+                continue;
+            }
+
+            if op == T![satisfies] {
+                parse_ts_type(p, TypeContext::default()).or_add_diagnostic(p, expected_ts_type);
+                let mut satisfies_expression = m.complete(p, TS_SATISFIES_EXPRESSION);
+
+                if TypeScript.is_unsupported(p) {
+                    p.error(ts_only_syntax_error(
+                        p,
+                        "'satisfies' expression",
+                        satisfies_expression.range(p),
+                    ));
+                    satisfies_expression.change_to_bogus(p);
+                }
+                left = Present(satisfies_expression);
+                continue;
+            }
+
+            let expression_kind = if is_bogus {
+                JS_BOGUS_EXPRESSION
+            } else {
+                match op {
+                    T![??] | T![||] | T![&&] => JS_LOGICAL_EXPRESSION,
+                    T![instanceof] => JS_INSTANCEOF_EXPRESSION,
+                    T![in] => JS_IN_EXPRESSION,
+                    _ => JS_BINARY_EXPRESSION,
+                }
+            };
+
+            stack.push((left_precedence, Some((expression_kind, m))));
+
+            left_precedence = new_precedence;
+            left = parse_unary_expr(p, context).or_else(|| parse_private_name(p));
+        }
+
+        if let Present(left) = &mut left {
+            // Left at this point becomes the right-hand side of a binary expression
+            // or is a standalone expression. Private names aren't allowed as standalone expressions
+            // nor on the right-hand side
+            if left.kind(p) == JS_PRIVATE_NAME {
+                left.change_kind(p, JS_BOGUS_EXPRESSION);
                 p.error(private_names_only_allowed_on_left_side_of_in_expression(
                     p,
                     left.range(p),
                 ));
-                left.change_kind(p, JS_BOGUS_EXPRESSION);
             }
-        } else {
-            let err = p
-                .err_builder(
-                    format!(
-                        "Expected an expression for the left hand side of the `{}` operator.",
-                        p.text(op_range),
-                    ),
-                    op_range,
-                )
-                .with_hint("This operator requires a left hand side value");
-            p.error(err);
-        }
-
-        let m = left.precede(p);
-        p.bump(op);
-
-        // test ts ts_as_expression
-        // let x: any = "string";
-        // let y = x as string;
-        // let z = x as const;
-        // let not_an_as_expression = x
-        // as;
-        // let precedence = "hello" as const + 3 as number as number;
-        if op == T![as] {
-            parse_ts_type(p, TypeContext::default()).or_add_diagnostic(p, expected_ts_type);
-            let mut as_expression = m.complete(p, TS_AS_EXPRESSION);
-
-            if TypeScript.is_unsupported(p) {
-                p.error(ts_only_syntax_error(
-                    p,
-                    "'as' expression",
-                    as_expression.range(p),
-                ));
-                as_expression.change_to_bogus(p);
-            }
-            left = Present(as_expression);
-            continue;
-        }
-
-        // test ts ts_satisfies_expression
-        // interface A {
-        //    a: string
-        // };
-        // let x = { a: 'test' } satisfies A;
-        // let y = { a: 'test', b: 'test' } satisfies A;
-        // const z = undefined satisfies 1;
-        // let not_a_satisfies_expression = undefined
-        // satisfies;
-        // let precedence = "hello" satisfies string + 3 satisfies number satisfies number;
-
-        // test_err js ts_satisfies_expression
-        // let x = "hello" satisfies string;
-        if op == T![satisfies] {
-            parse_ts_type(p, TypeContext::default()).or_add_diagnostic(p, expected_ts_type);
-            let mut satisfies_expression = m.complete(p, TS_SATISFIES_EXPRESSION);
-
-            if TypeScript.is_unsupported(p) {
-                p.error(ts_only_syntax_error(
-                    p,
-                    "'satisfies' expression",
-                    satisfies_expression.range(p),
-                ));
-                satisfies_expression.change_to_bogus(p);
-            }
-            left = Present(satisfies_expression);
-            continue;
-        }
-
-        parse_binary_or_logical_expression(p, new_precedence, context)
-            .or_add_diagnostic(p, expected_expression);
-
-        let expression_kind = if is_bogus {
-            JS_BOGUS_EXPRESSION
-        } else {
-            match op {
-                // test js logical_expressions
-                // foo ?? bar
-                // a || b
-                // a && b
-                //
-                // test_err js logical_expressions_err
-                // foo ?? * 2;
-                // !foo && bar;
-                // foo(foo ||)
-                T![??] | T![||] | T![&&] => JS_LOGICAL_EXPRESSION,
-                T![instanceof] => JS_INSTANCEOF_EXPRESSION,
-                T![in] => JS_IN_EXPRESSION,
-                _ => JS_BINARY_EXPRESSION,
-            }
-        };
-
-        left = Present(m.complete(p, expression_kind));
-    }
-
-    if let Present(left) = &mut left {
-        // Left at this point becomes the right-hand side of a binary expression
-        // or is a standalone expression. Private names aren't allowed as standalone expressions
-        // nor on the right-hand side
-        if left.kind(p) == JS_PRIVATE_NAME {
-            // test_err js private_name_presence_check_recursive
-            // class A {
-            // 	#prop;
-            // 	test() {
-            //    #prop in #prop in this;
-            //    5 + #prop;
-            //    #prop
-            //    #prop + 5;
-            //  }
-            // }
-            left.change_kind(p, JS_BOGUS_EXPRESSION);
-            p.error(private_names_only_allowed_on_left_side_of_in_expression(
-                p,
-                left.range(p),
-            ));
         }
     }
 
@@ -725,7 +679,6 @@ fn parse_binary_or_logical_expression_recursive(
 // new.target
 // new new new new Foo();
 // new Foo(bar, baz, 6 + 6, foo[bar] + ((foo) => {}) * foo?.bar)
-
 // test_err js new_exprs
 // new;
 fn parse_member_expression_or_higher(p: &mut JsParser, context: ExpressionContext) -> ParsedSyntax {
@@ -1032,6 +985,7 @@ pub(super) fn parse_private_name(p: &mut JsParser) -> ParsedSyntax {
 pub(super) fn parse_any_name(p: &mut JsParser) -> ParsedSyntax {
     match p.cur() {
         T![#] => parse_private_name(p),
+        t if t.is_metavariable() => parse_metavariable(p),
         _ => parse_name(p),
     }
 }
@@ -1081,7 +1035,6 @@ pub(super) fn parse_name(p: &mut JsParser) -> ParsedSyntax {
 /// Arguments to a function.
 ///
 /// `"(" (AssignExpr ",")* ")"`
-
 // test js call_arguments
 // function foo(...args) {}
 // let a, b, c, d;
@@ -1139,9 +1092,9 @@ fn parse_call_arguments(p: &mut JsParser) -> ParsedSyntax {
         }
 
         if argument
-            .or_recover(
+            .or_recover_with_token_set(
                 p,
-                &ParseRecovery::new(
+                &ParseRecoveryTokenSet::new(
                     JS_BOGUS_EXPRESSION,
                     EXPR_RECOVERY_SET.union(token_set!(T![')'], T![;], T![...])),
                 )
@@ -1209,6 +1162,10 @@ fn parse_parenthesized_expression(p: &mut JsParser) -> ParsedSyntax {
 
 /// A general expression.
 pub(crate) fn parse_expression(p: &mut JsParser, context: ExpressionContext) -> ParsedSyntax {
+    if is_at_metavariable(p) {
+        return parse_metavariable(p);
+    }
+
     let first = parse_assignment_expression_or_higher(p, context);
 
     if p.at(T![,]) {
@@ -1298,6 +1255,7 @@ fn parse_primary_expression(p: &mut JsParser, context: ExpressionContext) -> Par
     }
 
     let complete = match p.cur() {
+        t if t.is_metavariable() => return parse_metavariable(p),
         T![this] => {
             // test js this_expr
             // this
@@ -1403,12 +1361,13 @@ fn parse_primary_expression(p: &mut JsParser, context: ExpressionContext) -> Par
                 // test js import_call
                 // import("foo")
                 // import("foo", { assert: { type: 'json' } })
+                // import("foo", { with: { 'resolution-mode': 'import' } })
 
                 // test_err js import_invalid_args
                 // import()
                 // import(...["foo"])
                 // import("foo", { assert: { type: 'json' } }, "bar")
-
+                // import("foo", { with: { type: 'json' } }, "bar")
                 let args = p.start();
                 p.bump(T!['(']);
                 let args_list = p.start();
@@ -1543,6 +1502,10 @@ pub(crate) fn is_nth_at_reference_identifier(p: &mut JsParser, n: usize) -> bool
 /// * It is named `await` inside of an async function
 /// * It is named `yield` inside of a generator function or in strict mode
 pub(super) fn parse_identifier(p: &mut JsParser, kind: JsSyntaxKind) -> ParsedSyntax {
+    if is_at_metavariable(p) {
+        return parse_metavariable(p);
+    }
+
     if !is_at_identifier(p) {
         return Absent;
     }
@@ -1557,8 +1520,7 @@ pub(super) fn parse_identifier(p: &mut JsParser, kind: JsSyntaxKind) -> ParsedSy
                 let name = p.cur_text();
                 Some(p.err_builder(
                     format!(
-                        "Illegal use of reserved keyword `{}` as an identifier in strict mode",
-                        name
+                        "Illegal use of reserved keyword `{name}` as an identifier in strict mode"
                     ),
                     p.cur_range(),
                 ))
@@ -1622,7 +1584,6 @@ pub(crate) fn is_nth_at_identifier_or_keyword(p: &mut JsParser, n: usize) -> boo
 // let c = `${foo}`;
 // let d = `foo`;
 // let e = `${{ a: "string" }}`;
-
 // test_err js template_literal
 // let a = `foo ${}`
 // let b = `${a a}`
@@ -1695,7 +1656,7 @@ pub(crate) fn parse_template_elements<P>(
                 if !p.at(T!['}']) {
                     p.error(expected_token(T!['}']));
                     // Seems there's more. For example a `${a a}`. We must eat all tokens away to avoid a panic because of an unexpected token
-                    let _ =  ParseRecovery::new(JS_BOGUS, token_set![T!['}'], TEMPLATE_CHUNK, DOLLAR_CURLY, ERROR_TOKEN, BACKTICK]).recover(p);
+                    let _ =  ParseRecoveryTokenSet::new(JS_BOGUS, token_set![T!['}'], TEMPLATE_CHUNK, DOLLAR_CURLY, ERROR_TOKEN, BACKTICK]).recover(p);
                     if !p.at(T!['}']) {
                         e.complete(p, element_kind);
                         // Failed to fully recover, unclear where we are now, exit
@@ -1736,9 +1697,9 @@ impl ParseSeparatedList for ArrayElementsList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS_EXPRESSION,
                 EXPR_RECOVERY_SET.union(token_set!(T![']'])),
             ),
@@ -1763,7 +1724,6 @@ impl ParseSeparatedList for ArrayElementsList {
 // [foo,];
 // [,,,,,foo,,,,];
 // [...a, ...b];
-
 // test_err js array_expr_incomplete
 // let a = [
 fn parse_array_expr(p: &mut JsParser) -> ParsedSyntax {
@@ -1784,7 +1744,7 @@ fn parse_array_expr(p: &mut JsParser) -> ParsedSyntax {
 // test_err js spread
 // [...]
 /// A spread element consisting of three dots and an assignment expression such as `...foo`
-fn parse_spread_element(p: &mut JsParser, context: ExpressionContext) -> ParsedSyntax {
+pub(crate) fn parse_spread_element(p: &mut JsParser, context: ExpressionContext) -> ParsedSyntax {
     if !p.at(T![...]) {
         return Absent;
     }
@@ -2073,6 +2033,9 @@ pub(super) fn parse_unary_expr(p: &mut JsParser, context: ExpressionContext) -> 
         // delete (obj?.inner.#member)[key];
         // delete (obj.#key, obj.key);
         // delete (#key in obj);
+        // delete (obj.key);
+        // delete (console.log(1));
+        // delete (() => {});
 
         // test js unary_delete_nested
         // class TestClass { #member = true; method() { delete func(this.#member) } }
@@ -2101,14 +2064,14 @@ pub(super) fn parse_unary_expr(p: &mut JsParser, context: ExpressionContext) -> 
 
         let mut kind = JS_UNARY_EXPRESSION;
 
-        let res = if is_delete {
+        if is_delete {
             let checkpoint = p.checkpoint();
             parse_unary_expr(p, context).ok();
 
             let mut rewriter = DeleteExpressionRewriter::default();
             rewrite_events(&mut rewriter, checkpoint, p);
 
-            rewriter.result.take().map(|res| {
+            rewriter.result.take().inspect(|_| {
                 if StrictMode.is_supported(p) {
                     if let Some(range) = rewriter.exited_ident_expr {
                         kind = JS_BOGUS_EXPRESSION;
@@ -2126,27 +2089,10 @@ pub(super) fn parse_unary_expr(p: &mut JsParser, context: ExpressionContext) -> 
                         range,
                     ));
                 }
-
-                res
             })
         } else {
             parse_unary_expr(p, context).ok()
         };
-
-        if is_delete && kind != JS_BOGUS_EXPRESSION && TypeScript.is_supported(p) {
-            if let Some(res) = res {
-                match res.kind(p) {
-                    JS_STATIC_MEMBER_EXPRESSION | JS_COMPUTED_MEMBER_EXPRESSION => {}
-                    _ => {
-                        kind = JS_BOGUS_EXPRESSION;
-                        p.error(p.err_builder(
-                            "the target for a delete operator must be a property access",
-                            res.range(p),
-                        ));
-                    }
-                }
-            }
-        }
 
         return Present(m.complete(p, kind));
     }

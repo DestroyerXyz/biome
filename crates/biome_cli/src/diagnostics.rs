@@ -1,10 +1,8 @@
-use biome_console::fmt::{Display, Formatter};
 use biome_console::markup;
-use biome_diagnostics::adapters::{BpafError, IoError};
 use biome_diagnostics::{
-    Advices, Category, Diagnostic, DiagnosticTags, Error, Location, LogCategory,
-    MessageAndDescription, Severity, Visit,
+    Advices, Category, Diagnostic, Error, LogCategory, MessageAndDescription, Severity, Visit,
 };
+use biome_diagnostics::{BpafError, IoError, SerdeJsonError};
 use biome_service::WorkspaceError;
 use std::process::{ExitCode, Termination};
 use std::{env::current_exe, fmt::Debug};
@@ -19,7 +17,7 @@ fn command_name() -> String {
 /// A diagnostic that is emitted when running biome via CLI.
 ///
 /// When displaying the diagnostic,
-#[derive(Debug)]
+#[derive(Debug, Diagnostic)]
 pub enum CliDiagnostic {
     /// Returned when it is called with a subcommand it doesn't know
     UnknownCommand(UnknownCommand),
@@ -55,6 +53,10 @@ pub enum CliDiagnostic {
     NoFilesWereProcessed(NoFilesWereProcessed),
     /// Errors thrown when running the `biome migrate` command
     MigrateError(MigrationDiagnostic),
+    /// Emitted during the reporting phase
+    Report(ReportDiagnostic),
+    /// Emitted when there's an error emitted when using stdin mode
+    Stdin(StdinDiagnostic),
 }
 
 #[derive(Debug, Diagnostic)]
@@ -255,12 +257,10 @@ pub struct DeprecatedArgument {
     pub message: MessageAndDescription,
 }
 
-impl DeprecatedArgument {
-    pub fn new(message: impl Display) -> Self {
-        Self {
-            message: MessageAndDescription::from(markup! {{message}}.to_owned()),
-        }
-    }
+#[derive(Debug, Diagnostic)]
+pub enum ReportDiagnostic {
+    /// Emitted when trying to serialise the report
+    Serialization(SerdeJsonError),
 }
 
 /// Advices for the [CliDiagnostic]
@@ -408,35 +408,8 @@ impl CliDiagnostic {
         })
     }
 
-    /// Emitted for a file that has code fixes, but still has diagnostics to address
-    pub fn file_check_apply_error(
-        file_path: impl Into<String>,
-        category: &'static Category,
-    ) -> Self {
-        Self::FileCheck(FileCheck {
-            file_path: file_path.into(),
-            category,
-            message: MessageAndDescription::from(
-                markup! {
-                    "Fixes applied to the file, but there are still diagnostics to address."
-                }
-                .to_owned(),
-            ),
-        })
-    }
-
-    /// Emitted when the file has diagnostics.
-    pub fn file_check_error(file_path: impl Into<String>, category: &'static Category) -> Self {
-        Self::FileCheck(FileCheck {
-            file_path: file_path.into(),
-            category,
-            message: MessageAndDescription::from(
-                markup! {
-                    "The file contains diagnostics that needs to be addressed."
-                }
-                .to_owned(),
-            ),
-        })
+    pub fn stdin() -> Self {
+        Self::Stdin(StdinDiagnostic::default())
     }
 
     /// Emitted when the server is not running
@@ -470,201 +443,6 @@ impl CliDiagnostic {
     }
 }
 
-impl Diagnostic for CliDiagnostic {
-    fn category(&self) -> Option<&'static Category> {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.category(),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.category(),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.category(),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.category(),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.category(),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.category(),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.category(),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.category(),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => diagnostic.category(),
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.category(),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.category(),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.category(),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => diagnostic.category(),
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.category(),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.category(),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.category(),
-        }
-    }
-
-    fn tags(&self) -> DiagnosticTags {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.tags(),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.tags(),
-        }
-    }
-
-    fn severity(&self) -> Severity {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.severity(),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.severity(),
-        }
-    }
-
-    fn location(&self) -> Location<'_> {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.location(),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.location(),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.location(),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.location(),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.location(),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.location(),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.location(),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.location(),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => diagnostic.location(),
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.location(),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.location(),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.location(),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => diagnostic.location(),
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.location(),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.location(),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.location(),
-        }
-    }
-
-    fn message(&self, fmt: &mut Formatter<'_>) -> std::io::Result<()> {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.message(fmt),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.message(fmt),
-        }
-    }
-
-    fn description(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.description(fmt),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.description(fmt),
-        }
-    }
-
-    fn advices(&self, visitor: &mut dyn Visit) -> std::io::Result<()> {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.advices(visitor),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.advices(visitor),
-        }
-    }
-
-    fn verbose_advices(&self, visitor: &mut dyn Visit) -> std::io::Result<()> {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => {
-                diagnostic.verbose_advices(visitor)
-            }
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => {
-                diagnostic.verbose_advices(visitor)
-            }
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.verbose_advices(visitor),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.verbose_advices(visitor),
-        }
-    }
-
-    fn source(&self) -> Option<&dyn Diagnostic> {
-        match self {
-            CliDiagnostic::UnknownCommand(diagnostic) => diagnostic.source(),
-            CliDiagnostic::UnknownCommandHelp(diagnostic) => diagnostic.source(),
-            CliDiagnostic::ParseError(diagnostic) => diagnostic.source(),
-            CliDiagnostic::UnexpectedArgument(diagnostic) => diagnostic.source(),
-            CliDiagnostic::MissingArgument(diagnostic) => diagnostic.source(),
-            CliDiagnostic::EmptyArguments(diagnostic) => diagnostic.source(),
-            CliDiagnostic::IncompatibleArguments(diagnostic) => diagnostic.source(),
-            CliDiagnostic::CheckError(diagnostic) => diagnostic.source(),
-            CliDiagnostic::OverflowNumberArgument(diagnostic) => diagnostic.source(),
-            CliDiagnostic::WorkspaceError(diagnostic) => diagnostic.source(),
-            CliDiagnostic::IoError(diagnostic) => diagnostic.source(),
-            CliDiagnostic::ServerNotRunning(diagnostic) => diagnostic.source(),
-            CliDiagnostic::IncompatibleEndConfiguration(diagnostic) => diagnostic.source(),
-            CliDiagnostic::NoFilesWereProcessed(diagnostic) => diagnostic.source(),
-            CliDiagnostic::FileCheck(diagnostic) => diagnostic.source(),
-            CliDiagnostic::MigrateError(diagnostic) => diagnostic.source(),
-        }
-    }
-}
-
 impl From<WorkspaceError> for CliDiagnostic {
     fn from(error: WorkspaceError) -> Self {
         CliDiagnostic::workspace_error(error)
@@ -688,25 +466,13 @@ impl Termination for CliDiagnostic {
     }
 }
 
-#[derive(Debug, Diagnostic)]
+#[derive(Debug, Default, Diagnostic)]
 #[diagnostic(
-category = "internalError/fs",
-    severity = Warning,
-    message(
-        description = "The configuration file {path} is deprecated. Use biome.json instead.",
-        message("The configuration file "<Emphasis>{self.path}</Emphasis>" is deprecated. Use "<Emphasis>"biome.json"</Emphasis>" instead."),
-    )
+    severity = Error,
+    category = "stdin",
+    message = "The contents aren't fixed. Use the `--fix` flag to fix them."
 )]
-pub struct DeprecatedConfigurationFile {
-    #[location(resource)]
-    pub path: String,
-}
-
-impl DeprecatedConfigurationFile {
-    pub fn new(path: impl Into<String>) -> Self {
-        Self { path: path.into() }
-    }
-}
+pub struct StdinDiagnostic {}
 
 #[cfg(test)]
 mod test {
@@ -716,7 +482,7 @@ mod test {
     fn termination_diagnostic_size() {
         assert_eq!(
             std::mem::size_of::<CliDiagnostic>(),
-            104,
+            96,
             "you successfully decreased the size of the diagnostic!"
         )
     }

@@ -1,10 +1,10 @@
 use crate::prelude::*;
 use biome_js_syntax::JsFileSource;
 use biome_rowan::{TextRange, TextSize};
-use bitflags::bitflags;
+use enumflags2::{bitflags, make_bitflags, BitFlags};
 use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::{BitOr, BitOrAssign, Deref, DerefMut, Range, Sub};
 
 type LabelSet = IndexMap<String, LabelledItem>;
 
@@ -85,7 +85,7 @@ pub(crate) struct ExportDefaultItem {
 /// State kept by the parser while parsing.
 /// It is required for things such as strict mode or async functions
 #[derive(Debug)]
-pub(crate) struct ParserState {
+pub(crate) struct JsParserState {
     parsing_context: ParsingContextFlags,
     /// A list of labels for labelled statements used to report undefined label errors
     /// for break and continue, as well as duplicate labels.
@@ -126,9 +126,9 @@ pub(crate) enum StrictMode {
     Class(TextRange),
 }
 
-impl ParserState {
+impl JsParserState {
     pub fn new(source_type: &JsFileSource) -> Self {
-        let mut state = ParserState {
+        let mut state = JsParserState {
             parsing_context: ParsingContextFlags::TOP_LEVEL,
             label_set: IndexMap::new(),
             strict: source_type
@@ -201,58 +201,58 @@ impl ParserState {
         self.label_set.get(label)
     }
 
-    pub(super) fn checkpoint(&self) -> ParserStateCheckpoint {
-        ParserStateCheckpoint::snapshot(self)
+    pub(super) fn checkpoint(&self) -> JsParserStateCheckpoint {
+        JsParserStateCheckpoint::snapshot(self)
     }
 
-    pub(super) fn restore(&mut self, checkpoint: ParserStateCheckpoint) {
+    pub(super) fn restore(&mut self, checkpoint: JsParserStateCheckpoint) {
         checkpoint.rewind(self);
     }
 }
 
-/// Stores a checkpoint of the [ParserState].
+/// Stores a checkpoint of the [JsParserState].
 /// Allows rewinding the state to its previous state.
 ///
 /// It's important that creating and rewinding a snapshot is cheap. Consider the performance implications
 /// before adding new unscoped state.
 #[derive(Debug)]
-pub(super) struct ParserStateCheckpoint {
+pub(super) struct JsParserStateCheckpoint {
     /// Additional data that we only want to store in debug mode
     #[cfg(debug_assertions)]
-    debug_checkpoint: DebugParserStateCheckpoint,
+    debug_checkpoint: JsDebugParserStateCheckpoint,
 }
 
-impl ParserStateCheckpoint {
+impl JsParserStateCheckpoint {
     /// Creates a snapshot of the passed in state.
     #[cfg(debug_assertions)]
-    fn snapshot(state: &ParserState) -> Self {
+    fn snapshot(state: &JsParserState) -> Self {
         Self {
-            debug_checkpoint: DebugParserStateCheckpoint::snapshot(state),
+            debug_checkpoint: JsDebugParserStateCheckpoint::snapshot(state),
         }
     }
 
     #[cfg(not(debug_assertions))]
-    fn snapshot(_: &ParserState) -> Self {
+    fn snapshot(_: &JsParserState) -> Self {
         Self {}
     }
 
     /// Restores the `state values` to the time when this snapshot was created.
     #[cfg(debug_assertions)]
-    fn rewind(self, state: &mut ParserState) {
+    fn rewind(self, state: &mut JsParserState) {
         self.debug_checkpoint.rewind(state);
     }
 
     #[cfg(not(debug_assertions))]
-    fn rewind(self, _: &ParserState) {}
+    fn rewind(self, _: &JsParserState) {}
 }
 
-/// Most of the [ParserState] is scoped state. It should, therefore, not be necessary to rewind
+/// Most of the [JsParserState] is scoped state. It should, therefore, not be necessary to rewind
 /// that state because that's already taken care of by `with_state` and `with_scoped_state`.
 /// But, you can never no and better be safe than sorry. That's why we use some heuristics
 /// to verify that non of the scoped state did change and assert for it when rewinding.
 #[derive(Debug, Clone)]
 #[cfg(debug_assertions)]
-pub(super) struct DebugParserStateCheckpoint {
+pub(super) struct JsDebugParserStateCheckpoint {
     parsing_context: ParsingContextFlags,
     label_set_len: usize,
     strict: Option<StrictMode>,
@@ -262,8 +262,8 @@ pub(super) struct DebugParserStateCheckpoint {
 }
 
 #[cfg(debug_assertions)]
-impl DebugParserStateCheckpoint {
-    fn snapshot(state: &ParserState) -> Self {
+impl JsDebugParserStateCheckpoint {
+    fn snapshot(state: &JsParserState) -> Self {
         Self {
             parsing_context: state.parsing_context,
             label_set_len: state.label_set.len(),
@@ -274,7 +274,7 @@ impl DebugParserStateCheckpoint {
         }
     }
 
-    fn rewind(self, state: &mut ParserState) {
+    fn rewind(self, state: &mut JsParserState) {
         assert_eq!(state.parsing_context, self.parsing_context);
         assert_eq!(state.label_set.len(), self.label_set_len);
         assert_eq!(state.strict, self.strict);
@@ -306,7 +306,7 @@ impl<'parser, 't, C: ChangeParserState> ParserStateGuard<'parser, 't, C> {
     }
 }
 
-impl<'parser, 't, C: ChangeParserState> Drop for ParserStateGuard<'parser, 't, C> {
+impl<C: ChangeParserState> Drop for ParserStateGuard<'_, '_, C> {
     fn drop(&mut self) {
         let snapshot = std::mem::take(&mut self.snapshot);
 
@@ -314,7 +314,7 @@ impl<'parser, 't, C: ChangeParserState> Drop for ParserStateGuard<'parser, 't, C
     }
 }
 
-impl<'parser, 't, C: ChangeParserState> Deref for ParserStateGuard<'parser, 't, C> {
+impl<'t, C: ChangeParserState> Deref for ParserStateGuard<'_, 't, C> {
     type Target = JsParser<'t>;
 
     fn deref(&self) -> &Self::Target {
@@ -322,7 +322,7 @@ impl<'parser, 't, C: ChangeParserState> Deref for ParserStateGuard<'parser, 't, 
     }
 }
 
-impl<'parser, 't, C: ChangeParserState> DerefMut for ParserStateGuard<'parser, 't, C> {
+impl<C: ChangeParserState> DerefMut for ParserStateGuard<'_, '_, C> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner
     }
@@ -333,10 +333,10 @@ pub(crate) trait ChangeParserState {
     type Snapshot: Default;
 
     /// Applies the change to the passed in state and returns snapshot that allows restoring the previous state.
-    fn apply(self, state: &mut ParserState) -> Self::Snapshot;
+    fn apply(self, state: &mut JsParserState) -> Self::Snapshot;
 
     /// Restores the state to its previous value
-    fn restore(state: &mut ParserState, value: Self::Snapshot);
+    fn restore(state: &mut JsParserState, value: Self::Snapshot);
 }
 
 #[derive(Default, Debug)]
@@ -349,27 +349,42 @@ impl ChangeParserState for EnableStrictMode {
     type Snapshot = EnableStrictModeSnapshot;
 
     #[inline]
-    fn apply(self, state: &mut ParserState) -> Self::Snapshot {
+    fn apply(self, state: &mut JsParserState) -> Self::Snapshot {
         EnableStrictModeSnapshot(std::mem::replace(&mut state.strict, Some(self.0)))
     }
 
     #[inline]
-    fn restore(state: &mut ParserState, value: Self::Snapshot) {
+    fn restore(state: &mut JsParserState, value: Self::Snapshot) {
         state.strict = value.0
     }
 }
 
-bitflags! {
-    #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[bitflags]
+#[repr(u8)]
+enum SignatureFlag {
+    Async = 1 << 0,
+    Generator = 1 << 1,
+    Constructor = 1 << 2,
+}
 
-    /// Flags describing the context of a function.
-    pub(crate) struct SignatureFlags: u8 {
-        /// Is the function in an async context
-        const ASYNC 		= 1 << 0;
-        /// Is the function in a generator context
-        const GENERATOR 	= 1 << 1;
-        /// Is the function a constructor (or constructor context)
-        const CONSTRUCTOR 	= 1 << 2;
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub(crate) struct SignatureFlags(BitFlags<SignatureFlag>);
+
+impl SignatureFlags {
+    /// Is the function in an async context
+    pub const ASYNC: Self = Self(make_bitflags!(SignatureFlag::{Async}));
+    /// Is the function in a generator context
+    pub const GENERATOR: Self = Self(make_bitflags!(SignatureFlag::{Generator}));
+    /// Is the function a constructor (or constructor context)
+    pub const CONSTRUCTOR: Self = Self(make_bitflags!(SignatureFlag::{Constructor}));
+
+    pub const fn empty() -> Self {
+        Self(BitFlags::EMPTY)
+    }
+
+    pub fn contains(&self, other: impl Into<SignatureFlags>) -> bool {
+        self.0.contains(other.into().0)
     }
 }
 
@@ -393,48 +408,108 @@ impl From<SignatureFlags> for ParsingContextFlags {
     }
 }
 
-bitflags! {
-    /// Flags representing the parsing state.
-    /// The reasons to use flags instead of individual boolean fields on `ParserState` are:
-    /// * It's possible to use bit masks to define what state should be inherited. For example,
-    ///   functions inherit whether they're defined inside a parameter but override the `in_async` flag
-    /// * It's easier to snapshot the previous state. Individual boolean fields would require that a change
-    ///   snapshots each individual boolean field to allow restoring the previous state. With bitflags, all that
-    ///   is needed is to copy away the flags field and restore it after.
-    #[derive(Debug, Copy, Default, Clone, Eq, PartialEq)]
-    pub(crate) struct ParsingContextFlags: u8 {
-        /// Whether the parser is in a generator function like `function* a() {}`
-        /// Matches the `Yield` parameter in the ECMA spec
-        const IN_GENERATOR = 1 << 0;
-        /// Whether the parser is inside a function
-        const IN_FUNCTION = 1 << 1;
-        /// Whatever the parser is inside a constructor
-        const IN_CONSTRUCTOR = 1 << 2;
+impl BitOr for SignatureFlags {
+    type Output = Self;
 
-        /// Is async allowed in this context. Either because it's an async function or top level await is supported.
-        /// Equivalent to the `Async` generator in the ECMA spec
-        const IN_ASYNC = 1 << 3;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        SignatureFlags(self.0 | rhs.0)
+    }
+}
 
-        /// Whether the parser is parsing a top-level statement (not inside a class, function, parameter) or not
-        const TOP_LEVEL = 1 << 4;
+impl BitOrAssign for SignatureFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
 
-        /// Whether the parser is in an iteration or switch statement and
-        /// `break` is allowed.
-        const BREAK_ALLOWED = 1 << 5;
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[bitflags]
+#[repr(u8)]
+enum ParsingContextFlag {
+    InGenerator = 1 << 0,
+    InFunction = 1 << 1,
+    InConstructor = 1 << 2,
+    InAsync = 1 << 3,
+    TopLevel = 1 << 4,
+    BreakAllowed = 1 << 5,
+    ContinueAllowed = 1 << 6,
+    AmbientContext = 1 << 7,
+}
 
-        /// Whether the parser is in an iteration statement and `continue` is allowed.
-        const CONTINUE_ALLOWED = 1 << 6;
+/// Flags representing the parsing state.
+/// The reasons to use flags instead of individual boolean fields on `ParserState` are:
+/// * It's possible to use bit masks to define what state should be inherited. For example,
+///   functions inherit whether they're defined inside a parameter but override the `in_async` flag
+/// * It's easier to snapshot the previous state. Individual boolean fields would require that a change
+///   snapshots each individual boolean field to allow restoring the previous state. With bitflags, all that
+///   is needed is to copy away the flags field and restore it after.
+#[derive(Debug, Copy, Default, Clone, Eq, PartialEq)]
+pub(crate) struct ParsingContextFlags(BitFlags<ParsingContextFlag>);
 
-        /// Whatever the parser is in a TypeScript ambient context
-        const AMBIENT_CONTEXT = 1 << 7;
+impl ParsingContextFlags {
+    /// Whether the parser is in a generator function like `function* a() {}`
+    /// Matches the `Yield` parameter in the ECMA spec
+    const IN_GENERATOR: Self = Self(make_bitflags!(ParsingContextFlag::{InGenerator}));
+    /// Whether the parser is inside a function
+    const IN_FUNCTION: Self = Self(make_bitflags!(ParsingContextFlag::{InFunction}));
+    /// Whatever the parser is inside a constructor
+    const IN_CONSTRUCTOR: Self = Self(make_bitflags!(ParsingContextFlag::{InConstructor}));
 
-        const LOOP = Self::BREAK_ALLOWED.bits() | Self::CONTINUE_ALLOWED.bits();
+    /// Is async allowed in this context. Either because it's an async function or top level await is supported.
+    /// Equivalent to the `Async` generator in the ECMA spec
+    const IN_ASYNC: Self = Self(make_bitflags!(ParsingContextFlag::{InAsync}));
 
-        /// Bitmask of all the flags that must be reset (shouldn't be inherited) when the parser enters a function
-        const FUNCTION_RESET_MASK = Self::BREAK_ALLOWED.bits() | Self::CONTINUE_ALLOWED.bits() | Self::IN_CONSTRUCTOR.bits() | Self::IN_ASYNC.bits() | Self::IN_GENERATOR.bits() | Self::TOP_LEVEL.bits();
+    /// Whether the parser is parsing a top-level statement (not inside a class, function, parameter) or not
+    const TOP_LEVEL: Self = Self(make_bitflags!(ParsingContextFlag::{TopLevel}));
 
-        /// Bitmask of all the flags that must be reset (shouldn't be inherited) when entering parameters.
-        const PARAMETER_RESET_MASK = Self::IN_CONSTRUCTOR.bits() | Self::IN_FUNCTION.bits() | Self::TOP_LEVEL.bits() | Self::IN_GENERATOR.bits() | Self::IN_ASYNC.bits();
+    /// Whether the parser is in an iteration or switch statement and
+    /// `break` is allowed.
+    const BREAK_ALLOWED: Self = Self(make_bitflags!(ParsingContextFlag::{BreakAllowed}));
+
+    /// Whether the parser is in an iteration statement and `continue` is allowed.
+    const CONTINUE_ALLOWED: Self = Self(make_bitflags!(ParsingContextFlag::{ContinueAllowed}));
+
+    /// Whether the parser is in a TypeScript ambient context
+    const AMBIENT_CONTEXT: Self = Self(make_bitflags!(ParsingContextFlag::{AmbientContext}));
+
+    /// Bitmask of all the flags that must be reset (shouldn't be inherited) when the parser enters a function
+    const FUNCTION_RESET_MASK: Self = Self(
+        make_bitflags!(ParsingContextFlag::{BreakAllowed | ContinueAllowed | InConstructor | InAsync | InGenerator | TopLevel }),
+    );
+
+    /// Bitmask of all the flags that must be reset (shouldn't be inherited) when entering parameters.
+    const PARAMETER_RESET_MASK: Self = Self(
+        make_bitflags!(ParsingContextFlag::{InConstructor | InFunction | TopLevel | InGenerator | InAsync }),
+    );
+
+    pub const fn empty() -> Self {
+        Self(BitFlags::EMPTY)
+    }
+
+    pub fn contains(&self, other: impl Into<ParsingContextFlags>) -> bool {
+        self.0.contains(other.into().0)
+    }
+}
+
+impl BitOr for ParsingContextFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        ParsingContextFlags(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for ParsingContextFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl Sub for ParsingContextFlags {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 & !rhs.0)
     }
 }
 
@@ -448,12 +523,12 @@ pub(crate) trait ChangeParserStateFlags {
 impl<T: ChangeParserStateFlags> ChangeParserState for T {
     type Snapshot = ParsingContextFlagsSnapshot;
 
-    fn apply(self, state: &mut ParserState) -> Self::Snapshot {
+    fn apply(self, state: &mut JsParserState) -> Self::Snapshot {
         let new_flags = self.compute_new_flags(state.parsing_context);
         ParsingContextFlagsSnapshot(std::mem::replace(&mut state.parsing_context, new_flags))
     }
 
-    fn restore(state: &mut ParserState, value: Self::Snapshot) {
+    fn restore(state: &mut JsParserState, value: Self::Snapshot) {
         state.parsing_context = value.0
     }
 }
@@ -507,7 +582,7 @@ impl ChangeParserState for EnterFunction {
     type Snapshot = EnterFunctionSnapshot;
 
     #[inline]
-    fn apply(self, state: &mut ParserState) -> Self::Snapshot {
+    fn apply(self, state: &mut JsParserState) -> Self::Snapshot {
         let new_flags = (state.parsing_context - ParsingContextFlags::FUNCTION_RESET_MASK)
             | ParsingContextFlags::IN_FUNCTION
             | ParsingContextFlags::from(self.0);
@@ -519,7 +594,7 @@ impl ChangeParserState for EnterFunction {
     }
 
     #[inline]
-    fn restore(state: &mut ParserState, value: Self::Snapshot) {
+    fn restore(state: &mut JsParserState, value: Self::Snapshot) {
         state.parsing_context = value.parsing_context;
         state.label_set = value.label_set;
     }
@@ -547,7 +622,7 @@ pub(crate) struct EnterClassStaticInitializationBlock;
 impl ChangeParserState for EnterClassStaticInitializationBlock {
     type Snapshot = EnterClassStaticInitializationBlockSnapshot;
 
-    fn apply(self, state: &mut ParserState) -> Self::Snapshot {
+    fn apply(self, state: &mut JsParserState) -> Self::Snapshot {
         let flags = (state.parsing_context
             - ParsingContextFlags::FUNCTION_RESET_MASK
             - ParsingContextFlags::IN_FUNCTION)
@@ -558,7 +633,7 @@ impl ChangeParserState for EnterClassStaticInitializationBlock {
         }
     }
 
-    fn restore(state: &mut ParserState, value: Self::Snapshot) {
+    fn restore(state: &mut JsParserState, value: Self::Snapshot) {
         state.parsing_context = value.flags;
         state.label_set = value.label_set;
     }
@@ -577,7 +652,7 @@ pub(crate) struct WithLabel(pub String, pub LabelledItem);
 impl ChangeParserState for WithLabel {
     type Snapshot = WithLabelSnapshot;
 
-    fn apply(self, state: &mut ParserState) -> Self::Snapshot {
+    fn apply(self, state: &mut JsParserState) -> Self::Snapshot {
         #[cfg(debug_assertions)]
         let previous_len = state.label_set.len();
         state.label_set.insert(self.0, self.1);
@@ -591,12 +666,12 @@ impl ChangeParserState for WithLabel {
     }
 
     #[cfg(not(debug_assertions))]
-    fn restore(state: &mut ParserState, _: Self::Snapshot) {
+    fn restore(state: &mut JsParserState, _: Self::Snapshot) {
         state.label_set.pop();
     }
 
     #[cfg(debug_assertions)]
-    fn restore(state: &mut ParserState, value: Self::Snapshot) {
+    fn restore(state: &mut JsParserState, value: Self::Snapshot) {
         assert_eq!(state.label_set.len(), value.label_set_len + 1);
         state.label_set.pop();
     }
@@ -623,7 +698,7 @@ pub(crate) struct EnterAmbientContext;
 impl ChangeParserState for EnterAmbientContext {
     type Snapshot = EnterAmbientContextSnapshot;
 
-    fn apply(self, state: &mut ParserState) -> Self::Snapshot {
+    fn apply(self, state: &mut JsParserState) -> Self::Snapshot {
         let new_flags = state.parsing_context | ParsingContextFlags::AMBIENT_CONTEXT;
         EnterAmbientContextSnapshot {
             flags: std::mem::replace(&mut state.parsing_context, new_flags),
@@ -632,7 +707,7 @@ impl ChangeParserState for EnterAmbientContext {
         }
     }
 
-    fn restore(state: &mut ParserState, value: Self::Snapshot) {
+    fn restore(state: &mut JsParserState, value: Self::Snapshot) {
         state.parsing_context = value.flags;
         state.default_item = value.default_item;
         state.strict = value.strict_mode;

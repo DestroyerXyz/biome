@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: sumOfPrimes.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -23,7 +24,7 @@ function sumOfPrimes(max) {
 ```
 sumOfPrimes.js:1:10 lint/complexity/noExcessiveCognitiveComplexity ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Excessive complexity detected.
+  i Excessive complexity of 7 detected (max: 6).
   
   > 1 │ function sumOfPrimes(max) {
       │          ^^^^^^^^^^^
@@ -34,5 +35,3 @@ sumOfPrimes.js:1:10 lint/complexity/noExcessiveCognitiveComplexity ━━━━�
   
 
 ```
-
-

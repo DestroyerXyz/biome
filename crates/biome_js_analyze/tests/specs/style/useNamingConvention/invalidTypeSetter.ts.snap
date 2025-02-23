@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidTypeSetter.ts
+snapshot_kind: text
 ---
 # Input
-```js
+```ts
 export interface X {
     set X(x: unknown )
 
@@ -21,7 +22,7 @@ export interface X {
 ```
 invalidTypeSetter.ts:2:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This setter name should be in camelCase.
+  i This setter name should be in camelCase.
   
     1 │ export interface X {
   > 2 │     set X(x: unknown )
@@ -29,15 +30,13 @@ invalidTypeSetter.ts:2:9 lint/style/useNamingConvention ━━━━━━━━
     3 │ 
     4 │     set PROPERTY(x: unknown )
   
-  i The name could be renamed to `x`.
-  
 
 ```
 
 ```
 invalidTypeSetter.ts:4:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This setter name should be in camelCase.
+  i This setter name should be in camelCase.
   
     2 │     set X(x: unknown )
     3 │ 
@@ -46,15 +45,13 @@ invalidTypeSetter.ts:4:9 lint/style/useNamingConvention ━━━━━━━━
     5 │ 
     6 │     set SpecialProperty(x: unknown )
   
-  i The name could be renamed to `property`.
-  
 
 ```
 
 ```
 invalidTypeSetter.ts:6:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This setter name should be in camelCase.
+  i This setter name should be in camelCase.
   
     4 │     set PROPERTY(x: unknown )
     5 │ 
@@ -63,15 +60,13 @@ invalidTypeSetter.ts:6:9 lint/style/useNamingConvention ━━━━━━━━
     7 │ 
     8 │     set special_property(x: unknown )
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
 ```
 invalidTypeSetter.ts:8:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This setter name should be in camelCase.
+  i This setter name should be in camelCase.
   
      6 │     set SpecialProperty(x: unknown )
      7 │ 
@@ -80,15 +75,13 @@ invalidTypeSetter.ts:8:9 lint/style/useNamingConvention ━━━━━━━━
      9 │ 
     10 │     set Unknown_Style(x: unknown )
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
 ```
 invalidTypeSetter.ts:10:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This setter name should be in camelCase.
+  i This setter name should be in camelCase.
   
      8 │     set special_property(x: unknown )
      9 │ 
@@ -96,9 +89,5 @@ invalidTypeSetter.ts:10:9 lint/style/useNamingConvention ━━━━━━━�
        │         ^^^^^^^^^^^^^
     11 │ }
   
-  i The name could be renamed to `unknownStyle`.
-  
 
 ```
-
-

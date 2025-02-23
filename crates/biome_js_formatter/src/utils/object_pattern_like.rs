@@ -129,8 +129,8 @@ impl JsObjectPatternLike {
                 .parent::<AnyJsFormalParameter>()
                 .and_then(|parameter| parameter.syntax().grand_parent())
                 .and_then(FormatAnyJsParameters::cast)
-                .map_or(false, |parameters| {
-                    should_hug_function_parameters(&parameters, comments).unwrap_or(false)
+                .is_some_and(|parameters| {
+                    should_hug_function_parameters(&parameters, comments, false).unwrap_or(false)
                 }),
         }
     }

@@ -90,7 +90,7 @@ impl PrinterOptions {
         self.indent_width
     }
 
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub(super) const fn line_ending(&self) -> LineEnding {
         self.line_ending
     }
@@ -99,7 +99,7 @@ impl PrinterOptions {
 impl Default for PrinterOptions {
     fn default() -> Self {
         PrinterOptions {
-            indent_width: 2.into(),
+            indent_width: IndentWidth::default(),
             print_width: PrintWidth::default(),
             indent_style: Default::default(),
             line_ending: LineEnding::Lf,

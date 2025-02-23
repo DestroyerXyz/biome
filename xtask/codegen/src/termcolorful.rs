@@ -1,5 +1,5 @@
 #[derive(Copy, Clone, Debug)]
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub(crate) enum Color {
     Red,
     Green,
@@ -25,5 +25,5 @@ impl std::fmt::Display for Color {
     }
 }
 pub(crate) fn println_string_with_fg_color(content: String, color: Color) {
-    println!("\x1b[0;{}m{}\x1b[0m", color, content);
+    println!("\x1b[0;{color}m{content}\x1b[0m");
 }

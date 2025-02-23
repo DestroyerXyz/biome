@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: valid.jsx
 ---
 # Input
-```js
+```jsx
 <>
     <div />
     <button />
@@ -11,8 +11,7 @@ expression: valid.jsx
     <div autofocus />
     <input autofocus="true" />
     <MyComponent autoFocus={true} />
+    <div popover><input autoFocus />></div>
+    <dialog><input autoFocus />></dialog>
 </>
-
 ```
-
-

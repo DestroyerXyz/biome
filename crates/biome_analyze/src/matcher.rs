@@ -1,6 +1,6 @@
 use crate::{
     AnalyzerOptions, AnalyzerSignal, Phases, QueryMatch, Rule, RuleFilter, RuleGroup, ServiceBag,
-    SuppressionCommentEmitter,
+    SuppressionAction,
 };
 use biome_rowan::{Language, TextRange};
 use std::{
@@ -25,7 +25,7 @@ pub struct MatchQueryParams<'phase, 'query, L: Language> {
     pub query: Query,
     pub services: &'phase ServiceBag,
     pub signal_queue: &'query mut BinaryHeap<SignalEntry<'phase, L>>,
-    pub apply_suppression_comment: SuppressionCommentEmitter<L>,
+    pub suppression_action: &'phase dyn SuppressionAction<Language = L>,
     pub options: &'phase AnalyzerOptions,
 }
 
@@ -137,26 +137,28 @@ pub struct SignalEntry<'phase, L: Language> {
     pub signal: Box<dyn AnalyzerSignal<L> + 'phase>,
     /// Unique identifier for the rule that emitted this signal
     pub rule: RuleKey,
+    /// Optional rule instances being suppressed
+    pub instances: Box<[Box<str>]>,
     /// Text range in the document this signal covers
     pub text_range: TextRange,
 }
 
 // SignalEntry is ordered based on the starting point of its `text_range`
-impl<'phase, L: Language> Ord for SignalEntry<'phase, L> {
+impl<L: Language> Ord for SignalEntry<'_, L> {
     fn cmp(&self, other: &Self) -> Ordering {
         other.text_range.start().cmp(&self.text_range.start())
     }
 }
 
-impl<'phase, L: Language> PartialOrd for SignalEntry<'phase, L> {
+impl<L: Language> PartialOrd for SignalEntry<'_, L> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'phase, L: Language> Eq for SignalEntry<'phase, L> {}
+impl<L: Language> Eq for SignalEntry<'_, L> {}
 
-impl<'phase, L: Language> PartialEq for SignalEntry<'phase, L> {
+impl<L: Language> PartialEq for SignalEntry<'_, L> {
     fn eq(&self, other: &Self) -> bool {
         self.text_range.start() == other.text_range.start()
     }
@@ -198,16 +200,16 @@ where
 mod tests {
     use super::MatchQueryParams;
     use crate::{
-        signals::DiagnosticSignal, Analyzer, AnalyzerContext, AnalyzerSignal, ControlFlow,
-        MetadataRegistry, Never, Phases, QueryMatcher, RuleKey, ServiceBag, SignalEntry,
-        SyntaxVisitor,
+        signals::DiagnosticSignal, Analyzer, AnalyzerContext, AnalyzerSignal, ApplySuppression,
+        ControlFlow, MetadataRegistry, Never, Phases, QueryMatcher, RuleKey, ServiceBag,
+        SignalEntry, SuppressionAction, SyntaxVisitor,
     };
-    use crate::{AnalyzerOptions, SuppressionKind};
+    use crate::{AnalyzerOptions, AnalyzerSuppression};
     use biome_diagnostics::{category, DiagnosticExt};
     use biome_diagnostics::{Diagnostic, Severity};
     use biome_rowan::{
         raw_language::{RawLanguage, RawLanguageKind, RawLanguageRoot, RawSyntaxTreeBuilder},
-        AstNode, SyntaxNode, TextRange, TextSize, TriviaPiece, TriviaPieceKind,
+        AstNode, BatchMutation, SyntaxNode, SyntaxToken, TextRange, TextSize, TriviaPiece,
     };
     use std::convert::Infallible;
 
@@ -233,6 +235,7 @@ mod tests {
             params.signal_queue.push(SignalEntry {
                 signal: Box::new(DiagnosticSignal::new(move || TestDiagnostic { span })),
                 rule: RuleKey::new("group", "rule"),
+                instances: Default::default(),
                 text_range: span,
             });
         }
@@ -250,10 +253,7 @@ mod tests {
             builder.token_with_trivia(
                 RawLanguageKind::STRING_TOKEN,
                 "//group\n\"warn_here\"",
-                &[
-                    TriviaPiece::new(TriviaPieceKind::SingleLineComment, 7),
-                    TriviaPiece::new(TriviaPieceKind::Newline, 1),
-                ],
+                &[TriviaPiece::single_line_comment(7), TriviaPiece::newline(1)],
                 &[],
             );
             builder.finish_node();
@@ -262,7 +262,7 @@ mod tests {
                 RawLanguageKind::SEMICOLON_TOKEN,
                 ";\n",
                 &[],
-                &[TriviaPiece::new(TriviaPieceKind::Newline, 1)],
+                &[TriviaPiece::newline(1)],
             );
 
             builder.start_node(RawLanguageKind::LITERAL_EXPRESSION);
@@ -270,8 +270,8 @@ mod tests {
                 RawLanguageKind::STRING_TOKEN,
                 "//group/rule\n\"warn_here\"",
                 &[
-                    TriviaPiece::new(TriviaPieceKind::SingleLineComment, 12),
-                    TriviaPiece::new(TriviaPieceKind::Newline, 1),
+                    TriviaPiece::single_line_comment(12),
+                    TriviaPiece::newline(1),
                 ],
                 &[],
             );
@@ -281,7 +281,7 @@ mod tests {
                 RawLanguageKind::SEMICOLON_TOKEN,
                 ";\n",
                 &[],
-                &[TriviaPiece::new(TriviaPieceKind::Newline, 1)],
+                &[TriviaPiece::newline(1)],
             );
 
             builder.start_node(RawLanguageKind::LITERAL_EXPRESSION);
@@ -289,8 +289,8 @@ mod tests {
                 RawLanguageKind::STRING_TOKEN,
                 "//unknown_group\n\"warn_here\"",
                 &[
-                    TriviaPiece::new(TriviaPieceKind::SingleLineComment, 15),
-                    TriviaPiece::new(TriviaPieceKind::Newline, 1),
+                    TriviaPiece::single_line_comment(15),
+                    TriviaPiece::newline(1),
                 ],
                 &[],
             );
@@ -300,7 +300,7 @@ mod tests {
                 RawLanguageKind::SEMICOLON_TOKEN,
                 ";\n",
                 &[],
-                &[TriviaPiece::new(TriviaPieceKind::Newline, 1)],
+                &[TriviaPiece::newline(1)],
             );
 
             builder.start_node(RawLanguageKind::LITERAL_EXPRESSION);
@@ -308,8 +308,8 @@ mod tests {
                 RawLanguageKind::STRING_TOKEN,
                 "//group/unknown_rule\n\"warn_here\"",
                 &[
-                    TriviaPiece::new(TriviaPieceKind::SingleLineComment, 20),
-                    TriviaPiece::new(TriviaPieceKind::Newline, 1),
+                    TriviaPiece::single_line_comment(20),
+                    TriviaPiece::newline(1),
                 ],
                 &[],
             );
@@ -319,17 +319,17 @@ mod tests {
                 RawLanguageKind::SEMICOLON_TOKEN,
                 ";\n",
                 &[],
-                &[TriviaPiece::new(TriviaPieceKind::Newline, 1)],
+                &[TriviaPiece::newline(1)],
             );
 
             builder.token_with_trivia(
                 RawLanguageKind::SEMICOLON_TOKEN,
                 "//group/rule\n;\n",
                 &[
-                    TriviaPiece::new(TriviaPieceKind::SingleLineComment, 12),
-                    TriviaPiece::new(TriviaPieceKind::Newline, 1),
+                    TriviaPiece::single_line_comment(12),
+                    TriviaPiece::newline(1),
                 ],
-                &[TriviaPiece::new(TriviaPieceKind::Newline, 1)],
+                &[TriviaPiece::newline(1)],
             );
 
             builder.finish_node();
@@ -350,12 +350,13 @@ mod tests {
         };
 
         fn parse_suppression_comment(
-            comment: &'_ str,
-        ) -> Vec<Result<SuppressionKind<'_>, Infallible>> {
+            comment: &str,
+            _piece_range: TextRange,
+        ) -> Vec<Result<AnalyzerSuppression, Infallible>> {
             comment
                 .trim_start_matches("//")
                 .split(' ')
-                .map(SuppressionKind::Rule)
+                .map(AnalyzerSuppression::rule)
                 .map(Ok)
                 .collect()
         }
@@ -363,11 +364,43 @@ mod tests {
         let mut metadata = MetadataRegistry::default();
         metadata.insert_rule("group", "rule");
 
+        struct TestAction;
+
+        impl SuppressionAction for TestAction {
+            type Language = RawLanguage;
+
+            fn find_token_for_inline_suppression(
+                &self,
+                _: SyntaxToken<Self::Language>,
+            ) -> Option<ApplySuppression<Self::Language>> {
+                None
+            }
+
+            fn apply_inline_suppression(
+                &self,
+                _: &mut BatchMutation<Self::Language>,
+                _: ApplySuppression<Self::Language>,
+                _: &str,
+                _: &str,
+            ) {
+                unreachable!("")
+            }
+
+            fn apply_top_level_suppression(
+                &self,
+                _: &mut BatchMutation<Self::Language>,
+                _: SyntaxToken<Self::Language>,
+                _: &str,
+            ) {
+                unreachable!("")
+            }
+        }
+
         let mut analyzer = Analyzer::new(
             &metadata,
             SuppressionMatcher,
             parse_suppression_comment,
-            |_| unreachable!(),
+            Box::new(TestAction),
             &mut emit_signal,
         );
 

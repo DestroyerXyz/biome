@@ -6,13 +6,14 @@ use crate::syntax::parse_root;
 use biome_css_factory::CssSyntaxFactory;
 use biome_css_syntax::{CssLanguage, CssRoot, CssSyntaxNode};
 pub use biome_parser::prelude::*;
-use biome_parser::tree_sink::LosslessTreeSink;
+use biome_parser::{tree_sink::LosslessTreeSink, AnyParse};
 use biome_rowan::{AstNode, NodeCache};
 pub use parser::CssParserOptions;
 
 mod lexer;
 mod parser;
 mod prelude;
+mod state;
 mod syntax;
 mod token_source;
 
@@ -28,10 +29,10 @@ pub fn parse_css(source: &str, options: CssParserOptions) -> CssParse {
 pub fn parse_css_with_cache(
     source: &str,
     cache: &mut NodeCache,
-    config: CssParserOptions,
+    options: CssParserOptions,
 ) -> CssParse {
     tracing::debug_span!("Parsing phase").in_scope(move || {
-        let mut parser = CssParser::new(source, config);
+        let mut parser = CssParser::new(source, options);
 
         parse_root(&mut parser);
 
@@ -103,6 +104,18 @@ impl CssParse {
     /// Panics if the node represented by this parse result mismatches.
     pub fn tree(&self) -> CssRoot {
         CssRoot::unwrap_cast(self.syntax())
+    }
+}
+
+impl From<CssParse> for AnyParse {
+    fn from(parse: CssParse) -> Self {
+        let root = parse.syntax();
+        let diagnostics = parse.into_diagnostics();
+        Self::new(
+            // SAFETY: the parser should always return a root node
+            root.as_send().unwrap(),
+            diagnostics,
+        )
     }
 }
 

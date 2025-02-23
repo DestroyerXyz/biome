@@ -1,13 +1,14 @@
 ---
 source: crates/biome_cli/tests/snap_test.rs
-expression: content
+expression: redactor(content)
+snapshot_kind: text
 ---
 ## `biome.json`
 
 ```json
 {
   "formatter": { "lineWidth": 20, "indentStyle": "space" },
-  "overrides": [{ "include": ["test.js"], "linter": { "enabled": false } }]
+  "overrides": [{ "includes": ["test.js"], "linter": { "enabled": false } }]
 }
 ```
 
@@ -34,7 +35,5 @@ const a = [
 # Emitted Messages
 
 ```block
-Formatted 2 file(s) in <TIME>
+Formatted 2 files in <TIME>. Fixed 2 files.
 ```
-
-

@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidCatchParameter.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -18,14 +19,12 @@ try {} catch(SPECIFIC_ERROR) {}
 ```
 invalidCatchParameter.js:1:14 lint/style/useNamingConvention  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This catch parameter name should be in camelCase.
+  i This catch parameter name should be in camelCase.
   
   > 1 │ try {} catch(E) {}
       │              ^
     2 │ 
     3 │ try {} catch(SpecificError) {}
-  
-  i The name could be renamed to `e`.
   
   i Safe fix: Rename this symbol in camelCase.
   
@@ -40,7 +39,7 @@ invalidCatchParameter.js:1:14 lint/style/useNamingConvention  FIXABLE  ━━━
 ```
 invalidCatchParameter.js:3:14 lint/style/useNamingConvention  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This catch parameter name should be in camelCase.
+  i This catch parameter name should be in camelCase.
   
     1 │ try {} catch(E) {}
     2 │ 
@@ -48,8 +47,6 @@ invalidCatchParameter.js:3:14 lint/style/useNamingConvention  FIXABLE  ━━━
       │              ^^^^^^^^^^^^^
     4 │ 
     5 │ try {} catch(specific_error) {}
-  
-  i The name could be renamed to `specificError`.
   
   i Safe fix: Rename this symbol in camelCase.
   
@@ -66,7 +63,7 @@ invalidCatchParameter.js:3:14 lint/style/useNamingConvention  FIXABLE  ━━━
 ```
 invalidCatchParameter.js:5:14 lint/style/useNamingConvention  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This catch parameter name should be in camelCase.
+  i This catch parameter name should be in camelCase.
   
     3 │ try {} catch(SpecificError) {}
     4 │ 
@@ -74,8 +71,6 @@ invalidCatchParameter.js:5:14 lint/style/useNamingConvention  FIXABLE  ━━━
       │              ^^^^^^^^^^^^^^
     6 │ 
     7 │ try {} catch(SPECIFIC_ERROR) {}
-  
-  i The name could be renamed to `specificError`.
   
   i Safe fix: Rename this symbol in camelCase.
   
@@ -92,15 +87,13 @@ invalidCatchParameter.js:5:14 lint/style/useNamingConvention  FIXABLE  ━━━
 ```
 invalidCatchParameter.js:7:14 lint/style/useNamingConvention  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This catch parameter name should be in camelCase.
+  i This catch parameter name should be in camelCase.
   
     5 │ try {} catch(specific_error) {}
     6 │ 
   > 7 │ try {} catch(SPECIFIC_ERROR) {}
       │              ^^^^^^^^^^^^^^
     8 │ 
-  
-  i The name could be renamed to `specificError`.
   
   i Safe fix: Rename this symbol in camelCase.
   
@@ -112,5 +105,3 @@ invalidCatchParameter.js:7:14 lint/style/useNamingConvention  FIXABLE  ━━━
   
 
 ```
-
-

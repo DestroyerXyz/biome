@@ -18,8 +18,18 @@ pub fn format_verbatim_node<L: Language>(node: &SyntaxNode<L>) -> FormatVerbatim
     FormatVerbatimNode {
         node,
         kind: VerbatimKind::Verbatim {
-            length: node.text_range().len(),
+            length: node.text_range_with_trivia().len(),
         },
+        format_comments: true,
+    }
+}
+
+/// "Formats" a node according to its original formatting in the source text. It's functionally equal to
+/// [`format_verbatim_node`], but it doesn't track the node as [VerbatimKind::Verbatim].
+pub fn format_verbatim_skipped<L: Language>(node: &SyntaxNode<L>) -> FormatVerbatimNode<L> {
+    FormatVerbatimNode {
+        node,
+        kind: VerbatimKind::Skipped,
         format_comments: true,
     }
 }

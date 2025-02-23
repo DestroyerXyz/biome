@@ -2,7 +2,6 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: css/declaration_list.css
 ---
-
 # Input
 
 ```css
@@ -19,19 +18,45 @@ info: css/declaration_list.css
 
 .empty-line {
     color: blue;
-    
+
     background-color: red;
 }
 .grouping {
 color: blue   ;color: green    ;
     color  : red ;
-    
+
 
         background-color:      red;
     font-size:   12px;
-    
-    
+
+
     font-weight   :   700;
+}
+
+a {
+	--bs-font-monospace: sfmono-regular /  menlo;
+	--bs-font-monospace: sfmono-regular , menlo , monaco , consolas ,
+	'Liberation Mono' , 'Courier New' , monospace;
+}
+
+a {
+    color: red;;;;
+}
+
+.with-comments {
+  /* hello */
+  a,
+  /* world */
+  button {
+    color: blue;
+  }
+}
+  
+.without-comments {
+  a,
+  button {
+    color: blue;
+  }
 }
 ```
 
@@ -47,6 +72,7 @@ Indent style: Tab
 Indent width: 2
 Line ending: LF
 Line width: 80
+Quote style: Double Quotes
 -----
 
 ```css
@@ -83,6 +109,30 @@ Line width: 80
 
 	font-weight: 700;
 }
+
+a {
+	--bs-font-monospace: sfmono-regular / menlo;
+	--bs-font-monospace: sfmono-regular, menlo, monaco, consolas,
+		"Liberation Mono", "Courier New", monospace;
+}
+
+a {
+	color: red;
+}
+
+.with-comments {
+	/* hello */
+	a,
+	/* world */
+	button {
+		color: blue;
+	}
+}
+
+.without-comments {
+	a,
+	button {
+		color: blue;
+	}
+}
 ```
-
-

@@ -3,14 +3,17 @@
 mod tests;
 
 use crate::CssParserOptions;
-use biome_css_syntax::{CssSyntaxKind, CssSyntaxKind::*, TextLen, TextRange, TextSize, T};
-use biome_js_unicode_table::{
-    is_css_id_continue, is_css_id_start, lookup_byte, Dispatch, Dispatch::*,
-};
+use biome_css_syntax::{CssSyntaxKind, CssSyntaxKind::*, TextLen, TextSize, T};
 use biome_parser::diagnostic::ParseDiagnostic;
-use biome_parser::lexer::{LexContext, Lexer, LexerCheckpoint, TokenFlags};
+use biome_parser::lexer::{
+    LexContext, Lexer, LexerCheckpoint, LexerWithCheckpoint, ReLexer, TokenFlags,
+};
+use biome_rowan::SyntaxKind;
+use biome_unicode_table::{
+    is_css_non_ascii, lookup_byte,
+    Dispatch::{self, *},
+};
 use std::char::REPLACEMENT_CHARACTER;
-use unicode_bom::Bom;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum CssLexContext {
@@ -20,6 +23,7 @@ pub enum CssLexContext {
     /// Applied when lexing CSS selectors.
     /// Doesn't skip whitespace trivia for a combinator.
     Selector,
+
     /// Applied when lexing CSS pseudo nth selectors.
     /// Distinct '-' from identifiers and '+' from numbers.
     PseudoNthSelector,
@@ -33,6 +37,12 @@ pub enum CssLexContext {
     /// support #000 #000f #ffffff #ffffffff
     /// https://drafts.csswg.org/css-color/#typedef-hex-color
     Color,
+
+    /// Applied when lexing CSS unicode range.
+    /// Starting from U+ or u+
+    /// support U+0-9A-F? U+0-9A-F{1,6} U+0-9A-F{1,6}?
+    /// https://drafts.csswg.org/css-fonts/#unicode-range-desc
+    UnicodeRange,
 }
 
 impl LexContext for CssLexContext {
@@ -44,7 +54,12 @@ impl LexContext for CssLexContext {
 
 /// Context in which the [CssLexContext]'s current should be re-lexed.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum CssReLexContext {}
+pub enum CssReLexContext {
+    #[expect(dead_code)]
+    Regular,
+    /// See [CssLexContext::UnicodeRange]
+    UnicodeRange,
+}
 
 /// An extremely fast, lookup table based, lossless CSS lexer
 #[derive(Debug)]
@@ -61,7 +76,8 @@ pub(crate) struct CssLexer<'src> {
     /// If the source starts with a Unicode BOM, this is the number of bytes for that token.
     unicode_bom_length: usize,
 
-    /// Byte offset of the current token from the start of the source
+    /// Byte offset of the current token from the start of the source.
+    ///
     /// The range of the current token can be computed by `self.position - self.current_start`
     current_start: TextSize,
 
@@ -73,10 +89,13 @@ pub(crate) struct CssLexer<'src> {
 
     diagnostics: Vec<ParseDiagnostic>,
 
-    config: CssParserOptions,
+    options: CssParserOptions,
 }
 
 impl<'src> Lexer<'src> for CssLexer<'src> {
+    const NEWLINE: Self::Kind = NEWLINE;
+
+    const WHITESPACE: Self::Kind = WHITESPACE;
     type Kind = CssSyntaxKind;
     type LexContext = CssLexContext;
     type ReLexContext = CssReLexContext;
@@ -89,20 +108,16 @@ impl<'src> Lexer<'src> for CssLexer<'src> {
         self.current_kind
     }
 
-    fn current_range(&self) -> TextRange {
-        TextRange::new(self.current_start, TextSize::from(self.position as u32))
+    fn position(&self) -> usize {
+        self.position
     }
 
-    fn checkpoint(&self) -> LexerCheckpoint<Self::Kind> {
-        LexerCheckpoint {
-            position: TextSize::from(self.position as u32),
-            current_start: self.current_start,
-            current_flags: self.current_flags,
-            current_kind: self.current_kind,
-            after_line_break: self.after_newline,
-            unicode_bom_length: self.unicode_bom_length,
-            diagnostics_pos: self.diagnostics.len() as u32,
-        }
+    fn current_start(&self) -> TextSize {
+        self.current_start
+    }
+
+    fn push_diagnostic(&mut self, diagnostic: ParseDiagnostic) {
+        self.diagnostics.push(diagnostic);
     }
 
     fn next_token(&mut self, context: Self::LexContext) -> Self::Kind {
@@ -116,6 +131,7 @@ impl<'src> Lexer<'src> for CssLexer<'src> {
                 CssLexContext::PseudoNthSelector => self.consume_pseudo_nth_selector_token(current),
                 CssLexContext::UrlRawValue => self.consume_url_raw_value_token(current),
                 CssLexContext::Color => self.consume_color_token(current),
+                CssLexContext::UnicodeRange => self.consume_unicode_range_token(current),
             },
             None => EOF,
         };
@@ -129,25 +145,6 @@ impl<'src> Lexer<'src> for CssLexer<'src> {
         }
 
         kind
-    }
-
-    fn re_lex(&mut self, _context: Self::ReLexContext) -> Self::Kind {
-        let old_position = self.position;
-        self.position = u32::from(self.current_start) as usize;
-
-        let re_lexed_kind = match self.current_byte() {
-            Some(current) => self.consume_selector_token(current),
-            None => EOF,
-        };
-
-        if self.current() == re_lexed_kind {
-            // Didn't re-lex anything. Return existing token again
-            self.position = old_position;
-        } else {
-            self.current_kind = re_lexed_kind;
-        }
-
-        re_lexed_kind
     }
 
     fn has_preceding_line_break(&self) -> bool {
@@ -187,6 +184,18 @@ impl<'src> Lexer<'src> for CssLexer<'src> {
     fn current_flags(&self) -> TokenFlags {
         self.current_flags
     }
+
+    #[inline]
+    fn advance_char_unchecked(&mut self) {
+        let c = self.current_char_unchecked();
+        self.position += c.len_utf8();
+    }
+
+    /// Advances the current position by `n` bytes.
+    #[inline]
+    fn advance(&mut self, n: usize) {
+        self.position += n;
+    }
 }
 
 impl<'src> CssLexer<'src> {
@@ -201,121 +210,18 @@ impl<'src> CssLexer<'src> {
             current_flags: TokenFlags::empty(),
             position: 0,
             diagnostics: vec![],
-            config: CssParserOptions::default(),
+            options: CssParserOptions::default(),
         }
     }
 
-    pub(crate) fn with_config(self, config: CssParserOptions) -> Self {
-        Self { config, ..self }
-    }
-
-    fn text_position(&self) -> TextSize {
-        TextSize::try_from(self.position).expect("Input to be smaller than 4 GB")
+    pub(crate) fn with_options(self, options: CssParserOptions) -> Self {
+        Self { options, ..self }
     }
 
     /// Bumps the current byte and creates a lexed token of the passed in kind
     fn consume_byte(&mut self, tok: CssSyntaxKind) -> CssSyntaxKind {
         self.advance(1);
         tok
-    }
-
-    /// Consume just one newline/line break.
-    ///
-    /// ## Safety
-    /// Must be called at a valid UT8 char boundary
-    fn consume_newline(&mut self) -> bool {
-        self.assert_current_char_boundary();
-
-        match self.current_byte() {
-            Some(b'\n') => {
-                self.advance(1);
-                true
-            }
-            Some(b'\r') => {
-                if self.peek_byte() == Some(b'\n') {
-                    self.advance(2)
-                } else {
-                    self.advance(1)
-                }
-                true
-            }
-
-            _ => false,
-        }
-    }
-
-    /// Consumes all whitespace until a non-whitespace or a newline is found.
-    ///
-    /// ## Safety
-    /// Must be called at a valid UT8 char boundary
-    fn consume_whitespaces(&mut self) {
-        self.assert_current_char_boundary();
-
-        while let Some(byte) = self.current_byte() {
-            let dispatch = lookup_byte(byte);
-
-            match dispatch {
-                WHS => match byte {
-                    b'\t' | b' ' => self.advance(1),
-                    b'\r' | b'\n' => {
-                        break;
-                    }
-                    _ => {
-                        let start = self.text_position();
-                        self.advance(1);
-
-                        self.diagnostics.push(
-                            ParseDiagnostic::new(
-                                "The CSS standard only allows tabs, whitespace, carriage return and line feed whitespace.",
-                                start..self.text_position(),
-                            )
-                            .with_hint("Use a regular whitespace character instead."),
-                        )
-                    }
-                },
-
-                _ => break,
-            }
-        }
-    }
-
-    /// Consume one newline or all whitespace until a non-whitespace or a newline is found.
-    ///
-    /// ## Safety
-    /// Must be called at a valid UT8 char boundary
-    fn consume_newline_or_whitespaces(&mut self) -> CssSyntaxKind {
-        if self.consume_newline() {
-            self.after_newline = true;
-            NEWLINE
-        } else {
-            self.consume_whitespaces();
-            WHITESPACE
-        }
-    }
-
-    /// Check if the source starts with a Unicode BOM character. If it does,
-    /// consume it and return the UNICODE_BOM token kind.
-    ///
-    /// ## Safety
-    /// Must be called at a valid UT8 char boundary (and realistically only at
-    /// the start position of the source).
-    fn consume_potential_bom(&mut self) -> Option<CssSyntaxKind> {
-        // Bom needs at least the first three bytes of the source to know if it
-        // matches the UTF-8 BOM and not an alternative. This can be expanded
-        // to more bytes to support other BOM characters if Biome decides to
-        // support other encodings like UTF-16.
-        if let Some(first) = self.source().get(0..3) {
-            let bom = Bom::from(first.as_bytes());
-            self.unicode_bom_length = bom.len();
-            self.advance(self.unicode_bom_length);
-
-            match bom {
-                Bom::Null => None,
-                _ => Some(UNICODE_BOM),
-            }
-        } else {
-            None
-        }
     }
 
     /// Get the UTF8 char which starts at the current byte
@@ -326,62 +232,12 @@ impl<'src> CssLexer<'src> {
         self.char_unchecked_at(0)
     }
 
-    /// Gets the current byte.
-    ///
-    /// ## Returns
-    /// The current byte if the lexer isn't at the end of the file.
-    #[inline]
-    fn current_byte(&self) -> Option<u8> {
-        if self.is_eof() {
-            None
-        } else {
-            Some(self.source.as_bytes()[self.position])
-        }
-    }
-
-    /// Asserts that the lexer is at current a UTF8 char boundary
-    #[inline]
-    fn assert_current_char_boundary(&self) {
-        debug_assert!(self.source.is_char_boundary(self.position));
-    }
-
-    /// Peeks at the next byte
-    #[inline]
-    fn peek_byte(&self) -> Option<u8> {
-        self.byte_at(1)
-    }
-
     /// Peek the UTF8 char which starts at the current byte
     ///
     /// ## Safety
     /// Must be called at a valid UT8 char boundary
     fn peek_char_unchecked(&self) -> char {
         self.char_unchecked_at(1)
-    }
-
-    /// Returns the byte at position `self.position + offset` or `None` if it is out of bounds.
-    #[inline]
-    fn byte_at(&self, offset: usize) -> Option<u8> {
-        self.source.as_bytes().get(self.position + offset).copied()
-    }
-
-    /// Advances the position by one and returns the next byte value
-    #[inline]
-    fn next_byte(&mut self) -> Option<u8> {
-        self.advance(1);
-        self.current_byte()
-    }
-
-    /// Asserts that the lexer is at a UTF8 char boundary
-    #[inline]
-    fn assert_at_char_boundary(&self, offset: usize) {
-        debug_assert!(self.source.is_char_boundary(self.position + offset));
-    }
-
-    /// Asserts that the lexer is currently positioned at `byte`
-    #[inline]
-    fn assert_byte(&self, byte: u8) {
-        debug_assert_eq!(self.source.as_bytes()[self.position], byte);
     }
 
     /// Get the UTF8 char which starts at the current byte
@@ -421,37 +277,6 @@ impl<'src> CssLexer<'src> {
         }
     }
 
-    /// Advances the current position by `n` bytes.
-    #[inline]
-    fn advance(&mut self, n: usize) {
-        self.position += n;
-    }
-
-    #[inline]
-    fn advance_byte_or_char(&mut self, chr: u8) {
-        if chr.is_ascii() {
-            self.advance(1);
-        } else {
-            self.advance_char_unchecked();
-        }
-    }
-
-    /// Advances the current position by the current char UTF8 length
-    ///
-    /// ## Safety
-    /// Must be called at a valid UT8 char boundary
-    #[inline]
-    fn advance_char_unchecked(&mut self) {
-        let c = self.current_char_unchecked();
-        self.position += c.len_utf8();
-    }
-
-    /// Returns `true` if the parser is at or passed the end of the file.
-    #[inline]
-    fn is_eof(&self) -> bool {
-        self.position >= self.source.len()
-    }
-
     /// Lexes the next token
     ///
     /// Guaranteed to not be at the end of the file
@@ -463,7 +288,13 @@ impl<'src> CssLexer<'src> {
         let dispatched = lookup_byte(current);
 
         match dispatched {
-            WHS => self.consume_newline_or_whitespaces(),
+            WHS => {
+                let kind = self.consume_newline_or_whitespaces();
+                if kind == Self::NEWLINE {
+                    self.after_newline = true;
+                }
+                kind
+            }
             QOT => self.consume_string_literal(current),
             SLH => self.consume_slash(),
 
@@ -489,9 +320,12 @@ impl<'src> CssLexer<'src> {
 
             LSS => self.consume_lss(),
 
-            IDT if self.peek_byte() == Some(b'=') => {
+            IDT | DOL if self.peek_byte() == Some(b'=') => {
                 self.advance(1);
                 self.consume_byte(T!["$="])
+            }
+            UNI if self.options.is_metavariable_enabled() && self.is_metavariable_start() => {
+                self.consume_metavariable(GRIT_METAVARIABLE)
             }
             IDT | UNI | BSL if self.is_ident_start() => self.consume_identifier(),
 
@@ -519,11 +353,13 @@ impl<'src> CssLexer<'src> {
             UNI => {
                 // A BOM can only appear at the start of a file, so if we haven't advanced at all yet,
                 // perform the check. At any other position, the BOM is just considered plain whitespace.
-                if self.position == 0 && self.consume_potential_bom().is_some() {
-                    UNICODE_BOM
-                } else {
-                    self.consume_unexpected_character()
+                if self.position == 0 {
+                    if let Some((bom, bom_size)) = self.consume_potential_bom(UNICODE_BOM) {
+                        self.unicode_bom_length = bom_size;
+                        return bom;
+                    }
                 }
+                self.consume_unexpected_character()
             }
 
             _ => self.consume_unexpected_character(),
@@ -555,30 +391,101 @@ impl<'src> CssLexer<'src> {
         CSS_COLOR_LITERAL
     }
 
-    fn consume_selector_token(&mut self, current: u8) -> CssSyntaxKind {
+    /// Consumes a Unicode range token and returns its corresponding syntax kind.
+    fn consume_unicode_range_token(&mut self, current: u8) -> CssSyntaxKind {
         match current {
-            b' ' => self.consume_byte(CSS_SPACE_LITERAL),
+            b'u' | b'U' if matches!(self.peek_byte(), Some(b'+')) => {
+                self.advance(1);
+                self.consume_byte(T!["U+"])
+            }
+            b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' | b'?' => self.consume_unicode_range(),
+            b'-' => self.consume_byte(T![-]),
             _ => self.consume_token(current),
         }
     }
+
+    /// Consumes a Unicode range and determines its syntax kind.
+    ///
+    /// This method reads consecutive bytes representing valid hexadecimal characters ('0'-'9', 'a'-'f',
+    /// 'A'-'F') or the wildcard character '?'.
+    /// It tracks the length of the range and detects if it contains a wildcard.
+    /// If the length is invalid (either zero or greater than six), it generates
+    /// a `ParseDiagnostic` indicating an invalid Unicode range.
+    fn consume_unicode_range(&mut self) -> CssSyntaxKind {
+        let start = self.text_position();
+        let mut length = 0;
+        let mut is_wildcard = false;
+
+        while matches!(
+            self.current_byte(),
+            Some(b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' | b'?')
+        ) {
+            // If the current byte is a wildcard character, set the wildcard flag to true.
+            if self.current_byte() == Some(b'?') {
+                is_wildcard = true;
+            }
+
+            self.advance(1);
+            length += 1;
+        }
+
+        if length == 0 || length > 6 {
+            let diagnostic = ParseDiagnostic::new(
+                "Invalid unicode range",
+                start..self.text_position(),
+            )
+            .with_hint(
+                "Valid length (minimum 1 or maximum 6 hex digits) in the start of unicode range.",
+            );
+            self.diagnostics.push(diagnostic);
+        }
+
+        if is_wildcard {
+            CSS_UNICODE_RANGE_WILDCARD_LITERAL
+        } else {
+            CSS_UNICODE_CODEPOINT_LITERAL
+        }
+    }
+
+    fn consume_selector_token(&mut self, current: u8) -> CssSyntaxKind {
+        let dispatched = lookup_byte(current);
+
+        match dispatched {
+            WHS => self.consume_byte(CSS_SPACE_LITERAL),
+            _ => self.consume_token(current),
+        }
+    }
+
     fn consume_url_raw_value_token(&mut self, current: u8) -> CssSyntaxKind {
         if let Some(chr) = self.current_byte() {
             let dispatch = lookup_byte(chr);
             return match dispatch {
-                IDT | UNI | PRD | SLH | ZER | DIG => self.consume_url_raw_value(),
+                // TLD byte covers `url(~package/tilde.css)`;
+                // HAS byte covers `url(#IDofSVGpath);`
+                IDT | DOL | UNI | PRD | SLH | ZER | DIG | TLD | HAS => self.consume_url_raw_value(),
                 _ => self.consume_token(current),
             };
         }
         self.consume_token(current)
     }
+
     fn consume_url_raw_value(&mut self) -> CssSyntaxKind {
         let start = self.text_position();
         while let Some(chr) = self.current_byte() {
             let dispatch = lookup_byte(chr);
-            if matches!(dispatch, PNC) {
-                return CSS_URL_VALUE_RAW_LITERAL;
+            match dispatch {
+                PNC => {
+                    return CSS_URL_VALUE_RAW_LITERAL;
+                }
+                BSL if self.is_valid_escape_at(1) => {
+                    // We can escape any character, so we just skip over the escape sequence
+                    // Even a closing parenthesis (PNC token):
+                    // url(https://example.com/ima\)ge.png);
+                    //                            ^^ escaped closing paren
+                    self.advance(2)
+                }
+                _ => self.advance(1),
             }
-            self.advance(1);
         }
         let diagnostic = ParseDiagnostic::new("Invalid url raw value", start..self.text_position());
         self.diagnostics.push(diagnostic);
@@ -655,7 +562,7 @@ impl<'src> CssLexer<'src> {
                 WHS if matches!(chr, b'\n' | b'\r') => {
                     let unterminated =
                         ParseDiagnostic::new("Missing closing quote", start..self.text_position())
-                            .with_detail(self.position..self.position + 1, "line breaks here");
+                            .with_hint("The closing quote must be on the same line.");
 
                     self.diagnostics.push(unterminated);
 
@@ -738,15 +645,21 @@ impl<'src> CssLexer<'src> {
         // While the next input code point is a digit, consume it.
         self.consume_number_sequence();
 
-        // If the next 2 input code points are U+002E FULL STOP (.) followed by a digit...
-        if matches!(self.current_byte(), Some(b'.'))
-            && self.peek_byte().map_or(false, |byte| byte.is_ascii_digit())
-        {
-            // Consume them.
-            self.advance(2);
+        // According to the spec if the next 2 input code points are U+002E FULL STOP (.) followed by a digit we need to consume them.
+        // However we want to parse numbers like `1.` and `1.e10` where we don't have a number after (.)
+        // If the next input code points are U+002E FULL STOP (.)...
+        if matches!(self.current_byte(), Some(b'.')) {
+            // Consume it.
+            self.advance(1);
 
-            // While the next input code point is a digit, consume it.
-            self.consume_number_sequence()
+            // U+002E FULL STOP (.) followed by a digit...
+            if self
+                .current_byte()
+                .is_some_and(|byte| byte.is_ascii_digit())
+            {
+                // While the next input code point is a digit, consume it.
+                self.consume_number_sequence();
+            }
         }
 
         // If the next 2 or 3 input code points are U+0045 LATIN CAPITAL LETTER E (E) or
@@ -772,7 +685,25 @@ impl<'src> CssLexer<'src> {
             }
         }
 
-        CSS_NUMBER_LITERAL
+        // A Number immediately followed by an identifier is considered a single
+        // <dimension> token according to the spec: https://www.w3.org/TR/css-values-4/#dimensions.
+        // Spaces are not allowed, but by default this lexer will skip over
+        // whitespace tokens, making it difficult to determine on the next token
+        // if it is actually a dimension unit or a separated identifier. So, if
+        // the next characters constitute an identifier after parsing a number,
+        // this special CSS_DIMENSION_VALUE token will indicate to the parser
+        // that it is part of a dimension and the next token can safely be
+        // consumed as the unit.
+        //
+        // The parser will re-cast these tokens as CSS_NUMBER_LITERALs when
+        // creating the Dimension node to hide this internal detail.
+        if matches!(self.current_byte(), Some(b'%')) {
+            CSS_PERCENTAGE_VALUE
+        } else if self.is_ident_start() {
+            CSS_DIMENSION_VALUE
+        } else {
+            CSS_NUMBER_LITERAL
+        }
     }
 
     fn consume_number_sequence(&mut self) {
@@ -788,9 +719,13 @@ impl<'src> CssLexer<'src> {
         // Note to keep the buffer large enough to fit every possible keyword that
         // the lexer can return
         let mut buf = [0u8; 22];
-        let count = self.consume_ident_sequence(&mut buf);
+        let (count, only_ascii_used) = self.consume_ident_sequence(&mut buf);
 
-        match buf[..count].to_ascii_lowercase().as_slice() {
+        if !only_ascii_used {
+            return IDENT;
+        }
+
+        match &buf[..count] {
             b"media" => MEDIA_KW,
             b"keyframes" => KEYFRAMES_KW,
             b"-webkit-keyframes" => KEYFRAMES_KW,
@@ -838,10 +773,41 @@ impl<'src> CssLexer<'src> {
             b"charset" => CHARSET_KW,
             b"color-profile" => COLOR_PROFILE_KW,
             b"counter-style" => COUNTER_STYLE_KW,
+            b"property" => PROPERTY_KW,
             b"container" => CONTAINER_KW,
             b"style" => STYLE_KW,
             b"font-face" => FONT_FACE_KW,
+            b"font-feature-values" => FONT_FEATURE_VALUES_KW,
+            // font-feature-values items
+            b"stylistic" => STYLISTIC_KW,
+            b"historical-forms" => HISTORICAL_FORMS_KW,
+            b"styleset" => STYLESET_KW,
+            b"character-variant" => CHARACTER_VARIANT_KW,
+            b"swash" => SWASH_KW,
+            b"ornaments" => ORNAMENTS_KW,
+            b"annotation" => ANNOTATION_KW,
             b"font-palette-values" => FONT_PALETTE_VALUES_KW,
+            b"auto" => AUTO_KW,
+            b"thin" => THIN_KW,
+            b"medium" => MEDIUM_KW,
+            b"thick" => THICK_KW,
+            b"none" => NONE_KW,
+            b"hidden" => HIDDEN_KW,
+            b"dotted" => DOTTED_KW,
+            b"dashed" => DASHED_KW,
+            b"solid" => SOLID_KW,
+            b"double" => DOUBLE_KW,
+            b"groove" => GROOVE_KW,
+            b"ridge" => RIDGE_KW,
+            b"inset" => INSET_KW,
+            b"outset" => OUTSET_KW,
+            // CSS-Wide keywords
+            b"initial" => INITIAL_KW,
+            b"inherit" => INHERIT_KW,
+            b"unset" => UNSET_KW,
+            b"revert" => REVERT_KW,
+            b"revert-layer" => REVERT_LAYER_KW,
+            b"default" => DEFAULT_KW,
             // length units
             b"em" => EM_KW,
             b"rem" => REM_KW,
@@ -942,76 +908,106 @@ impl<'src> CssLexer<'src> {
             b"supports" => SUPPORTS_KW,
             b"selector" => SELECTOR_KW,
             b"url" => URL_KW,
+            b"src" => SRC_KW,
             b"scope" => SCOPE_KW,
+            b"import" => IMPORT_KW,
+            b"namespace" => NAMESPACE_KW,
+            b"starting-style" => STARTING_STYLE_KW,
+            b"document" => DOCUMENT_KW,
+            b"-moz-document" => DOCUMENT_KW,
+            b"url-prefix" => URL_PREFIX_KW,
+            b"domain" => DOMAIN_KW,
+            b"media-document" => MEDIA_DOCUMENT_KW,
+            b"regexp" => REGEXP_KW,
+            b"value" => VALUE_KW,
+            b"as" => AS_KW,
+            b"composes" => COMPOSES_KW,
+            b"position-try" => POSITION_TRY_KW,
+            b"view-transition" => VIEW_TRANSITION_KW,
             _ => IDENT,
         }
     }
 
-    /// Consume a ident sequence.
-    fn consume_ident_sequence(&mut self, buf: &mut [u8]) -> usize {
+    /// Consumes a sequence of identifier characters from a byte stream, appending
+    /// them to the provided buffer in lowercase ASCII form.
+    ///
+    /// This function iteratively processes bytes from the stream, which are part
+    /// of an identifier, and appends their lowercase ASCII representation to the buffer.
+    /// It stops processing either when the buffer is full or when a non-identifier
+    /// character is encountered.
+    ///
+    /// # Arguments
+    ///
+    /// * `buf` - A mutable reference to a byte array where the identifier characters
+    ///           will be appended. This buffer should be pre-allocated and have enough
+    ///           space to hold the expected identifier.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    ///
+    /// * The number of bytes appended to the buffer (`usize`).
+    /// * A boolean indicating whether only ASCII characters were used (`true` if so).
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the first character to be consumed is not a valid
+    /// start of an identifier, as determined by `self.is_ident_start()`.
+    fn consume_ident_sequence(&mut self, buf: &mut [u8]) -> (usize, bool) {
         debug_assert!(self.is_ident_start());
 
         let mut idx = 0;
-        let mut is_first = true;
+        let mut only_ascii_used = true;
         // Repeatedly consume the next input code point from the stream.
         while let Some(current) = self.current_byte() {
-            if let Some(part) = self.consume_ident_part(current, is_first) {
-                is_first = false;
+            if let Some(part) = self.consume_ident_part(current) {
+                if only_ascii_used && !part.is_ascii() {
+                    only_ascii_used = false;
+                }
 
-                // In this context, "+ 4" represents a safety measure for the buffer size.
-                // It ensures that there are at least 4 slots available in the buffer.
-                // This is necessary because the maximum UTF-8 sequence length is 4 bytes.
-                if let Some(buf) = buf.get_mut(idx..idx + 4) {
-                    let res = part.encode_utf8(buf);
-                    idx += res.len();
+                if only_ascii_used {
+                    // Ensure that there is space in the buffer.
+                    // Since we're only dealing with ASCII, we need at most 1 byte.
+                    if let Some(buf) = buf.get_mut(idx..idx + 1) {
+                        // Convert the ASCII character to lowercase.
+                        buf[0] = part.to_ascii_lowercase() as u8;
+                        idx += 1;
+                    }
                 }
             } else {
                 break;
             }
         }
 
-        idx
+        (idx, only_ascii_used)
     }
 
-    /// Tries to consume a character that forms part of a CSS identifier.
+    /// Consume a character that forms part of a CSS identifier.
     ///
-    /// This function checks if `current` character conforms to the rules for forming
-    /// CSS identifiers, taking into account if it's the first character (`is_first`)
-    /// in the identifier as the first character has some specific rules (like it cannot start with a digit).
+    /// Before calling this function, you should make sure that there is a valid identifier start
+    /// using [Self::is_ident_start].
     ///
     /// Also handles CSS escape sequences in identifiers and attach appropriate diagnostics for invalid cases.
     ///
     /// Returns the consumed character wrapped in `Some` if it is part of an identifier,
     /// and `None` if it is not.
-    fn consume_ident_part(&mut self, current: u8, is_first: bool) -> Option<char> {
-        let dispatched = lookup_byte(current);
-
-        let chr = match dispatched {
-            MIN => {
+    fn consume_ident_part(&mut self, current: u8) -> Option<char> {
+        let chr = match lookup_byte(current) {
+            IDT | MIN | DIG | ZER => {
                 self.advance(1);
-                '-'
+                // SAFETY: We know that the current byte is a hyphen or a number.
+                current as char
             }
             // name code point
-            UNI | IDT => {
+            UNI => {
                 // SAFETY: We know that the current byte is a valid unicode code point
                 let chr = self.current_char_unchecked();
-                let is_id = if is_first {
-                    is_css_id_start(chr)
-                } else {
-                    is_css_id_continue(chr)
-                };
-
-                if is_id {
+                if is_css_non_ascii(chr) {
                     self.advance(chr.len_utf8());
                     chr
                 } else {
                     return None;
                 }
-            }
-            // SAFETY: We know that the current byte is a number and we can use cast.
-            DIG | ZER if !is_first => {
-                self.advance(1);
-                current as char
             }
             // U+005C REVERSE SOLIDUS (\)
             // If the first and second code points are a valid escape, continue consume.
@@ -1022,19 +1018,11 @@ impl<'src> CssLexer<'src> {
                 self.advance(1);
 
                 match self.current_byte() {
-                    Some(c) if c.is_ascii_hexdigit() => {
-                        let hex = self.consume_escape_sequence(c);
-
-                        if hex == REPLACEMENT_CHARACTER {
-                            let diagnostic = ParseDiagnostic::new(
-                                "Invalid escape sequence",
-                                escape_start..self.text_position(),
-                            );
-                            self.diagnostics.push(diagnostic);
-                        }
-
-                        hex
-                    }
+                    // Any valid escape sequence can be used as an identifier,
+                    // even if it becomes the REPLACEMENT CHARACTER (like `\0`).
+                    // This is important to handle for cases like the "media
+                    // min-width hack": http://browserbu.gs/css-hacks/media-min-width-0-backslash-0/.
+                    Some(c) if c.is_ascii_hexdigit() => self.consume_escape_sequence(c),
 
                     Some(_) => {
                         let chr = self.current_char_unchecked();
@@ -1107,7 +1095,7 @@ impl<'src> CssLexer<'src> {
                     COMMENT
                 }
             }
-            Some(b'/') if self.config.allow_wrong_line_comments => {
+            Some(b'/') if self.options.allow_wrong_line_comments => {
                 self.advance(2);
 
                 while let Some(chr) = self.current_byte() {
@@ -1239,7 +1227,7 @@ impl<'src> CssLexer<'src> {
 
         let char = self.current_char_unchecked();
         let err = ParseDiagnostic::new(
-            format!("unexpected character `{}`", char),
+            format!("unexpected character `{char}`"),
             self.text_position()..self.text_position() + char.text_len(),
         );
         self.diagnostics.push(err);
@@ -1256,7 +1244,7 @@ impl<'src> CssLexer<'src> {
                 Some(byte) if byte.is_ascii_digit() => true,
                 // Otherwise, if the second code point is a U+002E FULL STOP (.) and the
                 // third code point is a digit, return true.
-                Some(b'.') if self.byte_at(2).map_or(false, |byte| byte.is_ascii_digit()) => true,
+                Some(b'.') if self.byte_at(2).is_some_and(|byte| byte.is_ascii_digit()) => true,
                 _ => false,
             },
             Some(b'.') => match self.peek_byte() {
@@ -1271,10 +1259,10 @@ impl<'src> CssLexer<'src> {
 
     /// Check if the lexer starts an identifier.
     fn is_ident_start(&self) -> bool {
+        // See https://drafts.csswg.org/css-syntax-3/#typedef-ident-token
         let Some(current) = self.current_byte() else {
             return false;
         };
-
         // Look at the first code point:
         match lookup_byte(current) {
             // U+002D HYPHEN-MINUS
@@ -1282,42 +1270,81 @@ impl<'src> CssLexer<'src> {
                 let Some(next) = self.peek_byte() else {
                     return false;
                 };
-
                 match lookup_byte(next) {
                     MIN => {
                         let Some(next) = self.byte_at(2) else {
                             return false;
                         };
-
                         match lookup_byte(next) {
+                            IDT | MIN | DIG | ZER => true,
                             // If the third code point is a name-start code point
                             // return true.
-                            UNI | IDT if is_css_id_start(self.char_unchecked_at(2)) => true,
+                            UNI => is_css_non_ascii(self.char_unchecked_at(2)),
                             // or the third and fourth code points are a valid escape
                             // return true.
                             BSL => self.is_valid_escape_at(3),
                             _ => false,
                         }
                     }
+                    IDT => true,
                     // If the second code point is a name-start code point
                     // return true.
-                    UNI | IDT if is_css_id_start(self.peek_char_unchecked()) => true,
+                    UNI => is_css_non_ascii(self.peek_char_unchecked()),
                     // or the second and third code points are a valid escape
                     // return true.
                     BSL => self.is_valid_escape_at(2),
                     _ => false,
                 }
             }
-            UNI | IDT if is_css_id_start(self.current_char_unchecked()) => true,
+            IDT => true,
+            UNI => is_css_non_ascii(self.current_char_unchecked()),
             // U+005C REVERSE SOLIDUS (\)
             // If the first and second code points are a valid escape, return true. Otherwise,
             // return false.
             BSL => self.is_valid_escape_at(1),
-
             _ => false,
         }
     }
 }
+
+impl<'src> ReLexer<'src> for CssLexer<'src> {
+    fn re_lex(&mut self, context: Self::ReLexContext) -> Self::Kind {
+        let old_position = self.position;
+        self.position = u32::from(self.current_start) as usize;
+
+        let re_lexed_kind = match self.current_byte() {
+            Some(current) => match context {
+                CssReLexContext::Regular => self.consume_token(current),
+                CssReLexContext::UnicodeRange => self.consume_unicode_range_token(current),
+            },
+            None => EOF,
+        };
+
+        if self.current() == re_lexed_kind {
+            // Didn't re-lex anything. Return existing token again
+            self.position = old_position;
+        } else {
+            self.current_kind = re_lexed_kind;
+        }
+
+        re_lexed_kind
+    }
+}
+
+impl<'src> LexerWithCheckpoint<'src> for CssLexer<'src> {
+    fn checkpoint(&self) -> LexerCheckpoint<Self::Kind> {
+        LexerCheckpoint {
+            position: TextSize::from(self.position as u32),
+            current_start: self.current_start,
+            current_flags: self.current_flags,
+            current_kind: self.current_kind,
+            after_line_break: self.after_newline,
+            unicode_bom_length: self.unicode_bom_length,
+            diagnostics_pos: self.diagnostics.len() as u32,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 enum LexStringState {
     /// String that contains an invalid escape sequence

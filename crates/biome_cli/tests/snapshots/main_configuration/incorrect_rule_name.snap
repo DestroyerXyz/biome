@@ -1,6 +1,7 @@
 ---
 source: crates/biome_cli/tests/snap_test.rs
 expression: content
+snapshot_kind: text
 ---
 ## `biome.json`
 
@@ -45,21 +46,28 @@ biome.json:6:13 deserialize ━━━━━━━━━━━━━━━━━�
     7 │         },
     8 │         "style": {
   
-  i Accepted keys
+  i Known keys:
   
   - recommended
-  - all
   - noChildrenProp
   - noConstAssign
   - noConstantCondition
+  - noConstantMathMinMaxClamp
   - noConstructorReturn
   - noEmptyCharacterClassInRegex
   - noEmptyPattern
+  - noFlatMapIdentity
   - noGlobalObjectCalls
   - noInnerDeclarations
+  - noInvalidBuiltinInstantiation
   - noInvalidConstructorSuper
+  - noInvalidDirectionInLinearGradient
+  - noInvalidGridAreas
   - noInvalidNewBuiltin
+  - noInvalidPositionAtImportRule
+  - noInvalidUseBeforeDeclaration
   - noNewSymbol
+  - noNodejsModules
   - noNonoctalDecimalEscape
   - noPrecisionLoss
   - noRenderReturnValue
@@ -67,19 +75,31 @@ biome.json:6:13 deserialize ━━━━━━━━━━━━━━━━━�
   - noSetterReturn
   - noStringCaseMismatch
   - noSwitchDeclarations
+  - noUndeclaredDependencies
   - noUndeclaredVariables
+  - noUnknownFunction
+  - noUnknownMediaFeatureName
+  - noUnknownProperty
+  - noUnknownUnit
+  - noUnmatchableAnbSelector
   - noUnnecessaryContinue
   - noUnreachable
   - noUnreachableSuper
   - noUnsafeFinally
   - noUnsafeOptionalChaining
+  - noUnusedFunctionParameters
+  - noUnusedImports
   - noUnusedLabels
+  - noUnusedPrivateClassMembers
   - noUnusedVariables
   - noVoidElementsWithChildren
   - noVoidTypeReturn
+  - useArrayLiterals
   - useExhaustiveDependencies
   - useHookAtTopLevel
+  - useImportExtensions
   - useIsNan
+  - useJsxKeyInIterable
   - useValidForDirection
   - useYield
   
@@ -98,15 +118,17 @@ biome.json:9:13 deserialize ━━━━━━━━━━━━━━━━━�
     10 │         }
     11 │     }
   
-  i Accepted keys
+  i Known keys:
   
   - recommended
-  - all
   - noArguments
   - noCommaOperator
+  - noDefaultExport
+  - noDoneCallback
   - noImplicitBoolean
   - noInferrableTypes
   - noNamespace
+  - noNamespaceImport
   - noNegationElse
   - noNonNullAssertion
   - noParameterAssign
@@ -115,27 +137,38 @@ biome.json:9:13 deserialize ━━━━━━━━━━━━━━━━━�
   - noShoutyConstants
   - noUnusedTemplateLiteral
   - noUselessElse
-  - noVar
+  - noYodaExpression
   - useAsConstAssertion
   - useBlockStatements
   - useCollapsedElseIf
+  - useConsistentArrayType
+  - useConsistentBuiltinInstantiation
   - useConst
   - useDefaultParameterLast
+  - useDefaultSwitchClause
   - useEnumInitializers
+  - useExplicitLengthCheck
   - useExponentiationOperator
+  - useExportType
+  - useFilenamingConvention
+  - useForOf
   - useFragmentSyntax
+  - useImportType
   - useLiteralEnumMembers
   - useNamingConvention
+  - useNodeAssertStrict
+  - useNodejsImportProtocol
+  - useNumberNamespace
   - useNumericLiterals
   - useSelfClosingElements
   - useShorthandArrayType
   - useShorthandAssign
+  - useShorthandFunctionType
   - useSingleCaseStatement
   - useSingleVarDeclarator
   - useTemplate
-  - useWhile
+  - useThrowNewError
+  - useThrowOnlyError
   
 
 ```
-
-

@@ -1,11 +1,11 @@
 //! Utilities for high level parsing of js code.
 
 use crate::*;
-use biome_js_syntax::{
+pub use biome_js_syntax::{
     AnyJsRoot, JsFileSource, JsLanguage, JsModule, JsScript, JsSyntaxNode, ModuleKind,
 };
-use biome_parser::event::Event;
 use biome_parser::token_source::Trivia;
+use biome_parser::{event::Event, AnyParse};
 use biome_rowan::{AstNode, NodeCache};
 use std::marker::PhantomData;
 
@@ -113,6 +113,18 @@ impl<T: AstNode<Language = JsLanguage>> Parse<T> {
     }
 }
 
+impl<T> From<Parse<T>> for AnyParse {
+    fn from(parse: Parse<T>) -> Self {
+        let root = parse.syntax();
+        let diagnostics = parse.into_diagnostics();
+        Self::new(
+            // SAFETY: the parser should always return a root node
+            root.as_send().unwrap(),
+            diagnostics,
+        )
+    }
+}
+
 fn parse_common(
     text: &str,
     source_type: JsFileSource,
@@ -150,7 +162,7 @@ fn parse_common(
 /// let prop = dbg!(typed_ast_node.member()).unwrap();
 ///
 /// // You can then go back to an untyped SyntaxNode and get its range, text, parents, children, etc.
-/// assert_eq!(prop.syntax().text(), "2");
+/// assert_eq!(prop.syntax().text_with_trivia(), "2");
 ///
 /// // Util has a function for yielding all tokens of a node.
 /// let tokens = untyped_expr_node.descendants_tokens(Direction::Next).map(|token| token.text_trimmed().to_string()).collect::<Vec<_>>();

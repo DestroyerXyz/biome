@@ -1,9 +1,9 @@
 use crate::prelude::*;
-use crate::utils::{AnyJsBinaryLikeExpression, FormatOptionalSemicolon, FormatStatementSemicolon};
+use crate::utils::{FormatOptionalSemicolon, FormatStatementSemicolon};
 
 use biome_formatter::{format_args, write, CstFormatContext};
-
-use crate::parentheses::{get_expression_left_side, AnyJsExpressionLeftSide};
+use biome_js_syntax::binary_like_expression::AnyJsBinaryLikeExpression;
+use biome_js_syntax::expression_left_side::AnyJsExpressionLeftSide;
 use biome_js_syntax::{
     AnyJsExpression, JsReturnStatement, JsSequenceExpression, JsSyntaxToken, JsThrowStatement,
 };
@@ -49,7 +49,7 @@ impl Format<JsFormatContext> for AnyJsStatementWithArgument {
                 .trailing_comments(self.syntax())
                 .last()
                 .or_else(|| comments.dangling_comments(self.syntax()).last())
-                .map_or(false, |comment| comment.kind().is_line());
+                .is_some_and(|comment| comment.kind().is_line());
 
             if is_last_comment_line {
                 write!(f, [FormatOptionalSemicolon::new(Some(&semicolon))])?;
@@ -138,7 +138,15 @@ fn has_argument_leading_comments(argument: &AnyJsExpression, comments: &JsCommen
             return true;
         }
 
-        current = get_expression_left_side(&expression);
+        if comments
+            .leading_comments(argument.syntax())
+            .iter()
+            .any(|comment| comment.piece().has_newline())
+        {
+            return true;
+        };
+
+        current = expression.left_expression();
     }
 
     false

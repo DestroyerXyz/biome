@@ -1,6 +1,7 @@
 use std::io;
 
 use biome_console::{fmt, markup, MarkupBuf};
+use biome_rowan::TextSize;
 use biome_text_edit::TextEdit;
 use biome_text_size::TextRange;
 use serde::{
@@ -15,6 +16,7 @@ use crate::{
 
 /// Serializable representation for a [Diagnostic](super::Diagnostic).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct Diagnostic {
@@ -72,6 +74,14 @@ impl Diagnostic {
             source,
         }
     }
+
+    pub fn with_offset(mut self, offset: TextSize) -> Self {
+        self.location.span = self
+            .location
+            .span
+            .map(|span| TextRange::new(span.start() + offset, span.end() + offset));
+        self
+    }
 }
 
 impl super::Diagnostic for Diagnostic {
@@ -122,13 +132,14 @@ impl super::Diagnostic for Diagnostic {
 /// prints the description of the diagnostic as a string.
 struct PrintDescription<'fmt, D: ?Sized>(pub &'fmt D);
 
-impl<'fmt, D: super::Diagnostic + ?Sized> std::fmt::Display for PrintDescription<'fmt, D> {
+impl<D: super::Diagnostic + ?Sized> std::fmt::Display for PrintDescription<'_, D> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.description(fmt).map_err(|_| std::fmt::Error)
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 struct Location {
@@ -151,6 +162,7 @@ impl From<super::Location<'_>> for Location {
 
 /// Implementation of [Visitor] collecting serializable [Advice] into a vector.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 struct Advices {
@@ -237,6 +249,7 @@ impl super::Advices for Advices {
 /// See the [Visitor] trait for additional documentation on all the supported
 /// advice types.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 enum Advice {
@@ -281,6 +294,7 @@ impl From<DiagnosticTag> for DiagnosticTags {
             DiagnosticTag::Internal => DiagnosticTags::INTERNAL,
             DiagnosticTag::UnnecessaryCode => DiagnosticTags::UNNECESSARY_CODE,
             DiagnosticTag::DeprecatedCode => DiagnosticTags::DEPRECATED_CODE,
+            DiagnosticTag::Verbose => DiagnosticTags::VERBOSE,
         }
     }
 }
@@ -416,8 +430,8 @@ mod tests {
     fn serialized() -> Value {
         let advices = json!([
             {
-                "Log": [
-                    "Warn",
+                "log": [
+                    "warn",
                     [
                         {
                             "content": "log",
@@ -443,14 +457,14 @@ mod tests {
             "advices": {
                 "advices": advices
             },
-            "verbose_advices": {
+            "verboseAdvices": {
                 "advices": advices
             },
             "location": {
                 "path": {
                     "file": "path"
                 },
-                "source_code": "source_code",
+                "sourceCode": "source_code",
                 "span": [
                     0,
                     6
@@ -470,7 +484,7 @@ mod tests {
         let json = to_value(&diag).unwrap();
 
         let expected = serialized();
-        assert_eq!(json, expected, "actual:\n{json:#}\nexpected:\n{expected:#}");
+        assert_eq!(json, expected);
     }
 
     #[test]
@@ -481,9 +495,6 @@ mod tests {
         let expected = TestDiagnostic::default();
         let expected = super::Diagnostic::new(expected);
 
-        assert_eq!(
-            diag, expected,
-            "actual:\n{diag:#?}\nexpected:\n{expected:#?}"
-        );
+        assert_eq!(diag, expected);
     }
 }

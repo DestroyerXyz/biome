@@ -4,19 +4,20 @@ use crate::prelude::*;
 use crate::ts::bindings::type_parameters::FormatTsTypeParametersOptions;
 use crate::utils::member_chain::is_member_call_chain;
 use crate::utils::object::write_member_name;
-use crate::utils::AnyJsBinaryLikeExpression;
 use crate::utils::{FormatLiteralStringToken, StringLiteralParentKind};
 use biome_formatter::{format_args, write, CstFormatContext, FormatOptions, VecBuffer};
+use biome_js_syntax::binary_like_expression::AnyJsBinaryLikeExpression;
 use biome_js_syntax::{
     AnyJsAssignmentPattern, AnyJsBindingPattern, AnyJsCallArgument, AnyJsClassMemberName,
     AnyJsExpression, AnyJsFunctionBody, AnyJsObjectAssignmentPatternMember,
-    AnyJsObjectBindingPatternMember, AnyJsObjectMemberName, AnyJsTemplateElement, AnyTsType,
-    AnyTsVariableAnnotation, JsAssignmentExpression, JsInitializerClause, JsLiteralMemberName,
-    JsObjectAssignmentPattern, JsObjectAssignmentPatternProperty, JsObjectBindingPattern,
-    JsPropertyClassMember, JsPropertyClassMemberFields, JsPropertyObjectMember, JsSyntaxKind,
-    JsVariableDeclarator, TsIdentifierBinding, TsInitializedPropertySignatureClassMember,
-    TsInitializedPropertySignatureClassMemberFields, TsPropertySignatureClassMember,
-    TsPropertySignatureClassMemberFields, TsTypeAliasDeclaration, TsTypeArguments,
+    AnyJsObjectBindingPatternMember, AnyJsObjectMemberName, AnyJsTemplateElement,
+    AnyTsIdentifierBinding, AnyTsType, AnyTsVariableAnnotation, JsAssignmentExpression,
+    JsInitializerClause, JsLiteralMemberName, JsObjectAssignmentPattern,
+    JsObjectAssignmentPatternProperty, JsObjectBindingPattern, JsPropertyClassMember,
+    JsPropertyClassMemberFields, JsPropertyObjectMember, JsSyntaxKind, JsVariableDeclarator,
+    TsInitializedPropertySignatureClassMember, TsInitializedPropertySignatureClassMemberFields,
+    TsPropertySignatureClassMember, TsPropertySignatureClassMemberFields, TsTypeAliasDeclaration,
+    TsTypeArguments, TsUnionType,
 };
 use biome_js_syntax::{AnyJsLiteralExpression, JsUnaryExpression};
 use biome_rowan::{declare_node_union, AstNode, SyntaxNodeOptionExt, SyntaxResult};
@@ -39,7 +40,7 @@ declare_node_union! {
         AnyJsAssignmentPattern |
         AnyJsObjectMemberName |
         AnyJsBindingPattern |
-        TsIdentifierBinding |
+        AnyTsIdentifierBinding |
         JsLiteralMemberName |
         AnyJsClassMemberName
 }
@@ -159,7 +160,7 @@ pub(crate) fn is_complex_type_annotation(
                         let is_complex_type = argument
                             .as_ts_reference_type()
                             .and_then(|reference_type| reference_type.type_arguments())
-                            .map_or(false, |type_arguments| {
+                            .is_some_and(|type_arguments| {
                                 type_arguments.ts_type_argument_list().len() > 0
                             });
 
@@ -689,7 +690,7 @@ impl AnyJsAssignmentLike {
         }
 
         if let Some(AnyJsExpression::JsCallExpression(call_expression)) = &right_expression {
-            if call_expression.callee()?.syntax().text() == "require" {
+            if call_expression.callee()?.syntax().text_with_trivia() == "require" {
                 return Ok(AssignmentLikeLayout::NeverBreakAfterOperator);
             }
         }
@@ -784,7 +785,7 @@ impl AnyJsAssignmentLike {
         let upper_chain_is_eligible =
             // First, we check if the current node is an assignment expression
             if let AnyJsAssignmentLike::JsAssignmentExpression(assignment) = self {
-                assignment.syntax().parent().map_or(false, |parent| {
+                assignment.syntax().parent().is_some_and(|parent| {
                     // Then we check if the parent is assignment expression or variable declarator
                     if matches!(
                         parent.kind(),
@@ -879,7 +880,7 @@ impl AnyJsAssignmentLike {
         let is_complex_destructuring = self
             .left()?
             .into_object_pattern()
-            .map_or(false, |pattern| pattern.is_complex());
+            .is_some_and(|pattern| pattern.is_complex());
 
         let has_complex_type_annotation = self
             .annotation()
@@ -888,10 +889,26 @@ impl AnyJsAssignmentLike {
 
         let is_complex_type_alias = self.is_complex_type_alias()?;
 
-        Ok(is_complex_destructuring || has_complex_type_annotation || is_complex_type_alias)
+        let is_right_arrow_func = self.right().is_ok_and(|right| match right {
+            RightAssignmentLike::JsInitializerClause(init) => {
+                init.expression().is_ok_and(|expression| {
+                    matches!(expression, AnyJsExpression::JsArrowFunctionExpression(_))
+                })
+            }
+            _ => false,
+        });
+        let is_breakable = self
+            .annotation()
+            .and_then(|annotation| is_annotation_breakable(annotation).ok())
+            .unwrap_or(false);
+
+        Ok(is_complex_destructuring
+            || has_complex_type_annotation
+            || is_complex_type_alias
+            || (is_right_arrow_func && is_breakable))
     }
 
-    /// Checks if the the current assignment is eligible for [AssignmentLikeLayout::BreakAfterOperator]
+    /// Checks if the current assignment is eligible for [AssignmentLikeLayout::BreakAfterOperator]
     ///
     /// This function is small wrapper around [should_break_after_operator] because it has to work
     /// for nodes that belong to TypeScript too.
@@ -910,7 +927,26 @@ impl AnyJsAssignmentLike {
                     || should_break_after_operator(&initializer.expression()?, comments, f)?
             }
             RightAssignmentLike::AnyTsType(AnyTsType::TsUnionType(ty)) => {
-                comments.has_leading_comments(ty.syntax())
+                // Recursively checks if the union type is nested and identifies the innermost union type.
+                // If a leading comment is found while navigating to the inner union type,
+                // it is considered as having leading comments.
+                let mut union_type = ty.clone();
+                let mut has_leading_comments = comments.has_leading_comments(union_type.syntax());
+                while is_nested_union_type(&union_type)? && !has_leading_comments {
+                    if let Some(Ok(inner_union_type)) = union_type.types().last() {
+                        let inner_union_type = TsUnionType::cast(inner_union_type.into_syntax());
+                        if let Some(inner_union_type) = inner_union_type {
+                            has_leading_comments =
+                                comments.has_leading_comments(inner_union_type.syntax());
+                            union_type = inner_union_type;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                has_leading_comments
             }
             right => comments.has_leading_own_line_comment(right.syntax()),
         };
@@ -949,9 +985,7 @@ pub(crate) fn should_break_after_operator(
 
         AnyJsExpression::JsConditionalExpression(conditional) => {
             AnyJsBinaryLikeExpression::cast(conditional.test()?.into_syntax())
-                .map_or(false, |expression| {
-                    !expression.should_inline_logical_expression()
-                })
+                .is_some_and(|expression| !expression.should_inline_logical_expression())
         }
 
         AnyJsExpression::JsClassExpression(class) => !class.decorators().is_empty(),
@@ -1119,7 +1153,7 @@ fn is_poorly_breakable_member_or_call_chain(
     expression: &AnyJsExpression,
     f: &Formatter<JsFormatContext>,
 ) -> SyntaxResult<bool> {
-    let threshold = f.options().line_width().get() / 4;
+    let threshold = f.options().line_width().value() / 4;
 
     // Only call and member chains are poorly breakable
     // - `obj.member.prop`
@@ -1285,15 +1319,14 @@ fn is_complex_type_arguments(type_arguments: TsTypeArguments) -> SyntaxResult<bo
         .iter()
         .next()
         .transpose()?
-        .map(|first_argument| {
+        .is_some_and(|first_argument| {
             matches!(
                 first_argument,
                 AnyTsType::TsUnionType(_)
                     | AnyTsType::TsIntersectionType(_)
                     | AnyTsType::TsObjectType(_)
             )
-        })
-        .unwrap_or(false);
+        });
 
     if is_first_argument_complex {
         return Ok(true);
@@ -1303,6 +1336,37 @@ fn is_complex_type_arguments(type_arguments: TsTypeArguments) -> SyntaxResult<bo
     // https://github.com/prettier/prettier/blob/a043ac0d733c4d53f980aa73807a63fc914f23bd/src/language-js/print/assignment.js#L454
 
     Ok(false)
+}
+
+/// If a union type has only one type and it's a union type, then it's a nested union type
+/// ```js
+/// type A = | (A | B)
+///          ^^^^^^^^^^
+/// ```
+/// The final format will only keep the inner union type
+fn is_nested_union_type(union_type: &TsUnionType) -> SyntaxResult<bool> {
+    if union_type.types().len() == 1 {
+        let ty = union_type.types().first();
+        if let Some(ty) = ty {
+            let is_nested = TsUnionType::can_cast(ty?.syntax().kind());
+            return Ok(is_nested);
+        }
+    }
+    Ok(false)
+}
+
+fn is_annotation_breakable(annotation: AnyTsVariableAnnotation) -> SyntaxResult<bool> {
+    let is_breakable = annotation
+        .type_annotation()?
+        .and_then(|type_annotation| type_annotation.ty().ok())
+        .is_some_and(|ty| match ty {
+            AnyTsType::TsReferenceType(reference_type) => reference_type
+                .type_arguments()
+                .is_some_and(|type_args| type_args.ts_type_argument_list().len() > 0),
+            _ => false,
+        });
+
+    Ok(is_breakable)
 }
 
 /// Formats an expression and passes the assignment layout to its formatting function if the expressions

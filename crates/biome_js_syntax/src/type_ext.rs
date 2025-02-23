@@ -1,7 +1,7 @@
-use biome_rowan::AstNode;
+use biome_rowan::{declare_node_union, AstNode, SyntaxResult};
 use std::iter;
 
-use crate::{AnyTsType, TsConditionalType};
+use crate::{AnyTsReturnType, AnyTsType, TsConditionalType, TsConstructorType, TsFunctionType};
 
 impl AnyTsType {
     /// Try to extract non `TsParenthesizedType` from `AnyTsType`
@@ -111,6 +111,21 @@ impl AnyTsType {
     pub fn in_conditional_true_type(&self) -> bool {
         self.parent::<TsConditionalType>()
             .and_then(|parent| parent.true_type().ok())
-            .map_or(false, |ref true_type| true_type == self)
+            .is_some_and(|ref true_type| true_type == self)
+    }
+}
+
+declare_node_union! {
+    pub AnyTsFunctionType = TsConstructorType | TsFunctionType
+}
+
+impl AnyTsFunctionType {
+    pub fn return_type(&self) -> SyntaxResult<AnyTsReturnType> {
+        match self {
+            Self::TsFunctionType(function_type) => function_type.return_type(),
+            Self::TsConstructorType(constructor_type) => constructor_type
+                .return_type()
+                .map(AnyTsReturnType::AnyTsType),
+        }
     }
 }

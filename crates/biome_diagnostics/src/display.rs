@@ -1,7 +1,11 @@
-use std::{io, iter};
-
-use biome_console::{fmt, markup, HorizontalLine, Markup, MarkupBuf, MarkupElement, MarkupNode};
+use biome_console::fmt::MarkupElements;
+use biome_console::{
+    fmt, markup, HorizontalLine, Markup, MarkupBuf, MarkupElement, MarkupNode, Padding,
+};
 use biome_text_edit::TextEdit;
+use std::path::Path;
+use std::{env, io, iter};
+use terminal_size::terminal_size;
 use unicode_width::UnicodeWidthStr;
 
 mod backtrace;
@@ -9,7 +13,7 @@ mod diff;
 pub(super) mod frame;
 mod message;
 
-use crate::display::frame::SourceFile;
+pub use crate::display::frame::{SourceFile, SourceLocation};
 use crate::{
     diagnostic::internal::AsDiagnostic, Advices, Diagnostic, DiagnosticTags, Location, LogCategory,
     Resource, Severity, Visit,
@@ -22,7 +26,7 @@ pub use self::message::MessageAndDescription;
 /// formatter implementing [std::fmt::Write].
 pub struct PrintDescription<'fmt, D: ?Sized>(pub &'fmt D);
 
-impl<'fmt, D: AsDiagnostic + ?Sized> std::fmt::Display for PrintDescription<'fmt, D> {
+impl<D: AsDiagnostic + ?Sized> std::fmt::Display for PrintDescription<'_, D> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0
             .as_diagnostic()
@@ -36,6 +40,7 @@ impl<'fmt, D: AsDiagnostic + ?Sized> std::fmt::Display for PrintDescription<'fmt
 pub struct PrintDiagnostic<'fmt, D: ?Sized> {
     diag: &'fmt D,
     verbose: bool,
+    search: bool,
 }
 
 impl<'fmt, D: AsDiagnostic + ?Sized> PrintDiagnostic<'fmt, D> {
@@ -43,6 +48,7 @@ impl<'fmt, D: AsDiagnostic + ?Sized> PrintDiagnostic<'fmt, D> {
         Self {
             diag,
             verbose: false,
+            search: false,
         }
     }
 
@@ -50,11 +56,20 @@ impl<'fmt, D: AsDiagnostic + ?Sized> PrintDiagnostic<'fmt, D> {
         Self {
             diag,
             verbose: true,
+            search: false,
+        }
+    }
+
+    pub fn search(diag: &'fmt D) -> Self {
+        Self {
+            diag,
+            verbose: false,
+            search: true,
         }
     }
 }
 
-impl<'fmt, D: AsDiagnostic + ?Sized> fmt::Display for PrintDiagnostic<'fmt, D> {
+impl<D: AsDiagnostic + ?Sized> fmt::Display for PrintDiagnostic<'_, D> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> io::Result<()> {
         let diagnostic = self.diag.as_diagnostic();
 
@@ -62,20 +77,24 @@ impl<'fmt, D: AsDiagnostic + ?Sized> fmt::Display for PrintDiagnostic<'fmt, D> {
         fmt.write_markup(markup! {
             {PrintHeader(diagnostic)}"\n\n"
         })?;
-
         // Wrap the formatter with an indentation level and print the advices
         let mut slot = None;
         let mut fmt = IndentWriter::wrap(fmt, &mut slot, true, "  ");
-        let mut visitor = PrintAdvices(&mut fmt);
 
-        print_advices(&mut visitor, diagnostic, self.verbose)
+        if self.search {
+            let mut visitor = PrintSearch(&mut fmt);
+            print_advices(&mut visitor, diagnostic, self.verbose)
+        } else {
+            let mut visitor = PrintAdvices(&mut fmt);
+            print_advices(&mut visitor, diagnostic, self.verbose)
+        }
     }
 }
 
 /// Display struct implementing the formatting of a diagnostic header.
-struct PrintHeader<'fmt, D: ?Sized>(&'fmt D);
+pub(crate) struct PrintHeader<'fmt, D: ?Sized>(pub(crate) &'fmt D);
 
-impl<'fmt, D: Diagnostic + ?Sized> fmt::Display for PrintHeader<'fmt, D> {
+impl<D: Diagnostic + ?Sized> fmt::Display for PrintHeader<'_, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> io::Result<()> {
         let Self(diagnostic) = *self;
 
@@ -90,8 +109,41 @@ impl<'fmt, D: Diagnostic + ?Sized> fmt::Display for PrintHeader<'fmt, D> {
             _ => None,
         };
 
+        let is_vscode = {
+            if cfg!(debug_assertions) {
+                false
+            } else {
+                env::var("TERM_PROGRAM").unwrap_or_default() == "vscode"
+            }
+        };
+        // https://github.com/JetBrains/jediterm/issues/253#issuecomment-1280492436
+        // https://github.com/JetBrains/intellij-community/blob/5ca79d879617e9cc82f61590b8d157d6a4ad8746/plugins/terminal/src/org/jetbrains/plugins/terminal/runner/LocalOptionsConfigurer.java#L94
+        let is_jetbrains = {
+            if cfg!(debug_assertions) {
+                false
+            } else {
+                env::var("TERM_PROGRAM").unwrap_or_default() == "JetBrains-JediTerm"
+            }
+        };
+
         if let Some(name) = file_name {
-            fmt.write_str(name)?;
+            if is_vscode {
+                fmt.write_str(name)?;
+            } else {
+                let path_name = Path::new(name);
+                if path_name.is_absolute() {
+                    let link = format!("file://{name}");
+                    fmt.write_markup(markup! {
+                        <Hyperlink href={link}>{name}</Hyperlink>
+                    })?;
+                } else if is_jetbrains {
+                    fmt.write_str(&format!(" at {name}"))?;
+                } else if cfg!(debug_assertions) && cfg!(windows) {
+                    fmt.write_str(name.replace('\\', "/").as_str())?;
+                } else {
+                    fmt.write_str(name)?;
+                }
+            }
 
             // Print the line and column position if the location has a span and source code
             // (the source code is necessary to convert a byte offset into a line + column)
@@ -142,6 +194,11 @@ impl<'fmt, D: Diagnostic + ?Sized> fmt::Display for PrintHeader<'fmt, D> {
             })?;
         }
 
+        if tags.contains(DiagnosticTags::VERBOSE) {
+            fmt.write_markup(markup! {
+                <Inverse>" VERBOSE "</Inverse>" "
+            })?;
+        }
         if diagnostic.severity() == Severity::Fatal {
             fmt.write_markup(markup! {
                 <Inverse><Error>" FATAL "</Error></Inverse>" "
@@ -150,11 +207,17 @@ impl<'fmt, D: Diagnostic + ?Sized> fmt::Display for PrintHeader<'fmt, D> {
 
         // Load the printed width for the header, and fill the rest of the line
         // with the '━' line character up to 100 columns with at least 10 characters
-        const HEADER_WIDTH: usize = 100;
+        let header_width = {
+            if cfg!(debug_assertions) {
+                100
+            } else {
+                terminal_size().map_or(100, |(width, _)| width.0 as usize)
+            }
+        };
         const MIN_WIDTH: usize = 10;
 
         let text_width = slot.map_or(0, |writer| writer.width);
-        let line_width = HEADER_WIDTH.saturating_sub(text_width).max(MIN_WIDTH);
+        let line_width = header_width.saturating_sub(text_width).max(MIN_WIDTH);
         HorizontalLine::new(line_width).fmt(f)
     }
 }
@@ -308,7 +371,7 @@ where
 /// message of this diagnostic and all of its sources.
 struct PrintCauseChain<'fmt, D: ?Sized>(&'fmt D);
 
-impl<'fmt, D: Diagnostic + ?Sized> fmt::Display for PrintCauseChain<'fmt, D> {
+impl<D: Diagnostic + ?Sized> fmt::Display for PrintCauseChain<'_, D> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> io::Result<()> {
         let Self(diagnostic) = *self;
 
@@ -324,6 +387,14 @@ impl<'fmt, D: Diagnostic + ?Sized> fmt::Display for PrintCauseChain<'fmt, D> {
         }
 
         Ok(())
+    }
+}
+
+struct PrintSearch<'a, 'b>(&'a mut fmt::Formatter<'b>);
+
+impl Visit for PrintSearch<'_, '_> {
+    fn record_frame(&mut self, location: Location<'_>) -> io::Result<()> {
+        frame::print_highlighted_frame(self.0, location)
     }
 }
 
@@ -421,6 +492,61 @@ impl Visit for PrintAdvices<'_, '_> {
         let mut fmt = IndentWriter::wrap(self.0, &mut slot, true, "  ");
         let mut visitor = PrintAdvices(&mut fmt);
         advice.record(&mut visitor)
+    }
+
+    fn record_table(
+        &mut self,
+        padding: usize,
+        headers: &[MarkupBuf],
+        columns: &[&[MarkupBuf]],
+    ) -> io::Result<()> {
+        debug_assert_eq!(
+            headers.len(),
+            columns.len(),
+            "headers and columns must have the same number length"
+        );
+
+        if columns.is_empty() {
+            return Ok(());
+        }
+
+        let mut headers_iter = headers.iter().enumerate();
+        let rows_number = columns[0].len();
+        let columns_number = columns.len();
+
+        let mut longest_cell = 0;
+        for current_row_index in 0..rows_number {
+            for current_column_index in 0..columns_number {
+                let cell = columns
+                    .get(current_column_index)
+                    .and_then(|c| c.get(current_row_index));
+                if let Some(cell) = cell {
+                    if current_column_index == 0 && current_row_index == 0 {
+                        longest_cell = cell.text_len();
+                        for (index, header_cell) in headers_iter.by_ref() {
+                            self.0.write_markup(markup!({ header_cell }))?;
+                            if index < headers.len() - 1 {
+                                self.0.write_markup(
+                                    markup! {{Padding::new(padding + longest_cell.saturating_sub(header_cell.text_len()))}},
+                                )?;
+                            }
+                        }
+
+                        self.0.write_markup(markup! {"\n\n"})?;
+                    }
+                    let extra_padding = longest_cell.saturating_sub(cell.text_len());
+
+                    self.0.write_markup(markup!({ cell }))?;
+                    if columns_number != current_column_index + 1 {
+                        self.0
+                            .write_markup(markup! {{Padding::new(padding + extra_padding)}})?;
+                    }
+                }
+            }
+            self.0.write_markup(markup!("\n"))?;
+        }
+
+        Ok(())
     }
 }
 
@@ -529,7 +655,8 @@ impl<W: fmt::Write + ?Sized> fmt::Write for IndentWriter<'_, W> {
     ) -> io::Result<()> {
         while !content.is_empty() {
             if self.pending_indent {
-                self.writer.write_str(elements, self.ident_text)?;
+                self.writer
+                    .write_str(&MarkupElements::Root, self.ident_text)?;
                 self.pending_indent = false;
             }
 
@@ -758,9 +885,11 @@ mod tests {
         let expected = markup!{
             "path:1:1 internalError/io "<Inverse>" FIXABLE "</Inverse>" ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "\n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
             "  \n"
-            <Emphasis><Error>"  >"</Error></Emphasis>" "<Emphasis>"1 │ "</Emphasis>"source code\n"
+            "  "
+            <Emphasis><Error>">"</Error></Emphasis>" "<Emphasis>"1 │ "</Emphasis>"source code\n"
             "   "<Emphasis>"   │ "</Emphasis><Emphasis><Error>"^^^^^^"</Error></Emphasis>"\n"
             "  \n"
         }.to_owned();
@@ -782,13 +911,17 @@ mod tests {
         let expected = markup!{
             "internalError/io "<Inverse>" FIXABLE "</Inverse>" ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "\n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
             "  \n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"error"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"error"</Error>"\n"
             "  \n"
-            <Emphasis><Warn>"  ⚠"</Warn></Emphasis>" "<Warn>"warn"</Warn>"\n"
+            "  "
+            <Emphasis><Warn>"⚠"</Warn></Emphasis>" "<Warn>"warn"</Warn>"\n"
             "  \n"
-            <Emphasis><Info>"  ℹ"</Info></Emphasis>" "<Info>"info"</Info>"\n"
+            "  "
+            <Emphasis><Info>"ℹ"</Info></Emphasis>" "<Info>"info"</Info>"\n"
             "  \n"
             "  none\n"
             "  \n"
@@ -812,7 +945,8 @@ mod tests {
         let expected = markup!{
             "internalError/io "<Inverse>" FIXABLE "</Inverse>" ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "\n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
             "  \n"
             "  - item 1\n"
             "  - item 2\n"
@@ -837,9 +971,11 @@ mod tests {
         let expected = markup!{
             "internalError/io "<Inverse>" FIXABLE "</Inverse>" ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "\n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
             "  \n"
-            <Emphasis><Error>"  >"</Error></Emphasis>" "<Emphasis>"1 │ "</Emphasis>"context location context\n"
+            "  "
+            <Emphasis><Error>">"</Error></Emphasis>" "<Emphasis>"1 │ "</Emphasis>"context location context\n"
             "   "<Emphasis>"   │ "</Emphasis>"        "<Emphasis><Error>"^^^^^^^^"</Error></Emphasis>"\n"
             "  \n"
         }.to_owned();
@@ -862,10 +998,13 @@ mod tests {
         let expected = markup!{
             "internalError/io "<Inverse>" FIXABLE "</Inverse>" ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "\n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
             "  \n"
-            <Error>"  -"</Error>" "<Error>"context"</Error><Error><Dim>"·"</Dim></Error><Error><Emphasis>"before"</Emphasis></Error><Error><Dim>"·"</Dim></Error><Error>"context"</Error>"\n"
-            <Success>"  +"</Success>" "<Success>"context"</Success><Success><Dim>"·"</Dim></Success><Success><Emphasis>"after"</Emphasis></Success><Success><Dim>"·"</Dim></Success><Success>"context"</Success>"\n"
+            "  "
+            <Error>"-"</Error>" "<Error>"context"</Error><Error><Dim>"·"</Dim></Error><Error><Emphasis>"before"</Emphasis></Error><Error><Dim>"·"</Dim></Error><Error>"context"</Error>"\n"
+            "  "
+            <Success>"+"</Success>" "<Success>"context"</Success><Success><Dim>"·"</Dim></Success><Success><Emphasis>"after"</Emphasis></Success><Success><Dim>"·"</Dim></Success><Success>"context"</Success>"\n"
             "  \n"
         }.to_owned();
 
@@ -887,9 +1026,11 @@ mod tests {
         let expected = markup!{
             "internalError/io "<Inverse>" FIXABLE "</Inverse>" ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "\n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
             "  \n"
-            <Emphasis><Info>"  ℹ"</Info></Emphasis>" "<Info>"Backtrace Title"</Info>"\n"
+            "  "
+            <Emphasis><Info>"ℹ"</Info></Emphasis>" "<Info>"Backtrace Title"</Info>"\n"
             "  \n"
             "     0: crate::module::function\n"
             "            at crate/src/module.rs:8:16\n"
@@ -913,9 +1054,11 @@ mod tests {
         let expected = markup!{
             "internalError/io "<Inverse>" FIXABLE "</Inverse>" ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "\n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
             "  \n"
-            <Emphasis>"  $"</Emphasis>" biome command --argument\n"
+            "  "
+            <Emphasis>"$"</Emphasis>" biome command --argument\n"
             "  \n"
         }.to_owned();
 
@@ -937,15 +1080,20 @@ mod tests {
         let expected = markup!{
             "internalError/io "<Inverse>" FIXABLE "</Inverse>" ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "\n"
-            <Emphasis><Error>"  ✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
+            "  "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"diagnostic message"</Error>"\n"
             "  \n"
-            <Emphasis>"  Group Title"</Emphasis>"\n"
+            "  "
+            <Emphasis>"Group Title"</Emphasis>"\n"
             "  \n"
-            <Emphasis><Error>"    ✖"</Error></Emphasis>" "<Error>"error"</Error>"\n"
+            "    "
+            <Emphasis><Error>"✖"</Error></Emphasis>" "<Error>"error"</Error>"\n"
             "    \n"
-            <Emphasis><Warn>"    ⚠"</Warn></Emphasis>" "<Warn>"warn"</Warn>"\n"
+            "    "
+            <Emphasis><Warn>"⚠"</Warn></Emphasis>" "<Warn>"warn"</Warn>"\n"
             "    \n"
-            <Emphasis><Info>"    ℹ"</Info></Emphasis>" "<Info>"info"</Info>"\n"
+            "    "
+            <Emphasis><Info>"ℹ"</Info></Emphasis>" "<Info>"info"</Info>"\n"
             "    \n"
             "    none\n"
             "    \n"

@@ -5,9 +5,9 @@ mod path;
 
 pub use dir::ensure_cache_dir;
 pub use fs::{
-    AutoSearchResult, ErrorEntry, File, FileSystem, FileSystemDiagnostic, FileSystemExt,
-    MemoryFileSystem, OpenOptions, OsFileSystem, TraversalContext, TraversalScope, BIOME_JSON,
-    ROME_JSON,
+    AutoSearchResult, ConfigName, ErrorEntry, File, FileSystem, FileSystemDiagnostic,
+    FileSystemExt, FsErrorKind, MemoryFileSystem, OpenOptions, OsFileSystem, PathKind, TemporaryFs,
+    TraversalContext, TraversalScope,
 };
-pub use interner::PathInterner;
-pub use path::RomePath;
+pub use interner::{PathInterner, PathInternerSet};
+pub use path::BiomePath;

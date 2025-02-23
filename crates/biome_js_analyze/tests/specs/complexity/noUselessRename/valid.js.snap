@@ -1,7 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
-assertion_line: 92
 expression: valid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -111,5 +111,3 @@ const { foo, ...stuff } = myObject;
 const { foo: bar, ...stuff } = myObject;
 
 ```
-
-

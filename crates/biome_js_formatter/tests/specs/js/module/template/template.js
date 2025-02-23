@@ -45,3 +45,28 @@ const foo = `but where will ${
 `${// $FlowFixMe found when converting React.createClass to ES6
 ExampleStory.getFragment('story')}
 `;
+
+// https://github.com/biomejs/biome/issues/2470
+let message = `this is a long message which contains an interpolation: ${format(data)} <- like this`;
+
+let otherMessage = `this template contains two interpolations: ${this(one)}, which should be kept on its line,
+and this other one: ${this(long.placeholder.text.goes.here.so.we.get.a.linebreak)
+  }
+which already had a linebreak so can be broken up
+`;
+
+message = `this is a long messsage a simple interpolation without a linebreak \${foo} <- like this\`;
+message = \`whereas this messsage has a linebreak in the interpolation \${
+  foo
+} <- like this`;
+
+// https://github.com/biomejs/biome/issues/3766
+const issus_3766 = `Lectures: ${doneCount}/${totalCount} | Mins: ${(doneSecs / 60).toFixed(
+    2,
+  )}/${(totalSecs / 60).toFixed(
+    2,
+  )}| Hours: ${(doneSecs / 3600).toFixed(
+    2,
+  )}/${(totalSecs / 3600).toFixed(
+    2,
+  )}`;

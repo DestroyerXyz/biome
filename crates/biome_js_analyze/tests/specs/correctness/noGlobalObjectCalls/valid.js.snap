@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: valid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -51,5 +52,3 @@ if (foo) { const Intl = 1; Intl(); }
 if (foo) { const Intl = 1; new Intl(); }
 
 ```
-
-

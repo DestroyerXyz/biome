@@ -2,30 +2,30 @@
 source: crates/biome_formatter_test/src/snapshot_builder.rs
 info: js/module/export/bracket-spacing/export_bracket_spacing.js
 ---
-
 # Input
 
 ```js
 export {a,
     b as c
-} from "fancy" assert { type: "json"}
+} from "fancy" with { type: "json"}
 
 
 export {
     lorem_lorem_lorem_lorem_lorem_lorem_lorem_lorem_lorem,
     lorem_lorem_lorem_lorem_lorem_ as ipsum_ipsum_ipsum_ipsum_ipsum_ipsum_
-} from "fancy" assert { type: "json", "type2": "json", type23: "json", "type24": "json"}
+} from "fancy" with { type: "json", "type2": "json", type23: "json", "type24": "json"}
 
 
 export { loooooooooooooooooooooooooooooooooooooooooooooooooong } from "loooooooooooooooooooooooooooooooooooooooooooooong"
 
 export { loooooooooooooooooooooooooooooooooooooooooooooooooong, } from "loooooooooooooooooooooooooooooooooooooooooooooong"
 
-export { 
-// comment 
+export {
+// comment
 loooooooooooooooooooooooooooooooooooooooooooooooooong } from "loooooooooooooooooooooooooooooooooooooooooooooong"
 
 export { a as b } from "loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong"
+
 ```
 
 
@@ -43,24 +43,26 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: true
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```js
-export { a, b as c } from "fancy" assert { type: "json" };
+export { a, b as c } from "fancy" with { type: "json" };
 
 export {
 	lorem_lorem_lorem_lorem_lorem_lorem_lorem_lorem_lorem,
 	lorem_lorem_lorem_lorem_lorem_ as ipsum_ipsum_ipsum_ipsum_ipsum_ipsum_,
-} from "fancy" assert {
+} from "fancy" with {
 	type: "json",
-	"type2": "json",
+	type2: "json",
 	type23: "json",
-	"type24": "json",
+	type24: "json",
 };
 
 export { loooooooooooooooooooooooooooooooooooooooooooooooooong } from "loooooooooooooooooooooooooooooooooooooooooooooong";
@@ -82,7 +84,7 @@ export { a as b } from "looooooooooooooooooooooooooooooooooooooooooooooooooooooo
    22: export { a as b } from "loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong";
 ```
 
-## Output 2
+## Output 1
 
 -----
 Indent style: Tab
@@ -92,24 +94,26 @@ Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
 Quote properties: As needed
-Trailing comma: All
+Trailing commas: All
 Semicolons: Always
 Arrow parentheses: Always
 Bracket spacing: false
 Bracket same line: false
+Attribute Position: Auto
+Object wrap: Preserve
 -----
 
 ```js
-export {a, b as c} from "fancy" assert {type: "json"};
+export {a, b as c} from "fancy" with {type: "json"};
 
 export {
 	lorem_lorem_lorem_lorem_lorem_lorem_lorem_lorem_lorem,
 	lorem_lorem_lorem_lorem_lorem_ as ipsum_ipsum_ipsum_ipsum_ipsum_ipsum_,
-} from "fancy" assert {
+} from "fancy" with {
 	type: "json",
-	"type2": "json",
+	type2: "json",
 	type23: "json",
-	"type24": "json",
+	type24: "json",
 };
 
 export {loooooooooooooooooooooooooooooooooooooooooooooooooong} from "loooooooooooooooooooooooooooooooooooooooooooooong";
@@ -130,5 +134,3 @@ export {a as b} from "looooooooooooooooooooooooooooooooooooooooooooooooooooooooo
    15: export {loooooooooooooooooooooooooooooooooooooooooooooooooong} from "loooooooooooooooooooooooooooooooooooooooooooooong";
    22: export {a as b} from "loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong";
 ```
-
-

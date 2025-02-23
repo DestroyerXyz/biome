@@ -24,6 +24,11 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::JsArrayAssignmentPattern::new_unchecked(node) };
                     $body
                 }
+                $crate::JsSyntaxKind::JS_ARRAY_ASSIGNMENT_PATTERN_ELEMENT => {
+                    let $pattern =
+                        unsafe { $crate::JsArrayAssignmentPatternElement::new_unchecked(node) };
+                    $body
+                }
                 $crate::JsSyntaxKind::JS_ARRAY_ASSIGNMENT_PATTERN_REST_ELEMENT => {
                     let $pattern =
                         unsafe { $crate::JsArrayAssignmentPatternRestElement::new_unchecked(node) };
@@ -31,6 +36,11 @@ macro_rules! map_syntax_node {
                 }
                 $crate::JsSyntaxKind::JS_ARRAY_BINDING_PATTERN => {
                     let $pattern = unsafe { $crate::JsArrayBindingPattern::new_unchecked(node) };
+                    $body
+                }
+                $crate::JsSyntaxKind::JS_ARRAY_BINDING_PATTERN_ELEMENT => {
+                    let $pattern =
+                        unsafe { $crate::JsArrayBindingPatternElement::new_unchecked(node) };
                     $body
                 }
                 $crate::JsSyntaxKind::JS_ARRAY_BINDING_PATTERN_REST_ELEMENT => {
@@ -55,10 +65,6 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::JsAssignmentExpression::new_unchecked(node) };
                     $body
                 }
-                $crate::JsSyntaxKind::JS_ASSIGNMENT_WITH_DEFAULT => {
-                    let $pattern = unsafe { $crate::JsAssignmentWithDefault::new_unchecked(node) };
-                    $body
-                }
                 $crate::JsSyntaxKind::JS_AWAIT_EXPRESSION => {
                     let $pattern = unsafe { $crate::JsAwaitExpression::new_unchecked(node) };
                     $body
@@ -70,11 +76,6 @@ macro_rules! map_syntax_node {
                 }
                 $crate::JsSyntaxKind::JS_BINARY_EXPRESSION => {
                     let $pattern = unsafe { $crate::JsBinaryExpression::new_unchecked(node) };
-                    $body
-                }
-                $crate::JsSyntaxKind::JS_BINDING_PATTERN_WITH_DEFAULT => {
-                    let $pattern =
-                        unsafe { $crate::JsBindingPatternWithDefault::new_unchecked(node) };
                     $body
                 }
                 $crate::JsSyntaxKind::JS_BLOCK_STATEMENT => {
@@ -380,6 +381,10 @@ macro_rules! map_syntax_node {
                 }
                 $crate::JsSyntaxKind::JS_LOGICAL_EXPRESSION => {
                     let $pattern = unsafe { $crate::JsLogicalExpression::new_unchecked(node) };
+                    $body
+                }
+                $crate::JsSyntaxKind::JS_METAVARIABLE => {
+                    let $pattern = unsafe { $crate::JsMetavariable::new_unchecked(node) };
                     $body
                 }
                 $crate::JsSyntaxKind::JS_METHOD_CLASS_MEMBER => {
@@ -814,6 +819,10 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::TsConstructorType::new_unchecked(node) };
                     $body
                 }
+                $crate::JsSyntaxKind::TS_DECLARATION_MODULE => {
+                    let $pattern = unsafe { $crate::TsDeclarationModule::new_unchecked(node) };
+                    $body
+                }
                 $crate::JsSyntaxKind::TS_DECLARE_FUNCTION_DECLARATION => {
                     let $pattern =
                         unsafe { $crate::TsDeclareFunctionDeclaration::new_unchecked(node) };
@@ -923,6 +932,19 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::TsImportType::new_unchecked(node) };
                     $body
                 }
+                $crate::JsSyntaxKind::TS_IMPORT_TYPE_ARGUMENTS => {
+                    let $pattern = unsafe { $crate::TsImportTypeArguments::new_unchecked(node) };
+                    $body
+                }
+                $crate::JsSyntaxKind::TS_IMPORT_TYPE_ASSERTION => {
+                    let $pattern = unsafe { $crate::TsImportTypeAssertion::new_unchecked(node) };
+                    $body
+                }
+                $crate::JsSyntaxKind::TS_IMPORT_TYPE_ASSERTION_BLOCK => {
+                    let $pattern =
+                        unsafe { $crate::TsImportTypeAssertionBlock::new_unchecked(node) };
+                    $body
+                }
                 $crate::JsSyntaxKind::TS_IMPORT_TYPE_QUALIFIER => {
                     let $pattern = unsafe { $crate::TsImportTypeQualifier::new_unchecked(node) };
                     $body
@@ -973,6 +995,10 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::TsIntersectionType::new_unchecked(node) };
                     $body
                 }
+                $crate::JsSyntaxKind::TS_LITERAL_ENUM_MEMBER_NAME => {
+                    let $pattern = unsafe { $crate::TsLiteralEnumMemberName::new_unchecked(node) };
+                    $body
+                }
                 $crate::JsSyntaxKind::TS_MAPPED_TYPE => {
                     let $pattern = unsafe { $crate::TsMappedType::new_unchecked(node) };
                     $body
@@ -1007,10 +1033,6 @@ macro_rules! map_syntax_node {
                 }
                 $crate::JsSyntaxKind::TS_MODULE_DECLARATION => {
                     let $pattern = unsafe { $crate::TsModuleDeclaration::new_unchecked(node) };
-                    $body
-                }
-                $crate::JsSyntaxKind::TS_NAME_WITH_TYPE_ARGUMENTS => {
-                    let $pattern = unsafe { $crate::TsNameWithTypeArguments::new_unchecked(node) };
                     $body
                 }
                 $crate::JsSyntaxKind::TS_NAMED_TUPLE_TYPE_ELEMENT => {

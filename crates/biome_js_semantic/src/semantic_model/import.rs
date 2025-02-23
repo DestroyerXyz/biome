@@ -6,8 +6,14 @@ use biome_js_syntax::{
 use biome_rowan::AstNode;
 
 pub(crate) fn is_imported(node: &JsSyntaxNode) -> bool {
-    node.ancestors()
-        .any(|x| matches!(x.kind(), JsSyntaxKind::JS_IMPORT))
+    node.ancestors().any(|x| {
+        matches!(
+            x.kind(),
+            JsSyntaxKind::JS_IMPORT
+                | JsSyntaxKind::JS_NAMED_IMPORT_SPECIFIERS
+                | JsSyntaxKind::JS_DEFAULT_IMPORT_SPECIFIER
+        )
+    })
 }
 
 /// Marker trait that groups all "AstNode" that can be imported or
@@ -22,7 +28,7 @@ impl CanBeImportedExported for JsIdentifierBinding {
     type Result = bool;
 
     fn is_exported(&self, model: &SemanticModel) -> Self::Result {
-        let range = self.syntax().text_range();
+        let range = self.syntax().text_trimmed_range();
         model.data.is_exported(range)
     }
 
@@ -35,7 +41,7 @@ impl CanBeImportedExported for TsIdentifierBinding {
     type Result = bool;
 
     fn is_exported(&self, model: &SemanticModel) -> Self::Result {
-        let range = self.syntax().text_range();
+        let range = self.syntax().text_trimmed_range();
         model.data.is_exported(range)
     }
 
@@ -48,7 +54,7 @@ impl CanBeImportedExported for AnyJsIdentifierBinding {
     type Result = bool;
 
     fn is_exported(&self, model: &SemanticModel) -> Self::Result {
-        let range = self.syntax().text_range();
+        let range = self.syntax().text_trimmed_range();
         model.data.is_exported(range)
     }
 
@@ -61,7 +67,7 @@ impl<T: HasDeclarationAstNode> CanBeImportedExported for T {
     type Result = Option<bool>;
 
     fn is_exported(&self, model: &SemanticModel) -> Self::Result {
-        let range = self.binding(model)?.syntax().text_range();
+        let range = self.binding(model)?.syntax().text_trimmed_range();
         Some(model.data.is_exported(range))
     }
 

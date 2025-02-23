@@ -2,11 +2,11 @@ use super::rename::*;
 use crate::utils::batch::JsBatchMutation;
 use biome_js_parser::JsParserOptions;
 use biome_js_semantic::{semantic_model, SemanticModelOptions};
-use biome_js_syntax::JsSyntaxNode;
 use biome_js_syntax::{
     AnyJsObjectMember, JsFileSource, JsFormalParameter, JsIdentifierBinding, JsLanguage,
     JsVariableDeclarator,
 };
+use biome_js_syntax::{JsSyntaxNode, TsIdentifierBinding};
 use biome_rowan::{AstNode, BatchMutationExt, SyntaxNodeCast};
 use std::{any::type_name, fmt::Debug};
 
@@ -24,7 +24,7 @@ pub fn assert_rename_binding_a_to_b_ok(before: &str, expected: &str) {
         .syntax()
         .descendants()
         .filter_map(JsIdentifierBinding::cast)
-        .filter(|x| x.text().contains('a'))
+        .filter(|x| x.to_trimmed_string().contains('a'))
         .collect();
 
     let mut batch = r.tree().begin();
@@ -34,14 +34,44 @@ pub fn assert_rename_binding_a_to_b_ok(before: &str, expected: &str) {
             .unwrap()
             .text_trimmed()
             .replace('a', "b");
-        assert!(batch.rename_node_declaration(&model, binding, &new_name));
+
+        assert!(batch.rename_node_declaration(&model, &binding, &new_name));
     }
 
     let root = batch.commit();
     let after = root.to_string();
     assert_eq!(expected, after.as_str());
 
-    assert!(!biome_js_parser::test_utils::has_bogus_nodes_or_empty_slots(&root));
+    assert!(!biome_test_utils::has_bogus_nodes_or_empty_slots(&root));
+}
+
+pub fn assert_rename_ts_binding_a_to_b_ok(before: &str, expected: &str) {
+    let r = biome_js_parser::parse(before, JsFileSource::tsx(), JsParserOptions::default());
+    let model = semantic_model(&r.tree(), SemanticModelOptions::default());
+
+    let bindings: Vec<TsIdentifierBinding> = r
+        .syntax()
+        .descendants()
+        .filter_map(TsIdentifierBinding::cast)
+        .filter(|x| x.to_trimmed_string().contains('a'))
+        .collect();
+
+    let mut batch = r.tree().begin();
+    for binding in bindings {
+        let new_name = binding
+            .name_token()
+            .unwrap()
+            .text_trimmed()
+            .replace('a', "b");
+
+        assert!(batch.rename_node_declaration(&model, &binding, &new_name));
+    }
+
+    let root = batch.commit();
+    let after = root.to_string();
+    assert_eq!(expected, after.as_str());
+
+    assert!(!biome_test_utils::has_bogus_nodes_or_empty_slots(&root));
 }
 
 /// Search and renames one binding named "a" to "b".
@@ -58,11 +88,11 @@ pub fn assert_rename_binding_a_to_b_nok(before: &str) {
         .syntax()
         .descendants()
         .filter_map(|x| x.cast::<JsIdentifierBinding>())
-        .find(|x| x.text() == "a")
+        .find(|x| x.to_trimmed_string() == "a")
         .unwrap();
 
     let mut batch = r.tree().begin();
-    assert!(!batch.rename_node_declaration(&model, binding_a, "b"));
+    assert!(!batch.rename_node_declaration(&model, &binding_a, "b"));
 }
 
 /// Search an identifier named "a" and remove the entire node of type Anc around it.
@@ -92,10 +122,7 @@ pub fn assert_remove_identifier_a_ok<Anc: AstNode<Language = JsLanguage> + Debug
                     type_name::<Anc>()
                 )
             }),
-        _ => panic!(
-            "Expected exactly one identifier named a, but got {:?}",
-            identifiers_a
-        ),
+        _ => panic!("Expected exactly one identifier named a, but got {identifiers_a:?}"),
     };
 
     let mut batch = r.tree().begin();
@@ -107,7 +134,7 @@ pub fn assert_remove_identifier_a_ok<Anc: AstNode<Language = JsLanguage> + Debug
     } else if let Some(member) = AnyJsObjectMember::cast_ref(node_to_remove.syntax()) {
         batch.remove_js_object_member(member)
     } else {
-        panic!("Don't know how to remove this node: {:?}", node_to_remove);
+        panic!("Don't know how to remove this node: {node_to_remove:?}");
     };
     assert!(batch_result);
     let root = batch.commit();
@@ -118,11 +145,15 @@ pub fn assert_remove_identifier_a_ok<Anc: AstNode<Language = JsLanguage> + Debug
 
 #[macro_export]
 macro_rules! assert_rename_ok {
-    ($(#[$attr:meta])* $($name:ident, $before:expr, $expected:expr,)*) => {
+    ($(#[$attr:meta])* $($name:ident, $before:expr, $expected:expr, $is_ts_binding:expr, )*) => {
         $(
             #[test]
             pub fn $name() {
-                $crate::utils::tests::assert_rename_binding_a_to_b_ok($before, $expected);
+                if $is_ts_binding {
+                    $crate::utils::tests::assert_rename_ts_binding_a_to_b_ok($before, $expected);
+                } else {
+                    $crate::utils::tests::assert_rename_binding_a_to_b_ok($before, $expected);
+                }
             }
         )*
     };

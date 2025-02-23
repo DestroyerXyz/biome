@@ -1,10 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
-assertion_line: 96
 expression: invalid.jsx
+snapshot_kind: text
 ---
 # Input
-```js
+```jsx
 <>
 	<audio><track /></audio>
 	<audio><track kind="subtitles" /></audio>
@@ -22,7 +22,7 @@ expression: invalid.jsx
 ```
 invalid.jsx:2:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a track for captions when using audio or video elements.
+  × Provide a track for captions when using audio or video elements.
   
     1 │ <>
   > 2 │ 	<audio><track /></audio>
@@ -38,7 +38,7 @@ invalid.jsx:2:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━�
 ```
 invalid.jsx:3:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a track for captions when using audio or video elements.
+  × Provide a track for captions when using audio or video elements.
   
     1 │ <>
     2 │ 	<audio><track /></audio>
@@ -55,7 +55,7 @@ invalid.jsx:3:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━�
 ```
 invalid.jsx:4:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a track for captions when using audio or video elements.
+  × Provide a track for captions when using audio or video elements.
   
     2 │ 	<audio><track /></audio>
     3 │ 	<audio><track kind="subtitles" /></audio>
@@ -72,7 +72,7 @@ invalid.jsx:4:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━�
 ```
 invalid.jsx:5:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a track for captions when using audio or video elements.
+  × Provide a track for captions when using audio or video elements.
   
     3 │ 	<audio><track kind="subtitles" /></audio>
     4 │ 	<audio />
@@ -89,7 +89,7 @@ invalid.jsx:5:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━�
 ```
 invalid.jsx:6:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a track for captions when using audio or video elements.
+  × Provide a track for captions when using audio or video elements.
   
     4 │ 	<audio />
     5 │ 	<video><track /></video>
@@ -106,7 +106,7 @@ invalid.jsx:6:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━�
 ```
 invalid.jsx:7:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a track for captions when using audio or video elements.
+  × Provide a track for captions when using audio or video elements.
   
     5 │ 	<video><track /></video>
     6 │ 	<video><track kind="subtitles" /></video>
@@ -123,7 +123,7 @@ invalid.jsx:7:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━�
 ```
 invalid.jsx:8:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a track for captions when using audio or video elements.
+  × Provide a track for captions when using audio or video elements.
   
      6 │ 	<video><track kind="subtitles" /></video>
      7 │ 	<video />
@@ -140,7 +140,7 @@ invalid.jsx:8:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━�
 ```
 invalid.jsx:9:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Provide a track for captions when using audio or video elements.
+  × Provide a track for captions when using audio or video elements.
   
      7 │ 	<video />
      8 │ 	<audio>Foo</audio>
@@ -153,5 +153,3 @@ invalid.jsx:9:2 lint/a11y/useMediaCaption ━━━━━━━━━━━━�
   
 
 ```
-
-

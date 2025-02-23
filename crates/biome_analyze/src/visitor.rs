@@ -2,7 +2,7 @@ use crate::{
     matcher::{MatchQueryParams, Query},
     registry::{NodeLanguage, Phases},
     AnalyzerOptions, LanguageRoot, QueryMatch, QueryMatcher, ServiceBag, SignalEntry,
-    SuppressionCommentEmitter,
+    SuppressionAction,
 };
 use biome_rowan::{AstNode, Language, SyntaxNode, TextRange, WalkEvent};
 use std::collections::BinaryHeap;
@@ -12,14 +12,14 @@ pub struct VisitorContext<'phase, 'query, L: Language> {
     pub phase: Phases,
     pub root: &'phase LanguageRoot<L>,
     pub services: &'phase ServiceBag,
+    pub suppression_action: &'phase dyn SuppressionAction<Language = L>,
     pub range: Option<TextRange>,
     pub(crate) query_matcher: &'query mut dyn QueryMatcher<L>,
     pub(crate) signal_queue: &'query mut BinaryHeap<SignalEntry<'phase, L>>,
-    pub apply_suppression_comment: SuppressionCommentEmitter<L>,
     pub options: &'phase AnalyzerOptions,
 }
 
-impl<'phase, 'query, L: Language> VisitorContext<'phase, 'query, L> {
+impl<L: Language> VisitorContext<'_, '_, L> {
     pub fn match_query<T: QueryMatch>(&mut self, query: T) {
         self.query_matcher.match_query(MatchQueryParams {
             phase: self.phase,
@@ -27,7 +27,7 @@ impl<'phase, 'query, L: Language> VisitorContext<'phase, 'query, L> {
             query: Query::new(query),
             services: self.services,
             signal_queue: self.signal_queue,
-            apply_suppression_comment: self.apply_suppression_comment,
+            suppression_action: self.suppression_action,
             options: self.options,
         })
     }

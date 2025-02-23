@@ -1,7 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
-assertion_line: 96
 expression: valid-block-scoped-func-decl.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -13,5 +13,3 @@ export {}
 }
 
 ```
-
-

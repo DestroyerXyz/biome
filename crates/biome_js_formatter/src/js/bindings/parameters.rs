@@ -3,11 +3,10 @@ use biome_formatter::{write, CstFormatContext};
 
 use crate::js::expressions::arrow_function_expression::can_avoid_parentheses;
 use crate::js::lists::parameter_list::FormatJsAnyParameterList;
-use crate::utils::test_call::is_test_call_argument;
 use biome_js_syntax::parameter_ext::{AnyJsParameterList, AnyParameter};
 use biome_js_syntax::{
-    AnyJsBinding, AnyJsBindingPattern, AnyJsConstructorParameter, AnyJsExpression,
-    AnyJsFormalParameter, AnyJsParameter, AnyTsType, JsArrowFunctionExpression,
+    is_test_call_argument, AnyJsBinding, AnyJsBindingPattern, AnyJsConstructorParameter,
+    AnyJsExpression, AnyJsFormalParameter, AnyJsParameter, AnyTsType, JsArrowFunctionExpression,
     JsConstructorParameters, JsParameters, JsSyntaxNode, JsSyntaxToken,
 };
 use biome_rowan::{declare_node_union, AstNode, SyntaxResult};
@@ -34,10 +33,14 @@ impl Format<JsFormatContext> for FormatAnyJsParameters {
     fn fmt(&self, f: &mut Formatter<JsFormatContext>) -> FormatResult<()> {
         let list = self.list();
 
+        let parentheses_not_needed = self
+            .as_arrow_function_expression()
+            .is_some_and(|expression| can_avoid_parentheses(&expression, f));
         let has_any_decorated_parameter = list.has_any_decorated_parameter();
 
-        let can_hug = should_hug_function_parameters(self, f.context().comments())?
-            && !has_any_decorated_parameter;
+        let can_hug =
+            should_hug_function_parameters(self, f.context().comments(), parentheses_not_needed)?
+                && !has_any_decorated_parameter;
 
         let layout = if list.is_empty() {
             ParameterLayout::NoParameters
@@ -49,10 +52,6 @@ impl Format<JsFormatContext> for FormatAnyJsParameters {
 
         let l_paren_token = self.l_paren_token()?;
         let r_paren_token = self.r_paren_token()?;
-
-        let parentheses_not_needed = self
-            .as_arrow_function_expression()
-            .map_or(false, |expression| can_avoid_parentheses(&expression, f));
 
         match layout {
             ParameterLayout::NoParameters => {
@@ -212,10 +211,17 @@ pub enum ParameterLayout {
 pub(crate) fn should_hug_function_parameters(
     parameters: &FormatAnyJsParameters,
     comments: &JsComments,
+    parentheses_not_needed: bool,
 ) -> FormatResult<bool> {
     /// Returns true if the first parameter should be forced onto the same line as the `(` and `)` parentheses.
     /// See the `[ParameterLayout::Hug] documentation.
-    fn hug_formal_parameter(parameter: &self::AnyJsFormalParameter) -> FormatResult<bool> {
+    ///
+    /// parameter `should_hug_formal_parameter` is a bool value used to determine whether the parenthesized arrow function parameters
+    /// should be on the same line as the arrow function after removing the parentheses.
+    fn hug_formal_parameter(
+        parameter: &self::AnyJsFormalParameter,
+        should_hug_formal_parameter: bool,
+    ) -> FormatResult<bool> {
         let result = match parameter {
             AnyJsFormalParameter::JsFormalParameter(parameter) => {
                 match parameter.initializer() {
@@ -223,16 +229,28 @@ pub(crate) fn should_hug_function_parameters(
                         match parameter.binding()? {
                             // always true for `[a]` or `{a}`
                             AnyJsBindingPattern::JsArrayBindingPattern(_)
-                            | AnyJsBindingPattern::JsObjectBindingPattern(_) => true,
-                            // only if the type parameter is an object type
+                            | AnyJsBindingPattern::JsObjectBindingPattern(_)
+                            | AnyJsBindingPattern::AnyJsBinding(AnyJsBinding::JsMetavariable(_)) => {
+                                true
+                            }
+                            // if the type parameter is an object type
                             // `a: { prop: string }`
+                            // or parameter is an arrow function parameter
+                            // (a) => {}
                             AnyJsBindingPattern::AnyJsBinding(
                                 AnyJsBinding::JsIdentifierBinding(_),
-                            ) => parameter
-                                .type_annotation()
-                                .map_or(false, |type_annotation| {
-                                    matches!(type_annotation.ty(), Ok(AnyTsType::TsObjectType(_)))
-                                }),
+                            ) => {
+                                if should_hug_formal_parameter {
+                                    true
+                                } else {
+                                    parameter.type_annotation().is_some_and(|type_annotation| {
+                                        matches!(
+                                            type_annotation.ty(),
+                                            Ok(AnyTsType::TsObjectType(_))
+                                        )
+                                    })
+                                }
+                            }
                             AnyJsBindingPattern::AnyJsBinding(AnyJsBinding::JsBogusBinding(_)) => {
                                 return Err(FormatError::SyntaxError);
                             }
@@ -261,14 +279,15 @@ pub(crate) fn should_hug_function_parameters(
                     }
                 }
             }
-            AnyJsFormalParameter::JsBogusParameter(_) => return Err(FormatError::SyntaxError),
+            AnyJsFormalParameter::JsBogusParameter(_) | AnyJsFormalParameter::JsMetavariable(_) => {
+                return Err(FormatError::SyntaxError)
+            }
         };
 
         Ok(result)
     }
 
     let list = parameters.list();
-
     if list.len() != 1 {
         return Ok(false);
     }
@@ -280,14 +299,19 @@ pub(crate) fn should_hug_function_parameters(
         return Ok(false);
     }
 
+    let has_parentheses = parameters.l_paren_token().is_ok() && parameters.r_paren_token().is_ok();
+    let from_arrow_function = parameters.as_arrow_function_expression().is_some();
+    let should_hug_formal_parameter =
+        has_parentheses && from_arrow_function && parentheses_not_needed;
+
     let result = match only_parameter {
         AnyParameter::AnyJsParameter(parameter) => match parameter {
             AnyJsParameter::AnyJsFormalParameter(formal_parameter) => {
-                hug_formal_parameter(&formal_parameter)?
+                hug_formal_parameter(&formal_parameter, should_hug_formal_parameter)?
             }
             AnyJsParameter::JsRestParameter(_) => false,
             AnyJsParameter::TsThisParameter(this) => {
-                this.type_annotation().map_or(false, |type_annotation| {
+                this.type_annotation().is_some_and(|type_annotation| {
                     matches!(type_annotation.ty(), Ok(AnyTsType::TsObjectType(_)))
                 })
             }
@@ -295,7 +319,7 @@ pub(crate) fn should_hug_function_parameters(
         AnyParameter::AnyJsConstructorParameter(constructor_parameter) => {
             match constructor_parameter {
                 AnyJsConstructorParameter::AnyJsFormalParameter(formal_parameter) => {
-                    hug_formal_parameter(&formal_parameter)?
+                    hug_formal_parameter(&formal_parameter, should_hug_formal_parameter)?
                 }
                 AnyJsConstructorParameter::JsRestParameter(_)
                 | AnyJsConstructorParameter::TsPropertyParameter(_) => false,

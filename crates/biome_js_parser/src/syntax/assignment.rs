@@ -16,7 +16,10 @@ use crate::JsParser;
 use crate::ParsedSyntax::{Absent, Present};
 use biome_js_syntax::{JsSyntaxKind::*, *};
 use biome_parser::diagnostic::expected_any;
+use biome_parser::parse_recovery::ParseRecoveryTokenSet;
 use biome_rowan::AstNode;
+
+use super::metavariable::is_at_metavariable;
 
 // test js assignment_target
 // foo += bar = b ??= 3;
@@ -80,17 +83,17 @@ pub(crate) fn expression_to_assignment_pattern(
     p: &mut JsParser,
     target: CompletedMarker,
     checkpoint: JsParserCheckpoint,
-) -> CompletedMarker {
+) -> ParsedSyntax {
     match target.kind(p) {
         JS_OBJECT_EXPRESSION => {
             p.rewind(checkpoint);
-            ObjectAssignmentPattern.parse_object_pattern(p).unwrap()
+            ObjectAssignmentPattern.parse_object_pattern(p)
         }
         JS_ARRAY_EXPRESSION => {
             p.rewind(checkpoint);
-            ArrayAssignmentPattern.parse_array_pattern(p).unwrap()
+            ArrayAssignmentPattern.parse_array_pattern(p)
         }
-        _ => expression_to_assignment(p, target, checkpoint),
+        _ => ParsedSyntax::Present(expression_to_assignment(p, target, checkpoint)),
     }
 }
 
@@ -116,7 +119,7 @@ pub(crate) fn parse_assignment_pattern(p: &mut JsParser) -> ParsedSyntax {
     let assignment_expression = parse_conditional_expr(p, ExpressionContext::default());
 
     assignment_expression
-        .map(|expression| expression_to_assignment_pattern(p, expression, checkpoint))
+        .and_then(|expression| expression_to_assignment_pattern(p, expression, checkpoint))
 }
 
 /// Re-parses an expression as an assignment.
@@ -167,12 +170,12 @@ pub(crate) fn parse_assignment(
     assignment_expression.map(|expr| expression_to_assignment(p, expr, checkpoint))
 }
 
-struct AssignmentPatternWithDefault;
+struct ArrayAssignmentPatternElement;
 
-impl ParseWithDefaultPattern for AssignmentPatternWithDefault {
+impl ParseWithDefaultPattern for ArrayAssignmentPatternElement {
     #[inline]
     fn pattern_with_default_kind() -> JsSyntaxKind {
-        JS_ASSIGNMENT_WITH_DEFAULT
+        JS_ARRAY_ASSIGNMENT_PATTERN_ELEMENT
     }
 
     #[inline]
@@ -200,7 +203,7 @@ struct ArrayAssignmentPattern;
 // [a = , = "test"] = test;
 // [[a b] [c]]= test;
 // [a: b] = c
-impl ParseArrayPattern<AssignmentPatternWithDefault> for ArrayAssignmentPattern {
+impl ParseArrayPattern<ArrayAssignmentPatternElement> for ArrayAssignmentPattern {
     #[inline]
     fn bogus_pattern_kind() -> JsSyntaxKind {
         JS_BOGUS_ASSIGNMENT
@@ -239,8 +242,8 @@ impl ParseArrayPattern<AssignmentPatternWithDefault> for ArrayAssignmentPattern 
     }
 
     #[inline]
-    fn pattern_with_default(&self) -> AssignmentPatternWithDefault {
-        AssignmentPatternWithDefault
+    fn pattern_with_default(&self) -> ArrayAssignmentPatternElement {
+        ArrayAssignmentPatternElement
     }
 }
 
@@ -289,7 +292,9 @@ impl ParseObjectPattern for ObjectAssignmentPattern {
     fn parse_property_pattern(&self, p: &mut JsParser) -> ParsedSyntax {
         let m = p.start();
 
-        let kind = if (is_at_identifier(p) || p.at(T![=])) && !p.nth_at(1, T![:]) {
+        let kind = if (is_at_identifier(p) || is_at_metavariable(p) || p.at(T![=]))
+            && !p.nth_at(1, T![:])
+        {
             parse_assignment(
                 p,
                 AssignmentExprPrecedence::Conditional,
@@ -298,7 +303,17 @@ impl ParseObjectPattern for ObjectAssignmentPattern {
             .or_add_diagnostic(p, expected_identifier);
             JS_OBJECT_ASSIGNMENT_PATTERN_SHORTHAND_PROPERTY
         } else if is_at_object_member_name(p) || p.at(T![:]) || p.nth_at(1, T![:]) {
-            parse_object_member_name(p).or_add_diagnostic(p, expected_object_member_name);
+            // If the parser is at an object member name, parse it and look for the colon token next.
+            // If `p.nth_at(1, T![:])` is true, it indicates an invalid object member name before the colon,
+            // such as `{%: 1}`. In this case, attempt to recover by finding the next colon token.
+            parse_object_member_name(p)
+                .or_recover_with_token_set(
+                    p,
+                    &ParseRecoveryTokenSet::new(JS_BOGUS, token_set![T![:]])
+                        .enable_recovery_on_line_break(),
+                    expected_object_member_name,
+                )
+                .ok();
             p.expect(T![:]);
             parse_assignment_pattern(p).or_add_diagnostic(p, expected_assignment_target);
             JS_OBJECT_ASSIGNMENT_PATTERN_PROPERTY
@@ -472,7 +487,7 @@ impl RewriteParseEvents for ReparseAssignment {
                     let name = completed.text(p);
                     if matches!(name, "eval" | "arguments") && p.is_strict_mode() {
                         let error = p.err_builder(
-                            format!("Illegal use of `{}` as an identifier in strict mode", name),
+                            format!("Illegal use of `{name}` as an identifier in strict mode"),
                             completed.range(p),
                         );
                         p.error(error);

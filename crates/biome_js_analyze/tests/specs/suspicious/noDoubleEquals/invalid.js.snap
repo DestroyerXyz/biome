@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -31,7 +32,7 @@ let a = `Output of "biome rage":
 ```
 invalid.js:3:5 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Use === instead of ==
+  × Use === instead of ==
   
     1 │ const foo = `
     2 │ text
@@ -49,7 +50,7 @@ invalid.js:3:5 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━
     4 │ `;
     5 │ 
   
-  i Using === may be unsafe if you are relying on type coercion
+  i Using == may be unsafe if you are relying on type coercion
   
   i Unsafe fix: Use ===
   
@@ -61,7 +62,7 @@ invalid.js:3:5 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━
 ```
 invalid.js:7:3 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Use === instead of ==
+  × Use === instead of ==
   
     6 │ // existing comment
   > 7 │ a == b;
@@ -77,7 +78,7 @@ invalid.js:7:3 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━
     8 │ 
     9 │ if (a == b) {
   
-  i Using === may be unsafe if you are relying on type coercion
+  i Using == may be unsafe if you are relying on type coercion
   
   i Unsafe fix: Use ===
   
@@ -89,7 +90,7 @@ invalid.js:7:3 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━
 ```
 invalid.js:9:7 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Use === instead of ==
+  × Use === instead of ==
   
      7 │ a == b;
      8 │ 
@@ -107,7 +108,7 @@ invalid.js:9:7 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━
     10 │     false;
     11 │ }
   
-  i Using === may be unsafe if you are relying on type coercion
+  i Using == may be unsafe if you are relying on type coercion
   
   i Unsafe fix: Use ===
   
@@ -119,7 +120,7 @@ invalid.js:9:7 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━
 ```
 invalid.js:14:11 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Use === instead of ==
+  × Use === instead of ==
   
     13 │ if (/** some weird comment
   > 14 │     **/ a == b) {
@@ -135,7 +136,7 @@ invalid.js:14:11 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━�
     15 │ 
     16 │     }
   
-  i Using === may be unsafe if you are relying on type coercion
+  i Using == may be unsafe if you are relying on type coercion
   
   i Unsafe fix: Use ===
   
@@ -147,7 +148,7 @@ invalid.js:14:11 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━�
 ```
 invalid.js:19:34 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Use === instead of ==
+  × Use === instead of ==
   
     18 │ let a = `Output of "biome rage":
   > 19 │   formatter enabled: ${formatter == true}
@@ -163,7 +164,7 @@ invalid.js:19:34 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━�
     20 │   linter: ${linter}
     21 │ `;
   
-  i Using === may be unsafe if you are relying on type coercion
+  i Using == may be unsafe if you are relying on type coercion
   
   i Unsafe fix: Use ===
   
@@ -171,5 +172,3 @@ invalid.js:19:34 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━�
        │                                    +      
 
 ```
-
-

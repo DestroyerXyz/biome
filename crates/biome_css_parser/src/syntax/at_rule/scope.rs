@@ -1,11 +1,11 @@
 use crate::parser::CssParser;
 use crate::syntax::at_rule::parse_error::expected_any_scope_range;
-use crate::syntax::blocks::parse_or_recover_rule_list_block;
-use crate::syntax::selector::CssSelectorList;
+use crate::syntax::block::parse_conditional_block;
+use crate::syntax::selector::SelectorList;
 use biome_css_syntax::CssSyntaxKind::*;
 use biome_css_syntax::{CssSyntaxKind, T};
 use biome_parser::parse_lists::ParseSeparatedList;
-use biome_parser::parse_recovery::{ParseRecovery, RecoveryResult};
+use biome_parser::parse_recovery::{ParseRecoveryTokenSet, RecoveryResult};
 use biome_parser::parsed_syntax::ParsedSyntax::Present;
 use biome_parser::prelude::ParsedSyntax::Absent;
 use biome_parser::prelude::*;
@@ -27,9 +27,7 @@ pub(crate) fn parse_scope_at_rule(p: &mut CssParser) -> ParsedSyntax {
 
     parse_any_scope_range(p).ok(); // it's optional
 
-    if parse_or_recover_rule_list_block(p).is_err() {
-        return Present(m.complete(p, CSS_BOGUS_AT_RULE));
-    }
+    parse_conditional_block(p);
 
     Present(m.complete(p, CSS_SCOPE_AT_RULE))
 }
@@ -102,9 +100,10 @@ const SCOPE_EDGE_RECOVERY_SET: TokenSet<CssSyntaxKind> =
     SCOPE_RANGE_RECOVERY_SET.union(token_set![T!['{']]);
 #[inline]
 pub(crate) fn parse_or_recover_scope_edge(p: &mut CssParser) -> RecoveryResult {
-    parse_scope_edge(p).or_recover(
+    parse_scope_edge(p).or_recover_with_token_set(
         p,
-        &ParseRecovery::new(CSS_BOGUS, SCOPE_EDGE_RECOVERY_SET).enable_recovery_on_line_break(),
+        &ParseRecoveryTokenSet::new(CSS_BOGUS, SCOPE_EDGE_RECOVERY_SET)
+            .enable_recovery_on_line_break(),
         expected_any_scope_range,
     )
 }
@@ -122,7 +121,7 @@ pub(crate) fn parse_scope_edge(p: &mut CssParser) -> ParsedSyntax {
     let m = p.start();
 
     p.bump(T!['(']);
-    CssSelectorList::default()
+    SelectorList::default()
         .with_end_kind_ts(SCOPE_EDGE_SELECTOR_LIST_END_SET)
         .parse_list(p);
     p.expect(T![')']);

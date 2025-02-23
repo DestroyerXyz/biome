@@ -1,8 +1,8 @@
 use crate::prelude::*;
 
-use crate::parentheses::{operator_type_or_higher_needs_parens, NeedsParentheses};
 use biome_formatter::write;
-use biome_js_syntax::{JsSyntaxKind, JsSyntaxNode, TsInferType, TsInferTypeFields};
+use biome_js_syntax::parentheses::NeedsParentheses;
+use biome_js_syntax::{TsInferType, TsInferTypeFields};
 
 #[derive(Debug, Clone, Default)]
 pub struct FormatTsInferType;
@@ -29,16 +29,6 @@ impl FormatNodeRule<TsInferType> for FormatTsInferType {
     }
 }
 
-impl NeedsParentheses for TsInferType {
-    fn needs_parentheses_with_parent(&self, parent: &JsSyntaxNode) -> bool {
-        if parent.kind() == JsSyntaxKind::TS_REST_TUPLE_TYPE_ELEMENT {
-            false
-        } else {
-            operator_type_or_higher_needs_parens(self.syntax(), parent)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -48,29 +38,37 @@ mod tests {
     #[test]
     fn needs_parentheses() {
         assert_needs_parentheses!(
-            "type A = T extends (infer string)[] ? string : never",
+            "type A<T> = T extends (infer string)[] ? string : never",
             TsInferType
         );
         assert_needs_parentheses!(
-            "type A = T extends unique (infer string) ? string : never",
+            "type A<T> = T extends unique (infer string) ? string : never",
             TsInferType
         );
 
         assert_not_needs_parentheses!(
-            "type A = T extends [number, ...infer string] ? string : never",
+            "type A<T> = T extends [number, ...infer string] ? string : never",
             TsInferType
         );
         assert_needs_parentheses!(
             "type A = T extends [(infer string)?] ? string : never",
             TsInferType
         );
+        assert_needs_parentheses!(
+            "type A<T> = [T] extends [(infer S extends string) | undefined] ? S : T",
+            TsInferType
+        );
 
         assert_needs_parentheses!(
-            "type A = T extends (infer string)[a] ? string : never",
+            "type A<T> = T extends (infer string)[a] ? string : never",
             TsInferType
         );
         assert_not_needs_parentheses!(
-            "type A = T extends a[(infer string)] ? string : never",
+            "type A<T> = T extends a[(infer string)] ? string : never",
+            TsInferType
+        );
+        assert_not_needs_parentheses!(
+            "type A = T extends () => infer R | B ? R : never",
             TsInferType
         );
     }

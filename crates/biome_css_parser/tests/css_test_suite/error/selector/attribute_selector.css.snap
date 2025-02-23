@@ -2,7 +2,6 @@
 source: crates/biome_css_parser/tests/spec_test.rs
 expression: snapshot
 ---
-
 ## Input
 
 ```css
@@ -22,10 +21,10 @@ expression: snapshot
 CssRoot {
     bom_token: missing (optional),
     rules: CssRuleList [
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssBogusSubSelector {
@@ -42,16 +41,16 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@9..10 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@10..11 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssBogusSubSelector {
@@ -80,16 +79,16 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@29..30 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@30..31 "}" [] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssAttributeSelector {
@@ -114,42 +113,43 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@48..49 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@49..50 "}" [] [],
             },
         },
-        CssBogusRule {
-            items: [
-                CssSelectorList [
-                    CssCompoundSelector {
-                        nesting_selector_token: missing (optional),
-                        simple_selector: missing (optional),
-                        sub_selectors: CssSubSelectorList [
-                            CssAttributeSelector {
-                                l_brack_token: L_BRACK@50..52 "[" [Newline("\n")] [],
-                                name: CssAttributeName {
-                                    namespace: missing (optional),
-                                    name: CssIdentifier {
-                                        value_token: IDENT@52..57 "title" [] [],
-                                    },
+        CssQualifiedRule {
+            prelude: CssSelectorList [
+                CssCompoundSelector {
+                    nesting_selectors: CssNestedSelectorList [],
+                    simple_selector: missing (optional),
+                    sub_selectors: CssSubSelectorList [
+                        CssAttributeSelector {
+                            l_brack_token: L_BRACK@50..52 "[" [Newline("\n")] [],
+                            name: CssAttributeName {
+                                namespace: missing (optional),
+                                name: CssIdentifier {
+                                    value_token: IDENT@52..57 "title" [] [],
                                 },
-                                matcher: CssAttributeMatcher {
-                                    operator: EQ@57..58 "=" [] [],
-                                    value: CssAttributeMatcherValue {
-                                        name: CssString {
-                                            value_token: CSS_STRING_LITERAL@58..64 "\"foo\"" [] [Whitespace(" ")],
-                                        },
-                                    },
-                                    modifier: S_KW@64..65 "s" [] [],
-                                },
-                                r_brack_token: missing (required),
                             },
-                        ],
-                    },
-                ],
+                            matcher: CssAttributeMatcher {
+                                operator: EQ@57..58 "=" [] [],
+                                value: CssAttributeMatcherValue {
+                                    name: CssString {
+                                        value_token: CSS_STRING_LITERAL@58..64 "\"foo\"" [] [Whitespace(" ")],
+                                    },
+                                },
+                                modifier: S_KW@64..65 "s" [] [],
+                            },
+                            r_brack_token: missing (required),
+                        },
+                    ],
+                },
             ],
+            block: CssBogusBlock {
+                items: [],
+            },
         },
     ],
     eof_token: EOF@65..66 "" [Newline("\n")] [],
@@ -162,10 +162,10 @@ CssRoot {
 0: CSS_ROOT@0..66
   0: (empty)
   1: CSS_RULE_LIST@0..65
-    0: CSS_RULE@0..11
+    0: CSS_QUALIFIED_RULE@0..11
       0: CSS_SELECTOR_LIST@0..9
         0: CSS_COMPOUND_SELECTOR@0..9
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@0..0
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@0..9
             0: CSS_BOGUS_SUB_SELECTOR@0..9
@@ -173,14 +173,14 @@ CssRoot {
               1: CSS_BOGUS@2..9
                 0: DOT@2..3 "." [] []
                 1: IDENT@3..9 "class" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@9..11
+      1: CSS_DECLARATION_OR_RULE_BLOCK@9..11
         0: L_CURLY@9..10 "{" [] []
-        1: CSS_DECLARATION_LIST@10..10
+        1: CSS_DECLARATION_OR_RULE_LIST@10..10
         2: R_CURLY@10..11 "}" [] []
-    1: CSS_RULE@11..31
+    1: CSS_QUALIFIED_RULE@11..31
       0: CSS_SELECTOR_LIST@11..29
         0: CSS_COMPOUND_SELECTOR@11..29
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@11..11
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@11..29
             0: CSS_BOGUS_SUB_SELECTOR@11..29
@@ -196,14 +196,14 @@ CssRoot {
                     0: CSS_STRING_LITERAL@20..26 "\"foo\"" [] [Whitespace(" ")]
                 2: IDENT@26..27 "P" [] []
               3: R_BRACK@27..29 "]" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@29..31
+      1: CSS_DECLARATION_OR_RULE_BLOCK@29..31
         0: L_CURLY@29..30 "{" [] []
-        1: CSS_DECLARATION_LIST@30..30
+        1: CSS_DECLARATION_OR_RULE_LIST@30..30
         2: R_CURLY@30..31 "}" [] []
-    2: CSS_RULE@31..50
+    2: CSS_QUALIFIED_RULE@31..50
       0: CSS_SELECTOR_LIST@31..48
         0: CSS_COMPOUND_SELECTOR@31..48
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@31..31
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@31..48
             0: CSS_ATTRIBUTE_SELECTOR@31..48
@@ -219,14 +219,14 @@ CssRoot {
                     0: CSS_STRING_LITERAL@40..46 "\"foo\"" [] [Whitespace(" ")]
                 2: S_KW@46..48 "s" [] [Whitespace(" ")]
               3: (empty)
-      1: CSS_DECLARATION_LIST_BLOCK@48..50
+      1: CSS_DECLARATION_OR_RULE_BLOCK@48..50
         0: L_CURLY@48..49 "{" [] []
-        1: CSS_DECLARATION_LIST@49..49
+        1: CSS_DECLARATION_OR_RULE_LIST@49..49
         2: R_CURLY@49..50 "}" [] []
-    3: CSS_BOGUS_RULE@50..65
+    3: CSS_QUALIFIED_RULE@50..65
       0: CSS_SELECTOR_LIST@50..65
         0: CSS_COMPOUND_SELECTOR@50..65
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@50..50
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@50..65
             0: CSS_ATTRIBUTE_SELECTOR@50..65
@@ -242,6 +242,7 @@ CssRoot {
                     0: CSS_STRING_LITERAL@58..64 "\"foo\"" [] [Whitespace(" ")]
                 2: S_KW@64..65 "s" [] []
               3: (empty)
+      1: CSS_BOGUS_BLOCK@65..65
   2: EOF@65..66 "" [Newline("\n")] []
 
 ```
@@ -299,5 +300,3 @@ attribute_selector.css:7:1 parse ━━━━━━━━━━━━━━━�
       │ 
   
 ```
-
-

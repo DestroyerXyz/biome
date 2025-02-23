@@ -43,9 +43,23 @@ impl FormatRule<JsxChildList> for FormatJsxChildList {
     }
 }
 
+/// The result of formatting the children of an [JsxChildList]. This is ultimately determined by [FormatJsxChildList::layout].
 #[derive(Debug)]
 pub(crate) enum FormatChildrenResult {
+    /// Force the children to be formatted over multiple lines.
+    ///
+    /// For example:
+    /// ```jsx
+    /// <div>
+    ///     <div>1</div>
+    ///     <div>2</div>
+    /// </div>
+    /// ```
+    ///
+    /// This usually occurs when the children are already formatted over multiple lines, or when the children contains another tag.
     ForceMultiline(FormatMultilineChildren),
+
+    /// Let the formatter determine whether the children should be formatted over multiple lines or if they can be kept on a single line.
     BestFitting {
         flat_children: FormatFlatChildren,
         expanded_children: FormatMultilineChildren,
@@ -116,7 +130,7 @@ impl FormatJsxChildList {
                         None => None,
                     };
 
-                    child_breaks = separator.map_or(false, |separator| separator.will_break());
+                    child_breaks = separator.is_some_and(|separator| separator.will_break());
 
                     flat.write(&format_args![word, separator], f);
 
@@ -138,8 +152,7 @@ impl FormatJsxChildList {
                     // <div>a
                     // {' '}</div>
                     // ```
-                    let is_after_line_break =
-                        last.as_ref().map_or(false, |last| last.is_any_line());
+                    let is_after_line_break = last.as_ref().is_some_and(|last| last.is_any_line());
 
                     // `<div>aaa </div>` or `<div> </div>`
                     let is_trailing_or_only_whitespace = children_iter.peek().is_none();
@@ -282,7 +295,7 @@ impl FormatJsxChildList {
                         None => None,
                     };
 
-                    child_breaks = line_mode.map_or(false, |mode| mode.is_hard());
+                    child_breaks = line_mode.is_some_and(|mode| mode.is_hard());
 
                     let format_separator = line_mode.map(|mode| {
                         format_with(move |f| f.write_element(FormatElement::Line(mode)))
@@ -425,7 +438,7 @@ impl FormatJsxChildList {
                     meta.meaningful_text = meta.meaningful_text
                         || text
                             .value_token()
-                            .map_or(false, |token| is_meaningful_jsx_text(token.text()));
+                            .is_ok_and(|token| is_meaningful_jsx_text(token.text()));
                 }
                 _ => {}
             }

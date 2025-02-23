@@ -18,7 +18,7 @@ use std::cmp::Ordering;
 ///
 /// These information **are printed in this exact order**.
 ///
-#[derive(Debug, Diagnostic, Clone)]
+#[derive(Clone, Debug, Diagnostic)]
 #[diagnostic(category = "parse", severity = Error)]
 pub struct ParseDiagnostic {
     /// The location where the error is occurred
@@ -26,20 +26,20 @@ pub struct ParseDiagnostic {
     span: Option<TextRange>,
     #[message]
     #[description]
-    message: MessageAndDescription,
+    pub message: MessageAndDescription,
     #[advice]
     advice: ParserAdvice,
 }
 
 /// Possible details related to the diagnostic
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 struct ParserAdvice {
     advice_list: Vec<ParserAdviceKind>,
 }
 
 /// The structure of the advice. A message that gives details, a possible range so
 /// the diagnostic is able to highlight the part of the code we want to explain.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct ParserAdviceDetail {
     /// A message that should explain this detail
     message: MarkupBuf,
@@ -47,7 +47,7 @@ struct ParserAdviceDetail {
     span: Option<TextRange>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 enum ParserAdviceKind {
     /// A list a possible details that can be attached to the diagnostic.
     /// Useful to explain the nature errors.
@@ -124,7 +124,7 @@ impl ParseDiagnostic {
     pub fn new_single_node(name: &str, range: TextRange, p: &impl Parser) -> Self {
         let names = format!("{} {}", article_for(name), name);
         let msg = if p.source().text().text_len() <= range.start() {
-            format!("Expected {} but instead found the end of the file.", names)
+            format!("Expected {names} but instead found the end of the file.")
         } else {
             format!("Expected {} but instead found '{}'.", names, p.text(range))
         };
@@ -133,7 +133,7 @@ impl ParseDiagnostic {
             message: MessageAndDescription::from(msg),
             advice: ParserAdvice::default(),
         }
-        .with_detail(range, format!("Expected {} here.", names))
+        .with_detail(range, format!("Expected {names} here."))
     }
 
     pub fn new_with_any(names: &[&str], range: TextRange, p: &impl Parser) -> Self {
@@ -160,10 +160,7 @@ impl ParseDiagnostic {
         }
 
         let msg = if p.source().text().text_len() <= range.start() {
-            format!(
-                "Expected {} but instead found the end of the file.",
-                joined_names
-            )
+            format!("Expected {joined_names} but instead found the end of the file.")
         } else {
             format!(
                 "Expected {} but instead found '{}'.",
@@ -177,7 +174,7 @@ impl ParseDiagnostic {
             message: MessageAndDescription::from(msg),
             advice: ParserAdvice::default(),
         }
-        .with_detail(range, format!("Expected {} here.", joined_names))
+        .with_detail(range, format!("Expected {joined_names} here."))
     }
 
     pub const fn is_error(&self) -> bool {
@@ -443,8 +440,8 @@ pub fn expect_one_of(names: &[&str], range: TextRange) -> ParseDiagnostic {
 }
 
 fn article_for(name: &str) -> &'static str {
-    match name.chars().next() {
-        Some('a' | 'e' | 'i' | 'o' | 'u') => "an",
+    match name.bytes().next() {
+        Some(b'a' | b'e' | b'i' | b'o' | b'u') => "an",
         _ => "a",
     }
 }

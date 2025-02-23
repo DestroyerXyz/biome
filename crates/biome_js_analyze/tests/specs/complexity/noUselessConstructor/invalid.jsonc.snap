@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.jsonc
+snapshot_kind: text
 ---
 # Input
-```js
+```cjs
 class A { constructor(){} }
 ```
 
@@ -11,7 +12,7 @@ class A { constructor(){} }
 ```
 invalid.jsonc:1:11 lint/complexity/noUselessConstructor  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This constructor is unnecessary.
+  i This constructor is unnecessary.
   
   > 1 │ class A { constructor(){} }
       │           ^^^^^^^^^^^^^^^
@@ -24,7 +25,7 @@ invalid.jsonc:1:11 lint/complexity/noUselessConstructor  FIXABLE  ━━━━�
 ```
 
 # Input
-```js
+```cjs
 class A { 'constructor'(){} }
 ```
 
@@ -32,7 +33,7 @@ class A { 'constructor'(){} }
 ```
 invalid.jsonc:1:11 lint/complexity/noUselessConstructor  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This constructor is unnecessary.
+  i This constructor is unnecessary.
   
   > 1 │ class A { 'constructor'(){} }
       │           ^^^^^^^^^^^^^^^^^
@@ -45,7 +46,7 @@ invalid.jsonc:1:11 lint/complexity/noUselessConstructor  FIXABLE  ━━━━�
 ```
 
 # Input
-```js
+```cjs
 class A extends B { constructor() { super(); } }
 ```
 
@@ -53,7 +54,7 @@ class A extends B { constructor() { super(); } }
 ```
 invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This constructor is unnecessary.
+  i This constructor is unnecessary.
   
   > 1 │ class A extends B { constructor() { super(); } }
       │                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -66,7 +67,7 @@ invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━�
 ```
 
 # Input
-```js
+```cjs
 class A extends B { constructor(foo){ super(foo); } }
 ```
 
@@ -74,7 +75,7 @@ class A extends B { constructor(foo){ super(foo); } }
 ```
 invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This constructor is unnecessary.
+  i This constructor is unnecessary.
   
   > 1 │ class A extends B { constructor(foo){ super(foo); } }
       │                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -87,7 +88,7 @@ invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━�
 ```
 
 # Input
-```js
+```cjs
 class A extends B { constructor(foo, bar){ super(foo, bar); } }
 ```
 
@@ -95,7 +96,7 @@ class A extends B { constructor(foo, bar){ super(foo, bar); } }
 ```
 invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This constructor is unnecessary.
+  i This constructor is unnecessary.
   
   > 1 │ class A extends B { constructor(foo, bar){ super(foo, bar); } }
       │                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -108,7 +109,7 @@ invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━�
 ```
 
 # Input
-```js
+```cjs
 class A extends B { constructor(...args){ super(...args); } }
 ```
 
@@ -116,7 +117,7 @@ class A extends B { constructor(...args){ super(...args); } }
 ```
 invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This constructor is unnecessary.
+  i This constructor is unnecessary.
   
   > 1 │ class A extends B { constructor(...args){ super(...args); } }
       │                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -129,7 +130,7 @@ invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━�
 ```
 
 # Input
-```js
+```cjs
 class A extends B { constructor(a, b, ...c) { super(a, b, ...c); } }
 ```
 
@@ -137,7 +138,7 @@ class A extends B { constructor(a, b, ...c) { super(a, b, ...c); } }
 ```
 invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This constructor is unnecessary.
+  i This constructor is unnecessary.
   
   > 1 │ class A extends B { constructor(a, b, ...c) { super(a, b, ...c); } }
       │                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -148,5 +149,3 @@ invalid.jsonc:1:21 lint/complexity/noUselessConstructor  FIXABLE  ━━━━�
       │                     ----------------------------------------------- 
 
 ```
-
-

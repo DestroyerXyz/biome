@@ -33,9 +33,12 @@ fix.js:1:22 parse ━━━━━━━━━━━━━━━━━━━━�
 ```
 
 ```block
-fix.js lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+fix.js:1:22 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Fixes applied to the file, but there are still diagnostics to address.
+  × Illegal use of `arguments` as an identifier in strict mode
+  
+  > 1 │ function _13_1_3_fun(arguments) { }
+      │                      ^^^^^^^^^
   
 
 ```
@@ -43,21 +46,12 @@ fix.js lint ━━━━━━━━━━━━━━━━━━━━━━�
 ```block
 fix.js format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Format with errors is disabled.
+  × Code formatting aborted due to parsing errors. To format code with errors, enable the 'formatter.formatWithErrors' option.
   
 
 ```
 
 ```block
-fix.js check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × Fixes applied to the file, but there are still diagnostics to address.
-  
-
+Checked 1 file in <TIME>. No fixes applied.
+Found 3 errors.
 ```
-
-```block
-Fixed 1 file(s) in <TIME>
-```
-
-

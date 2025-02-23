@@ -2,7 +2,6 @@
 source: crates/biome_css_parser/tests/spec_test.rs
 expression: snapshot
 ---
-
 ## Input
 
 ```css
@@ -17,10 +16,10 @@ expression: snapshot
 CssRoot {
     bom_token: missing (optional),
     rules: CssRuleList [
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssClassSelector {
@@ -31,7 +30,7 @@ CssRoot {
                 },
                 COMMA@2..4 "," [] [Whitespace(" ")],
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssIdSelector {
@@ -41,9 +40,9 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@6..7 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@7..8 "}" [] [],
             },
         },
@@ -58,10 +57,10 @@ CssRoot {
 0: CSS_ROOT@0..9
   0: (empty)
   1: CSS_RULE_LIST@0..8
-    0: CSS_RULE@0..8
+    0: CSS_QUALIFIED_RULE@0..8
       0: CSS_SELECTOR_LIST@0..6
         0: CSS_COMPOUND_SELECTOR@0..2
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@0..0
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@0..2
             0: CSS_CLASS_SELECTOR@0..2
@@ -69,15 +68,15 @@ CssRoot {
               1: (empty)
         1: COMMA@2..4 "," [] [Whitespace(" ")]
         2: CSS_COMPOUND_SELECTOR@4..6
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@4..4
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@4..6
             0: CSS_ID_SELECTOR@4..6
               0: HASH@4..6 "#" [] [Whitespace(" ")]
               1: (empty)
-      1: CSS_DECLARATION_LIST_BLOCK@6..8
+      1: CSS_DECLARATION_OR_RULE_BLOCK@6..8
         0: L_CURLY@6..7 "{" [] []
-        1: CSS_DECLARATION_LIST@7..7
+        1: CSS_DECLARATION_OR_RULE_LIST@7..7
         2: R_CURLY@7..8 "}" [] []
   2: EOF@8..9 "" [Newline("\n")] []
 
@@ -115,5 +114,3 @@ missing_identifier.css:1:7 parse ━━━━━━━━━━━━━━━�
     2 │ 
   
 ```
-
-

@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.jsonc
+snapshot_kind: text
 ---
 # Input
-```js
+```cjs
 const b = [/**test*/,];
 ```
 
@@ -11,10 +12,12 @@ const b = [/**test*/,];
 ```
 invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This array contains an empty slot.
+  × This array contains an empty slots..
   
   > 1 │ const b = [/**test*/,];
       │           ^^^^^^^^^^^^
+  
+  i The presences of empty slots may cause incorrect information and might be a typo.
   
   i Unsafe fix: Replace hole with undefined
   
@@ -24,7 +27,7 @@ invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 const c = [,,];
 ```
 
@@ -32,10 +35,12 @@ const c = [,,];
 ```
 invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This array contains an empty slot.
+  × This array contains an empty slots..
   
   > 1 │ const c = [,,];
       │           ^^^^
+  
+  i The presences of empty slots may cause incorrect information and might be a typo.
   
   i Unsafe fix: Replace hole with undefined
   
@@ -45,7 +50,7 @@ invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 const d = [,2];
 ```
 
@@ -53,10 +58,12 @@ const d = [,2];
 ```
 invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This array contains an empty slot.
+  × This array contains an empty slots..
   
   > 1 │ const d = [,2];
       │           ^^^^
+  
+  i The presences of empty slots may cause incorrect information and might be a typo.
   
   i Unsafe fix: Replace hole with undefined
   
@@ -66,7 +73,7 @@ invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 const e = [1,,];
 ```
 
@@ -74,10 +81,12 @@ const e = [1,,];
 ```
 invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This array contains an empty slot.
+  × This array contains an empty slots..
   
   > 1 │ const e = [1,,];
       │           ^^^^^
+  
+  i The presences of empty slots may cause incorrect information and might be a typo.
   
   i Unsafe fix: Replace hole with undefined
   
@@ -87,7 +96,7 @@ invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 const f = [1,,2];
 ```
 
@@ -95,10 +104,12 @@ const f = [1,,2];
 ```
 invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This array contains an empty slot.
+  × This array contains an empty slots..
   
   > 1 │ const f = [1,,2];
       │           ^^^^^^
+  
+  i The presences of empty slots may cause incorrect information and might be a typo.
   
   i Unsafe fix: Replace hole with undefined
   
@@ -106,5 +117,3 @@ invalid.jsonc:1:11 lint/suspicious/noSparseArray  FIXABLE  ━━━━━━━
       │              ++++++++++    
 
 ```
-
-

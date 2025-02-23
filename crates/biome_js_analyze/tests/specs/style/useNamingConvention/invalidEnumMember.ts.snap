@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidEnumMember.ts
+snapshot_kind: text
 ---
 # Input
-```js
+```ts
 export enum Status {
     OPEN,
     CLOSE,
@@ -19,7 +20,7 @@ export enum Direction {
 ```
 invalidEnumMember.ts:2:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This enum member name should be in PascalCase.
+  i This enum member name should be in PascalCase.
   
     1 │ export enum Status {
   > 2 │     OPEN,
@@ -27,15 +28,13 @@ invalidEnumMember.ts:2:5 lint/style/useNamingConvention ━━━━━━━━
     3 │     CLOSE,
     4 │ }
   
-  i The name could be renamed to `Open`.
-  
 
 ```
 
 ```
 invalidEnumMember.ts:3:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This enum member name should be in PascalCase.
+  i This enum member name should be in PascalCase.
   
     1 │ export enum Status {
     2 │     OPEN,
@@ -44,15 +43,13 @@ invalidEnumMember.ts:3:5 lint/style/useNamingConvention ━━━━━━━━
     4 │ }
     5 │ 
   
-  i The name could be renamed to `Close`.
-  
 
 ```
 
 ```
 invalidEnumMember.ts:7:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This enum member name should be in PascalCase.
+  i This enum member name should be in PascalCase.
   
     6 │ export enum Direction {
   > 7 │     right,
@@ -60,15 +57,13 @@ invalidEnumMember.ts:7:5 lint/style/useNamingConvention ━━━━━━━━
     8 │     left,
     9 │ }
   
-  i The name could be renamed to `Right`.
-  
 
 ```
 
 ```
 invalidEnumMember.ts:8:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This enum member name should be in PascalCase.
+  i This enum member name should be in PascalCase.
   
     6 │ export enum Direction {
     7 │     right,
@@ -76,9 +71,5 @@ invalidEnumMember.ts:8:5 lint/style/useNamingConvention ━━━━━━━━
       │     ^^^^
     9 │ }
   
-  i The name could be renamed to `Left`.
-  
 
 ```
-
-

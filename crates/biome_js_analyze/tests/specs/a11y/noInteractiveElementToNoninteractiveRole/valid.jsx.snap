@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
+assertion_line: 86
 expression: valid.jsx
 ---
 # Input
-```js
+```jsx
 <TestComponent onClick={doFoo} />;
 <Button onClick={doFoo} />;
 /* Interactive elements */
@@ -61,6 +62,7 @@ expression: valid.jsx
 <body role="button" />;
 <br role="button" />;
 <canvas role="button" />;
+<canvas role="img" />;
 <caption role="button" />;
 <center role="button" />;
 <cite role="button" />;
@@ -218,6 +220,7 @@ expression: valid.jsx
 <li role="presentation" />;
 <nav role="button" />;
 <ol role="button" />;
+<svg role="img" />;
 <table role="button" />;
 <tbody role="button" />;
 <td role="button" />;
@@ -268,7 +271,17 @@ expression: valid.jsx
 <Link href="http://x.y.z" role="img" />;
 <Link href="http://x.y.z" />;
 <Button onClick={doFoo} />;
+<picture>
+  <source
+    srcSet={'/assets/head.webp'}
+    role='img'
+    type='image/webp'
+  />
+  <img
+    src={'/assets/head.png'}
+    alt='An ASCII-style headshot'
+  />
+</picture>
+
 
 ```
-
-

@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.jsonc
+snapshot_kind: text
 ---
 # Input
-```js
+```cjs
 switch (a) { case 1: let x = 1; break; }
 ```
 
@@ -11,7 +12,7 @@ switch (a) { case 1: let x = 1; break; }
 ```
 invalid.jsonc:1:22 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Other switch clauses can erroneously access this declaration.
+  × Other switch clauses can erroneously access this declaration.
     Wrap the declaration in a block to restrict its access to the switch clause.
   
   > 1 │ switch (a) { case 1: let x = 1; break; }
@@ -24,13 +25,14 @@ invalid.jsonc:1:22 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━�
   
   i Unsafe fix: Wrap the declaration in a block.
   
-    1 │ switch·(a)·{·case·1:·{·let·x·=·1;·break;·}}
-      │                      ++                   +
+  - switch·(a)·{·case·1:·let·x·=·1;·break;·}
+  + switch·(a)·{·case·1:·{·let·x·=·1;·break;·}}
+  
 
 ```
 
 # Input
-```js
+```cjs
 switch (a) { default: let x = 2; break; }
 ```
 
@@ -38,7 +40,7 @@ switch (a) { default: let x = 2; break; }
 ```
 invalid.jsonc:1:23 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Other switch clauses can erroneously access this declaration.
+  × Other switch clauses can erroneously access this declaration.
     Wrap the declaration in a block to restrict its access to the switch clause.
   
   > 1 │ switch (a) { default: let x = 2; break; }
@@ -51,13 +53,14 @@ invalid.jsonc:1:23 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━�
   
   i Unsafe fix: Wrap the declaration in a block.
   
-    1 │ switch·(a)·{·default:·{·let·x·=·2;·break;·}}
-      │                       ++                   +
+  - switch·(a)·{·default:·let·x·=·2;·break;·}
+  + switch·(a)·{·default:·{·let·x·=·2;·break;·}}
+  
 
 ```
 
 # Input
-```js
+```cjs
 switch (a) { case 1: const x = 1; break; }
 ```
 
@@ -65,7 +68,7 @@ switch (a) { case 1: const x = 1; break; }
 ```
 invalid.jsonc:1:22 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Other switch clauses can erroneously access this declaration.
+  × Other switch clauses can erroneously access this declaration.
     Wrap the declaration in a block to restrict its access to the switch clause.
   
   > 1 │ switch (a) { case 1: const x = 1; break; }
@@ -78,13 +81,14 @@ invalid.jsonc:1:22 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━�
   
   i Unsafe fix: Wrap the declaration in a block.
   
-    1 │ switch·(a)·{·case·1:·{·const·x·=·1;·break;·}}
-      │                      ++                     +
+  - switch·(a)·{·case·1:·const·x·=·1;·break;·}
+  + switch·(a)·{·case·1:·{·const·x·=·1;·break;·}}
+  
 
 ```
 
 # Input
-```js
+```cjs
 switch (a) { default: const x = 2; break; }
 ```
 
@@ -92,7 +96,7 @@ switch (a) { default: const x = 2; break; }
 ```
 invalid.jsonc:1:23 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Other switch clauses can erroneously access this declaration.
+  × Other switch clauses can erroneously access this declaration.
     Wrap the declaration in a block to restrict its access to the switch clause.
   
   > 1 │ switch (a) { default: const x = 2; break; }
@@ -105,13 +109,14 @@ invalid.jsonc:1:23 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━�
   
   i Unsafe fix: Wrap the declaration in a block.
   
-    1 │ switch·(a)·{·default:·{·const·x·=·2;·break;·}}
-      │                       ++                     +
+  - switch·(a)·{·default:·const·x·=·2;·break;·}
+  + switch·(a)·{·default:·{·const·x·=·2;·break;·}}
+  
 
 ```
 
 # Input
-```js
+```cjs
 switch (a) { case 1: function f() {} break; }
 ```
 
@@ -119,7 +124,7 @@ switch (a) { case 1: function f() {} break; }
 ```
 invalid.jsonc:1:22 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Other switch clauses can erroneously access this declaration.
+  × Other switch clauses can erroneously access this declaration.
     Wrap the declaration in a block to restrict its access to the switch clause.
   
   > 1 │ switch (a) { case 1: function f() {} break; }
@@ -132,13 +137,14 @@ invalid.jsonc:1:22 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━�
   
   i Unsafe fix: Wrap the declaration in a block.
   
-    1 │ switch·(a)·{·case·1:·{·function·f()·{}·break;·}}
-      │                      ++                        +
+  - switch·(a)·{·case·1:·function·f()·{}·break;·}
+  + switch·(a)·{·case·1:·{·function·f()·{}·break;·}}
+  
 
 ```
 
 # Input
-```js
+```cjs
 switch (a) { default: function f() {} break; }
 ```
 
@@ -146,7 +152,7 @@ switch (a) { default: function f() {} break; }
 ```
 invalid.jsonc:1:23 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Other switch clauses can erroneously access this declaration.
+  × Other switch clauses can erroneously access this declaration.
     Wrap the declaration in a block to restrict its access to the switch clause.
   
   > 1 │ switch (a) { default: function f() {} break; }
@@ -159,13 +165,14 @@ invalid.jsonc:1:23 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━�
   
   i Unsafe fix: Wrap the declaration in a block.
   
-    1 │ switch·(a)·{·default:·{·function·f()·{}·break;·}}
-      │                       ++                        +
+  - switch·(a)·{·default:·function·f()·{}·break;·}
+  + switch·(a)·{·default:·{·function·f()·{}·break;·}}
+  
 
 ```
 
 # Input
-```js
+```cjs
 switch (a) { case 1: class C {} break; }
 ```
 
@@ -173,7 +180,7 @@ switch (a) { case 1: class C {} break; }
 ```
 invalid.jsonc:1:22 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Other switch clauses can erroneously access this declaration.
+  × Other switch clauses can erroneously access this declaration.
     Wrap the declaration in a block to restrict its access to the switch clause.
   
   > 1 │ switch (a) { case 1: class C {} break; }
@@ -186,13 +193,14 @@ invalid.jsonc:1:22 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━�
   
   i Unsafe fix: Wrap the declaration in a block.
   
-    1 │ switch·(a)·{·case·1:·{·class·C·{}·break;·}}
-      │                      ++                   +
+  - switch·(a)·{·case·1:·class·C·{}·break;·}
+  + switch·(a)·{·case·1:·{·class·C·{}·break;·}}
+  
 
 ```
 
 # Input
-```js
+```cjs
 switch (a) { default: class C {} break; }
 ```
 
@@ -200,7 +208,7 @@ switch (a) { default: class C {} break; }
 ```
 invalid.jsonc:1:23 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Other switch clauses can erroneously access this declaration.
+  × Other switch clauses can erroneously access this declaration.
     Wrap the declaration in a block to restrict its access to the switch clause.
   
   > 1 │ switch (a) { default: class C {} break; }
@@ -213,9 +221,8 @@ invalid.jsonc:1:23 lint/correctness/noSwitchDeclarations  FIXABLE  ━━━━�
   
   i Unsafe fix: Wrap the declaration in a block.
   
-    1 │ switch·(a)·{·default:·{·class·C·{}·break;·}}
-      │                       ++                   +
+  - switch·(a)·{·default:·class·C·{}·break;·}
+  + switch·(a)·{·default:·{·class·C·{}·break;·}}
+  
 
 ```
-
-

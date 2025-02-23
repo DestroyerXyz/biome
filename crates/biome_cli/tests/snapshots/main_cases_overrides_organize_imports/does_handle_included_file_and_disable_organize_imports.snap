@@ -1,17 +1,16 @@
 ---
 source: crates/biome_cli/tests/snap_test.rs
-expression: content
+expression: redactor(content)
+snapshot_kind: text
 ---
 ## `biome.json`
 
 ```json
 {
   "files": {
-    "include": ["test.js", "special/**"]
+    "includes": ["test.js", "special/**"]
   },
-  "overrides": [
-    { "include": ["special/**"], "organizeImports": { "enabled": false } }
-  ]
+  "overrides": [{ "includes": ["special/**"], "assist": { "enabled": false } }]
 }
 ```
 
@@ -32,7 +31,5 @@ import * as something from "../something";
 # Emitted Messages
 
 ```block
-Fixed 1 file(s) in <TIME>
+Checked 1 file in <TIME>. Fixed 1 file.
 ```
-
-

@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidObjectProperty.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -21,7 +22,7 @@ export default {
 ```
 invalidObjectProperty.js:2:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object property name should be in camelCase.
+  i This object property name should be in camelCase.
   
     1 │ export default {
   > 2 │     Initialized: 0,
@@ -29,15 +30,13 @@ invalidObjectProperty.js:2:5 lint/style/useNamingConvention ━━━━━━�
     3 │ 
     4 │     SpecialProperty: 0,
   
-  i The name could be renamed to `initialized`.
-  
 
 ```
 
 ```
 invalidObjectProperty.js:4:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object property name should be in camelCase.
+  i This object property name should be in camelCase.
   
     2 │     Initialized: 0,
     3 │ 
@@ -46,15 +45,13 @@ invalidObjectProperty.js:4:5 lint/style/useNamingConvention ━━━━━━�
     5 │ 
     6 │     special_property: 0,
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
 ```
 invalidObjectProperty.js:6:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object property name should be in camelCase.
+  i This object property name should be in camelCase.
   
     4 │     SpecialProperty: 0,
     5 │ 
@@ -63,15 +60,13 @@ invalidObjectProperty.js:6:5 lint/style/useNamingConvention ━━━━━━�
     7 │ 
     8 │     Unknown_Style: 0,
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
 ```
 invalidObjectProperty.js:8:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object property name should be in camelCase.
+  i This object property name should be in camelCase.
   
      6 │     special_property: 0,
      7 │ 
@@ -80,15 +75,13 @@ invalidObjectProperty.js:8:5 lint/style/useNamingConvention ━━━━━━�
      9 │ 
     10 │     Unknown_Init_Style: 0,
   
-  i The name could be renamed to `unknownStyle`.
-  
 
 ```
 
 ```
 invalidObjectProperty.js:10:5 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object property name should be in camelCase.
+  i This object property name should be in camelCase.
   
      8 │     Unknown_Style: 0,
      9 │ 
@@ -96,9 +89,5 @@ invalidObjectProperty.js:10:5 lint/style/useNamingConvention ━━━━━━�
        │     ^^^^^^^^^^^^^^^^^^
     11 │ }
   
-  i The name could be renamed to `unknownInitStyle`.
-  
 
 ```
-
-

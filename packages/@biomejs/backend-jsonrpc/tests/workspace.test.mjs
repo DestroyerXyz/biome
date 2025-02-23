@@ -1,6 +1,6 @@
-import { fileURLToPath } from "url";
-import { resolve } from "path";
-import { describe, it, expect } from "vitest";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 
 import { createWorkspaceWithBinary } from "../dist/index.js";
 
@@ -14,30 +14,27 @@ describe("Workspace API", () => {
 		);
 
 		const workspace = await createWorkspaceWithBinary(command);
-
+		const projectKey = await workspace.openProject({
+			path: "",
+			openUninitialized: true,
+		});
 		await workspace.openFile({
-			path: {
-				path: "test.js",
-				id: 0,
-			},
-			content: "statement()",
+			projectKey,
+			path: "test.js",
+			content: { type: "fromClient", content: "statement()" },
 			version: 0,
 		});
 
 		const printed = await workspace.formatFile({
-			path: {
-				path: "test.js",
-				id: 0,
-			},
+			projectKey,
+			path: "test.js",
 		});
 
 		expect(printed.code).toBe("statement();\n");
 
 		await workspace.closeFile({
-			path: {
-				path: "test.js",
-				id: 0,
-			},
+			projectKey,
+			path: "test.js",
 		});
 
 		workspace.destroy();

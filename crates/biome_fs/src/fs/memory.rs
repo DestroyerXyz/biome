@@ -1,18 +1,19 @@
+use biome_diagnostics::{Error, Severity};
+use camino::{Utf8Path, Utf8PathBuf};
+use oxc_resolver::{FsResolution, ResolveError};
+use parking_lot::{lock_api::ArcMutexGuard, Mutex, RawMutex, RwLock};
 use rustc_hash::FxHashMap;
-use std::collections::hash_map::{Entry, IntoIter};
+use std::collections::hash_map::Entry;
 use std::io;
 use std::panic::{AssertUnwindSafe, RefUnwindSafe};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str;
 use std::sync::Arc;
 
-use biome_diagnostics::{Error, Severity};
-use parking_lot::{lock_api::ArcMutexGuard, Mutex, RawMutex, RwLock};
-
 use crate::fs::OpenOptions;
-use crate::{FileSystem, RomePath, TraversalContext, TraversalScope};
+use crate::{BiomePath, FileSystem, TraversalContext, TraversalScope};
 
-use super::{BoxedTraversal, ErrorKind, File, FileSystemDiagnostic};
+use super::{BoxedTraversal, File, FileSystemDiagnostic, FsErrorKind, PathKind};
 
 type OnGetChangedFiles = Option<
     Arc<
@@ -22,11 +23,14 @@ type OnGetChangedFiles = Option<
     >,
 >;
 
+type Files = Arc<RwLock<FxHashMap<Utf8PathBuf, FileEntry>>>;
+
 /// Fully in-memory file system, stores the content of all known files in a hashmap
 pub struct MemoryFileSystem {
-    files: AssertUnwindSafe<RwLock<FxHashMap<PathBuf, FileEntry>>>,
-    errors: FxHashMap<PathBuf, ErrorEntry>,
+    pub files: AssertUnwindSafe<Files>,
+    errors: FxHashMap<Utf8PathBuf, ErrorEntry>,
     allow_write: bool,
+    on_get_staged_files: OnGetChangedFiles,
     on_get_changed_files: OnGetChangedFiles,
 }
 
@@ -36,7 +40,12 @@ impl Default for MemoryFileSystem {
             files: Default::default(),
             errors: Default::default(),
             allow_write: true,
-            on_get_changed_files: None,
+            on_get_staged_files: Some(Arc::new(AssertUnwindSafe(Mutex::new(Some(Box::new(
+                Vec::new,
+            )))))),
+            on_get_changed_files: Some(Arc::new(AssertUnwindSafe(Mutex::new(Some(Box::new(
+                Vec::new,
+            )))))),
         }
     }
 }
@@ -68,6 +77,14 @@ pub enum ErrorEntry {
 }
 
 impl MemoryFileSystem {
+    /// Creates a new instance with pre-initialized files.
+    pub fn from_files(files: Files) -> Self {
+        Self {
+            files: AssertUnwindSafe(files),
+            ..Default::default()
+        }
+    }
+
     /// Create a read-only instance of [MemoryFileSystem]
     ///
     /// This instance will disallow any modification through the [FileSystem]
@@ -81,24 +98,19 @@ impl MemoryFileSystem {
     }
 
     /// Create or update a file in the filesystem
-    pub fn insert(&mut self, path: PathBuf, content: impl Into<Vec<u8>>) {
-        let files = self.files.0.get_mut();
+    pub fn insert(&mut self, path: Utf8PathBuf, content: impl Into<Vec<u8>>) {
+        let mut files = self.files.0.write();
         files.insert(path, Arc::new(Mutex::new(content.into())));
     }
 
     /// Create or update an error in the filesystem
-    pub fn insert_error(&mut self, path: PathBuf, kind: ErrorEntry) {
+    pub fn insert_error(&mut self, path: Utf8PathBuf, kind: ErrorEntry) {
         self.errors.insert(path, kind);
     }
 
     /// Remove a file from the filesystem
-    pub fn remove(&mut self, path: &Path) {
+    pub fn remove(&mut self, path: &Utf8Path) {
         self.files.0.write().remove(path);
-    }
-
-    pub fn files(self) -> IntoIter<PathBuf, FileEntry> {
-        let files = self.files.0.into_inner();
-        files.into_iter()
     }
 
     pub fn set_on_get_changed_files(
@@ -107,10 +119,21 @@ impl MemoryFileSystem {
     ) {
         self.on_get_changed_files = Some(Arc::new(AssertUnwindSafe(Mutex::new(Some(cfn)))));
     }
+
+    pub fn set_on_get_staged_files(
+        &mut self,
+        cfn: Box<dyn FnOnce() -> Vec<String> + Send + RefUnwindSafe + 'static>,
+    ) {
+        self.on_get_staged_files = Some(Arc::new(AssertUnwindSafe(Mutex::new(Some(cfn)))));
+    }
 }
 
 impl FileSystem for MemoryFileSystem {
-    fn open_with_options(&self, path: &Path, options: OpenOptions) -> io::Result<Box<dyn File>> {
+    fn open_with_options(
+        &self,
+        path: &Utf8Path,
+        options: OpenOptions,
+    ) -> io::Result<Box<dyn File>> {
         if !self.allow_write
             && (options.create || options.create_new || options.truncate || options.write)
         {
@@ -123,7 +146,7 @@ impl FileSystem for MemoryFileSystem {
         let mut inner = if options.create || options.create_new {
             // Acquire write access to the files map if the file may need to be created
             let mut files = self.files.0.write();
-            match files.entry(PathBuf::from(path)) {
+            match files.entry(Utf8PathBuf::from(path)) {
                 Entry::Vacant(entry) => {
                     // we create an empty file
                     let file: FileEntry = Arc::new(Mutex::new(vec![]));
@@ -170,18 +193,24 @@ impl FileSystem for MemoryFileSystem {
             version: 0,
         }))
     }
-
     fn traversal<'scope>(&'scope self, func: BoxedTraversal<'_, 'scope>) {
         func(&MemoryTraversalScope { fs: self })
     }
 
-    fn working_directory(&self) -> Option<PathBuf> {
+    fn working_directory(&self) -> Option<Utf8PathBuf> {
         None
     }
 
-    fn path_exists(&self, path: &Path) -> bool {
+    fn path_exists(&self, path: &Utf8Path) -> bool {
+        self.path_is_file(path)
+    }
+
+    fn path_kind(&self, path: &Utf8Path) -> Result<PathKind, FileSystemDiagnostic> {
         let files = self.files.0.read();
-        files.get(path).is_some()
+        match files.get(path) {
+            Some(_) => Ok(PathKind::File { is_symlink: false }),
+            None => Ok(PathKind::Directory { is_symlink: false }),
+        }
     }
 
     fn get_changed_files(&self, _base: &str) -> io::Result<Vec<String>> {
@@ -192,6 +221,31 @@ impl FileSystem for MemoryFileSystem {
         let cb = cb_guard.take().unwrap();
 
         Ok(cb())
+    }
+
+    fn get_staged_files(&self) -> io::Result<Vec<String>> {
+        let cb_arc = self.on_get_staged_files.as_ref().unwrap().clone();
+
+        let mut cb_guard = cb_arc.lock();
+
+        let cb = cb_guard.take().unwrap();
+
+        Ok(cb())
+    }
+
+    fn read_link(&self, _path: &Utf8Path) -> io::Result<Utf8PathBuf> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "memory FS doesn't support symlinks",
+        ))
+    }
+
+    fn resolve_configuration(
+        &self,
+        _specifier: &str,
+        _path: &Utf8Path,
+    ) -> Result<FsResolution, ResolveError> {
+        todo!()
     }
 }
 
@@ -246,7 +300,7 @@ pub struct MemoryTraversalScope<'scope> {
 }
 
 impl<'scope> TraversalScope<'scope> for MemoryTraversalScope<'scope> {
-    fn spawn(&self, ctx: &'scope dyn TraversalContext, base: PathBuf) {
+    fn evaluate(&self, ctx: &'scope dyn TraversalContext, base: Utf8PathBuf) {
         // Traversal is implemented by iterating on all keys, and matching on
         // those that are prefixed with the provided `base` path
         {
@@ -254,8 +308,8 @@ impl<'scope> TraversalScope<'scope> for MemoryTraversalScope<'scope> {
             for path in files.keys() {
                 let should_process_file = if base.starts_with(".") || base.starts_with("./") {
                     // we simulate absolute paths, so we can correctly strips out the base path from the path
-                    let absolute_base = PathBuf::from("/").join(&base);
-                    let absolute_path = Path::new("/").join(path);
+                    let absolute_base = Utf8PathBuf::from("/").join(&base);
+                    let absolute_path = Utf8Path::new("/").join(path);
                     absolute_path.strip_prefix(&absolute_base).is_ok()
                 } else {
                     path.strip_prefix(&base).is_ok()
@@ -263,11 +317,11 @@ impl<'scope> TraversalScope<'scope> for MemoryTraversalScope<'scope> {
 
                 if should_process_file {
                     let _ = ctx.interner().intern_path(path.into());
-                    let rome_path = RomePath::new(path);
-                    if !ctx.can_handle(&rome_path) {
+                    let biome_path = BiomePath::new(path);
+                    if !ctx.can_handle(&biome_path) {
                         continue;
                     }
-                    ctx.handle_file(path);
+                    ctx.store_path(biome_path);
                 }
             }
         }
@@ -275,44 +329,42 @@ impl<'scope> TraversalScope<'scope> for MemoryTraversalScope<'scope> {
         for (path, entry) in &self.fs.errors {
             if path.strip_prefix(&base).is_ok() {
                 ctx.push_diagnostic(Error::from(FileSystemDiagnostic {
-                    path: path.to_string_lossy().to_string(),
+                    path: path.to_string(),
                     error_kind: match entry {
-                        ErrorEntry::UnknownFileType => ErrorKind::UnknownFileType,
-                        ErrorEntry::DereferencedSymlink(path) => {
-                            ErrorKind::DereferencedSymlink(path.to_string_lossy().to_string())
-                        }
-                        ErrorEntry::DeeplyNestedSymlinkExpansion(path) => {
-                            ErrorKind::DeeplyNestedSymlinkExpansion(
-                                path.to_string_lossy().to_string(),
-                            )
+                        ErrorEntry::UnknownFileType => FsErrorKind::UnknownFileType,
+                        ErrorEntry::DereferencedSymlink(_) => FsErrorKind::DereferencedSymlink,
+                        ErrorEntry::DeeplyNestedSymlinkExpansion(_) => {
+                            FsErrorKind::DeeplyNestedSymlinkExpansion
                         }
                     },
                     severity: Severity::Warning,
+                    source: None,
                 }));
             }
         }
+    }
+
+    fn handle(&self, context: &'scope dyn TraversalContext, path: Utf8PathBuf) {
+        context.handle_path(BiomePath::new(path));
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        io,
-        mem::swap,
-        path::{Path, PathBuf},
-    };
-
     use biome_diagnostics::Error;
+    use camino::{Utf8Path, Utf8PathBuf};
     use parking_lot::Mutex;
+    use std::collections::BTreeSet;
+    use std::{io, mem::swap};
 
     use crate::{fs::FileSystemExt, OpenOptions};
-    use crate::{FileSystem, MemoryFileSystem, PathInterner, RomePath, TraversalContext};
+    use crate::{BiomePath, FileSystem, MemoryFileSystem, PathInterner, TraversalContext};
 
     #[test]
     fn fs_read_only() {
         let mut fs = MemoryFileSystem::new_read_only();
 
-        let path = Path::new("file.js");
+        let path = Utf8Path::new("file.js");
         fs.insert(path.into(), *b"content");
 
         assert!(fs.open(path).is_ok());
@@ -343,7 +395,7 @@ mod tests {
     fn file_read_write() {
         let mut fs = MemoryFileSystem::default();
 
-        let path = Path::new("file.js");
+        let path = Utf8Path::new("file.js");
         let content_1 = "content 1";
         let content_2 = "content 2";
 
@@ -373,7 +425,7 @@ mod tests {
     fn file_create() {
         let fs = MemoryFileSystem::default();
 
-        let path = Path::new("file.js");
+        let path = Utf8Path::new("file.js");
         let mut file = fs.create(path).expect("the file should not fail to open");
 
         file.set_content(b"content".as_slice())
@@ -384,7 +436,7 @@ mod tests {
     fn file_create_truncate() {
         let mut fs = MemoryFileSystem::default();
 
-        let path = Path::new("file.js");
+        let path = Utf8Path::new("file.js");
         fs.insert(path.into(), b"content".as_slice());
 
         let file = fs.create(path).expect("the file should not fail to create");
@@ -407,7 +459,7 @@ mod tests {
     fn file_create_new() {
         let fs = MemoryFileSystem::default();
 
-        let path = Path::new("file.js");
+        let path = Utf8Path::new("file.js");
         let content = "content";
 
         let mut file = fs
@@ -432,7 +484,7 @@ mod tests {
     fn file_create_new_exists() {
         let mut fs = MemoryFileSystem::default();
 
-        let path = Path::new("file.js");
+        let path = Utf8Path::new("file.js");
         fs.insert(path.into(), b"content".as_slice());
 
         let result = fs.create_new(path);
@@ -449,7 +501,7 @@ mod tests {
     fn missing_file() {
         let fs = MemoryFileSystem::default();
 
-        let result = fs.open(Path::new("non_existing"));
+        let result = fs.open(Utf8Path::new("non_existing"));
 
         match result {
             Ok(_) => panic!("opening a non-existing file should return an error"),
@@ -463,14 +515,14 @@ mod tests {
     fn traversal() {
         let mut fs = MemoryFileSystem::default();
 
-        fs.insert(PathBuf::from("dir1/file1"), "dir1/file1".as_bytes());
-        fs.insert(PathBuf::from("dir1/file2"), "dir1/file1".as_bytes());
-        fs.insert(PathBuf::from("dir2/file1"), "dir2/file1".as_bytes());
-        fs.insert(PathBuf::from("dir2/file2"), "dir2/file1".as_bytes());
+        fs.insert(Utf8PathBuf::from("dir1/file1"), "dir1/file1".as_bytes());
+        fs.insert(Utf8PathBuf::from("dir1/file2"), "dir1/file1".as_bytes());
+        fs.insert(Utf8PathBuf::from("dir2/file1"), "dir2/file1".as_bytes());
+        fs.insert(Utf8PathBuf::from("dir2/file2"), "dir2/file1".as_bytes());
 
         struct TestContext {
             interner: PathInterner,
-            visited: Mutex<Vec<PathBuf>>,
+            visited: Mutex<BTreeSet<BiomePath>>,
         }
 
         impl TraversalContext for TestContext {
@@ -482,12 +534,21 @@ mod tests {
                 panic!("unexpected error {err:?}")
             }
 
-            fn can_handle(&self, _: &RomePath) -> bool {
+            fn can_handle(&self, _: &BiomePath) -> bool {
                 true
             }
 
-            fn handle_file(&self, path: &Path) {
-                self.visited.lock().push(path.into())
+            fn handle_path(&self, path: BiomePath) {
+                self.visited.lock().insert(path.to_written());
+            }
+
+            fn store_path(&self, path: BiomePath) {
+                self.visited.lock().insert(path);
+            }
+
+            fn evaluated_paths(&self) -> BTreeSet<BiomePath> {
+                let lock = self.visited.lock();
+                lock.clone()
             }
         }
 
@@ -499,25 +560,25 @@ mod tests {
 
         // Traverse a directory
         fs.traversal(Box::new(|scope| {
-            scope.spawn(&ctx, PathBuf::from("dir1"));
+            scope.evaluate(&ctx, Utf8PathBuf::from("dir1"));
         }));
 
-        let mut visited = Vec::new();
+        let mut visited = BTreeSet::default();
         swap(&mut visited, ctx.visited.get_mut());
 
         assert_eq!(visited.len(), 2);
-        assert!(visited.contains(&PathBuf::from("dir1/file1")));
-        assert!(visited.contains(&PathBuf::from("dir1/file2")));
+        assert!(visited.contains(&BiomePath::new("dir1/file1")));
+        assert!(visited.contains(&BiomePath::new("dir1/file2")));
 
         // Traverse a single file
         fs.traversal(Box::new(|scope| {
-            scope.spawn(&ctx, PathBuf::from("dir2/file2"));
+            scope.evaluate(&ctx, Utf8PathBuf::from("dir2/file2"));
         }));
 
-        let mut visited = Vec::new();
+        let mut visited = BTreeSet::default();
         swap(&mut visited, ctx.visited.get_mut());
 
         assert_eq!(visited.len(), 1);
-        assert!(visited.contains(&PathBuf::from("dir2/file2")));
+        assert!(visited.contains(&BiomePath::new("dir2/file2")));
     }
 }

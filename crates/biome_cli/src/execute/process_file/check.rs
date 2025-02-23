@@ -1,89 +1,99 @@
+use crate::execute::process_file::assist::assist_with_guard;
 use crate::execute::process_file::format::format_with_guard;
 use crate::execute::process_file::lint::lint_with_guard;
-use crate::execute::process_file::organize_imports::organize_imports_with_guard;
 use crate::execute::process_file::workspace_file::WorkspaceFile;
 use crate::execute::process_file::{FileResult, FileStatus, Message, SharedTraversalOptions};
-use crate::CliDiagnostic;
-use biome_diagnostics::Category;
-use biome_service::workspace::{FeatureName, FileFeaturesResult};
-use std::path::Path;
+use biome_diagnostics::{category, DiagnosticExt};
+use biome_fs::{BiomePath, TraversalContext};
+use biome_service::diagnostics::FileTooLarge;
+use biome_service::workspace::FileFeaturesResult;
 
 pub(crate) fn check_file<'ctx>(
     ctx: &'ctx SharedTraversalOptions<'ctx, '_>,
-    path: &Path,
+    path: BiomePath,
     file_features: &'ctx FileFeaturesResult,
-    category: &'static Category,
 ) -> FileResult {
-    let mut has_errors = false;
+    let mut has_failures = false;
     let mut workspace_file = WorkspaceFile::new(ctx, path)?;
-    tracing::info_span!("Process check", path =? workspace_file.path.display()).in_scope(
-        move || {
-            if file_features.supports_for(&FeatureName::Lint) {
-                let lint_result = lint_with_guard(ctx, &mut workspace_file);
-                match lint_result {
-                    Ok(status) => {
-                        if let FileStatus::Message(msg) = status {
-                            if msg.is_diagnostic() {
-                                has_errors = true
-                            }
-                            ctx.push_message(msg);
-                        }
+    let result = workspace_file.guard().check_file_size()?;
+    if result.is_too_large() {
+        ctx.push_diagnostic(
+            FileTooLarge::from(result)
+                .with_file_path(workspace_file.path.to_string())
+                .with_category(category!("check")),
+        );
+        return Ok(FileStatus::Ignored);
+    }
+    let mut changed = false;
+    let _ = tracing::info_span!("Check ", path =? workspace_file.path).entered();
+    if file_features.supports_lint() {
+        let lint_result = lint_with_guard(ctx, &mut workspace_file, false, None);
+        match lint_result {
+            Ok(status) => {
+                if status.is_changed() {
+                    changed = true
+                }
+                if let FileStatus::Message(msg) = status {
+                    if msg.is_failure() {
+                        has_failures = true;
                     }
-                    Err(err) => {
-                        ctx.push_message(err);
-                        has_errors = true;
-                    }
+                    ctx.push_message(msg);
                 }
             }
-            if file_features.supports_for(&FeatureName::OrganizeImports) {
-                let organize_imports_result = organize_imports_with_guard(ctx, &mut workspace_file);
-                match organize_imports_result {
-                    Ok(status) => {
-                        if let FileStatus::Message(msg) = status {
-                            if msg.is_diagnostic() {
-                                has_errors = true
-                            }
-                            ctx.push_message(msg);
-                        }
-                    }
-                    Err(err) => {
-                        ctx.push_message(err);
-                        has_errors = true;
-                    }
-                }
+            Err(err) => {
+                ctx.push_message(err);
+                has_failures = true;
             }
+        }
+    }
 
-            if file_features.supports_for(&FeatureName::Format) {
-                let format_result = format_with_guard(ctx, &mut workspace_file);
-                match format_result {
-                    Ok(status) => {
-                        if let FileStatus::Message(msg) = status {
-                            if msg.is_diagnostic() {
-                                has_errors = true
-                            }
-                            ctx.push_message(msg);
-                        }
+    if file_features.supports_assist() {
+        let assist_result = assist_with_guard(ctx, &mut workspace_file);
+        match assist_result {
+            Ok(status) => {
+                if status.is_changed() {
+                    changed = true
+                }
+                if let FileStatus::Message(msg) = status {
+                    if msg.is_failure() {
+                        has_failures = true;
                     }
-                    Err(err) => {
-                        ctx.push_message(err);
-                        has_errors = true;
-                    }
+                    ctx.push_message(msg);
                 }
             }
+            Err(err) => {
+                ctx.push_message(err);
+                has_failures = true;
+            }
+        }
+    }
 
-            if has_errors {
-                if ctx.execution.is_check_apply() || ctx.execution.is_check_apply_unsafe() {
-                    Ok(FileStatus::Message(Message::ApplyError(
-                        CliDiagnostic::file_check_apply_error(path.display().to_string(), category),
-                    )))
-                } else {
-                    Ok(FileStatus::Message(Message::ApplyError(
-                        CliDiagnostic::file_check_error(path.display().to_string(), category),
-                    )))
+    if file_features.supports_format() {
+        let format_result = format_with_guard(ctx, &mut workspace_file);
+        match format_result {
+            Ok(status) => {
+                if status.is_changed() {
+                    changed = true
                 }
-            } else {
-                Ok(FileStatus::Success)
+                if let FileStatus::Message(msg) = status {
+                    if msg.is_failure() {
+                        has_failures = true;
+                    }
+                    ctx.push_message(msg);
+                }
             }
-        },
-    )
+            Err(err) => {
+                ctx.push_message(err);
+                has_failures = true;
+            }
+        }
+    }
+
+    if has_failures {
+        Ok(FileStatus::Message(Message::Failure))
+    } else if changed {
+        Ok(FileStatus::Changed)
+    } else {
+        Ok(FileStatus::Unchanged)
+    }
 }

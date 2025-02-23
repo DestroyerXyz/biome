@@ -391,7 +391,7 @@ impl std::fmt::Debug for LocatedTokenText {
 }
 
 fn debug_assert_no_newlines(text: &str) {
-    debug_assert!(!text.contains('\r'), "The content '{}' contains an unsupported '\\r' line terminator character but text must only use line feeds '\\n' as line separator. Use '\\n' instead of '\\r' and '\\r\\n' to insert a line break in strings.", text);
+    debug_assert!(!text.contains('\r'), "The content '{text}' contains an unsupported '\\r' line terminator character but text must only use line feeds '\\n' as line separator. Use '\\n' instead of '\\r' and '\\r\\n' to insert a line break in strings.");
 }
 
 /// Pushes some content to the end of the current line
@@ -527,7 +527,7 @@ impl<Context> Format<Context> for LineSuffixBoundary {
 ///
 ///         let recorded = recording.stop();
 ///
-///         let is_labelled = recorded.first().map_or(false, |element| element.has_label(LabelId::of(MyLabels::Main)));
+///         let is_labelled = recorded.first().is_some_and(|element| element.has_label(LabelId::of(MyLabels::Main)));
 ///
 ///         if is_labelled {
 ///             write!(f, [text(" has label `Main`")])
@@ -601,6 +601,71 @@ pub const fn space() -> Space {
     Space
 }
 
+/// Inserts a single space.
+/// The main difference with space is that
+/// it always adds a space even when it's the last element of a group.
+///
+/// # Examples
+///
+/// ```
+/// use biome_formatter::{format, format_args, LineWidth, SimpleFormatOptions};
+/// use biome_formatter::prelude::*;
+///
+/// # fn main() -> FormatResult<()> {
+/// let context = SimpleFormatContext::new(SimpleFormatOptions {
+///     line_width: LineWidth::try_from(20).unwrap(),
+///     ..SimpleFormatOptions::default()
+/// });
+///
+/// let elements = format!(context, [
+///     group(&format_args![
+///         text("nineteen_characters"),
+///         soft_line_break(),
+///         text("1"),
+///         hard_space(),
+///     ])
+/// ])?;
+/// assert_eq!(
+///     "nineteen_characters\n1",
+///     elements.print()?.as_code()
+/// );
+/// # Ok(())
+/// # }
+/// ```
+/// # Examples
+///
+/// Without HardSpace
+///
+/// ```
+/// use biome_formatter::{format, format_args, LineWidth, SimpleFormatOptions};
+/// use biome_formatter::prelude::*;
+///
+/// # fn main() -> FormatResult<()> {
+/// let context = SimpleFormatContext::new(SimpleFormatOptions {
+///     line_width: LineWidth::try_from(20).unwrap(),
+///     ..SimpleFormatOptions::default()
+/// });
+///
+/// let elements = format!(context, [
+///     group(&format_args![
+///         text("nineteen_characters"),
+///         soft_line_break(),
+///         text("1"),
+///         space(),
+///     ])
+/// ])?;
+/// assert_eq!(
+///     "nineteen_characters1",
+///     elements.print()?.as_code()
+/// );
+/// # Ok(())
+/// # }
+/// ```
+#[inline]
+pub const fn hard_space() -> HardSpace {
+    HardSpace
+}
+
 /// Optionally inserts a single space if the given condition is true.
 ///
 /// # Examples
@@ -636,6 +701,14 @@ impl<Context> Format<Context> for Space {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct HardSpace;
+
+impl<Context> Format<Context> for HardSpace {
+    fn fmt(&self, f: &mut Formatter<Context>) -> FormatResult<()> {
+        f.write_element(FormatElement::HardSpace)
+    }
+}
 /// It adds a level of indentation to the given content
 ///
 /// It doesn't add any line breaks at the edges of the content, meaning that
@@ -669,6 +742,34 @@ impl<Context> Format<Context> for Space {
 ///     block.print()?.as_code()
 /// );
 /// # Ok(())
+/// # }
+/// ```
+///
+/// When the indent_style is tab, [indent] convert the preceding alignments to indents
+/// ```
+/// use biome_formatter::prelude::*;
+/// use biome_formatter::{format, format_args};
+///
+/// # fn main() -> FormatResult<()> {
+/// let block = format!(
+///     SimpleFormatContext::default(),
+///     [
+///         text("root"),
+///         indent(&format_args![align(
+///             2,
+///             &format_args![indent(&format_args![
+///                 hard_line_break(),
+///                 text("shoud be 3 tabs"),
+///             ])]
+///         )])
+///     ]
+/// )?;
+///
+/// assert_eq!(
+///     "root\n\t\t\tshoud be 3 tabs",
+///     block.print()?.as_code()
+/// );
+/// #    Ok(())
 /// # }
 /// ```
 #[inline]
@@ -740,6 +841,94 @@ impl<Context> std::fmt::Debug for Indent<'_, Context> {
 /// # Ok(())
 /// # }
 /// ```
+///
+/// ```
+/// use biome_formatter::prelude::*;
+/// use biome_formatter::{format, format_args, IndentStyle, IndentWidth, SimpleFormatOptions};
+///
+/// # fn main() -> FormatResult<()> {
+///     let context = SimpleFormatContext::new(SimpleFormatOptions {
+///         indent_width: IndentWidth::try_from(8).unwrap(),
+///         indent_style: IndentStyle::Space,
+///         ..SimpleFormatOptions::default()
+///     });
+///     let elements = format!(
+///         context,
+///         [
+///             text("root"),
+///             indent(&format_args![
+///                 hard_line_break(),
+///                 text("Indented"),
+///                 align(
+///                     2,
+///                     &format_args![
+///                         hard_line_break(),
+///                         text("Indented and aligned"),
+///                         dedent(&format_args![
+///                             hard_line_break(),
+///                             text("Indented, not aligned"),
+///                         ]),
+///                     ]
+///                 ),
+///             ]),
+///             align(
+///                 2,
+///                 &format_args![
+///                     hard_line_break(),
+///                     text("Aligned"),
+///                     indent(&format_args![
+///                         hard_line_break(),
+///                         text("Aligned, and indented"),
+///                         dedent(&format_args![
+///                             hard_line_break(),
+///                             text("aligned, not Intended"),
+///                         ]),
+///                     ])
+///                 ]
+///             ),
+///             dedent(&format_args![hard_line_break(), text("root level")])
+///         ]
+///     )?;
+///     assert_eq!(
+///      "root\n        Indented\n          Indented and aligned\n        Indented, not aligned\n  Aligned\n          Aligned, and indented\n  aligned, not Intended\nroot level",
+///      elements.print()?.as_code()
+///  );
+/// #    Ok(())
+/// # }
+/// ```
+///
+/// ```
+/// use biome_formatter::prelude::*;
+/// use biome_formatter::{format, format_args};
+///
+/// # fn main() -> FormatResult<()> {
+/// let block = format!(
+///     SimpleFormatContext::default(),
+///     [
+///         text("root"),
+///         indent(&format_args![align(
+///             2,
+///             &format_args![align(
+///                 2,
+///                 &format_args![indent(&format_args![
+///                     hard_line_break(),
+///                     text("should be 4 tabs"),
+///                     dedent(&format_args![
+///                         hard_line_break(),
+///                         text("should be 1 tab and 4 spaces"),
+///                     ]),
+///                 ])]
+///             ),]
+///         )])
+///     ]
+/// )?;
+/// assert_eq!(
+///     "root\n\t\t\t\tshould be 4 tabs\n\t    should be 1 tab and 4 spaces",
+///     block.print()?.as_code()
+/// );
+/// # Ok(())
+/// # }
+/// ```
 #[inline]
 pub fn dedent<Content, Context>(content: &Content) -> Dedent<Context>
 where
@@ -761,7 +950,7 @@ impl<Context> Format<Context> for Dedent<'_, Context> {
     fn fmt(&self, f: &mut Formatter<Context>) -> FormatResult<()> {
         f.write_element(FormatElement::Tag(StartDedent(self.mode)))?;
         Arguments::from(&self.content).fmt(f)?;
-        f.write_element(FormatElement::Tag(EndDedent))
+        f.write_element(FormatElement::Tag(EndDedent(self.mode)))
     }
 }
 
@@ -889,7 +1078,7 @@ where
 /// # fn main() -> FormatResult<()> {
 /// let context = SimpleFormatContext::new(SimpleFormatOptions {
 ///     indent_style: IndentStyle::Space,
-///     indent_width: 4.into(),
+///     indent_width: 4.try_into().unwrap(),
 ///     ..SimpleFormatOptions::default()
 /// });
 ///
@@ -1251,6 +1440,108 @@ pub fn soft_line_indent_or_space<Context>(content: &impl Format<Context>) -> Blo
     }
 }
 
+/// It functions similarly to soft_line_indent_or_space, but instead of a regular space, it inserts a hard space.
+///
+/// # Examples
+///
+/// Indents the content by one level and puts in new lines if the enclosing `Group` doesn't
+/// fit on a single line. Otherwise, just inserts a space.
+///
+/// ```
+/// use biome_formatter::{format, format_args, LineWidth, SimpleFormatOptions};
+/// use biome_formatter::prelude::*;
+///
+/// # fn main() -> FormatResult<()> {
+/// let context = SimpleFormatContext::new(SimpleFormatOptions {
+///     line_width: LineWidth::try_from(10).unwrap(),
+///     ..SimpleFormatOptions::default()
+/// });
+///
+/// let elements = format!(context, [
+///     group(&format_args![
+///         text("name"),
+///         space(),
+///         text("="),
+///         soft_line_indent_or_hard_space(&format_args![
+///             text("firstName"),
+///             space(),
+///             text("+"),
+///             space(),
+///             text("lastName"),
+///         ]),
+///     ])
+/// ])?;
+///
+/// assert_eq!(
+///     "name =\n\tfirstName + lastName",
+///     elements.print()?.as_code()
+/// );
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Only adds a space if the enclosing `Group` fits on a single line
+/// ```
+/// use biome_formatter::{format, format_args};
+/// use biome_formatter::prelude::*;
+///
+/// # fn main() -> FormatResult<()> {
+/// let elements = format!(SimpleFormatContext::default(), [
+///     group(&format_args![
+///         text("a"),
+///         space(),
+///         text("="),
+///         soft_line_indent_or_hard_space(&text("10")),
+///     ])
+/// ])?;
+///
+/// assert_eq!(
+///     "a = 10",
+///     elements.print()?.as_code()
+/// );
+/// # Ok(())
+/// # }
+/// ```
+///
+/// It enforces a space after the "=" assignment operators
+/// ```
+/// use biome_formatter::{format, format_args, LineWidth, SimpleFormatOptions};
+/// use biome_formatter::prelude::*;
+///
+/// # fn main() -> FormatResult<()> {
+/// let context = SimpleFormatContext::new(SimpleFormatOptions {
+///     line_width: LineWidth::try_from(8).unwrap(),
+///     ..SimpleFormatOptions::default()
+/// });
+///
+/// let elements = format!(context, [
+///     group(&format_args![
+///         text("value"),
+///         soft_line_break_or_space(),
+///         text("="),
+///         soft_line_indent_or_hard_space(&format_args![
+///             text("10"),
+///         ]),
+///     ])
+/// ])?;
+///
+/// assert_eq!(
+///     "value\n=\n\t10",
+///     elements.print()?.as_code()
+/// );
+/// # Ok(())
+/// # }
+/// ```
+#[inline]
+pub fn soft_line_indent_or_hard_space<Context>(
+    content: &impl Format<Context>,
+) -> BlockIndent<Context> {
+    BlockIndent {
+        content: Argument::new(content),
+        mode: IndentMode::HardSpace,
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct BlockIndent<'a, Context> {
     content: Argument<'a, Context>,
@@ -1262,6 +1553,7 @@ enum IndentMode {
     Soft,
     Block,
     SoftSpace,
+    HardSpace,
     SoftLineOrSpace,
 }
 
@@ -1277,6 +1569,7 @@ impl<Context> Format<Context> for BlockIndent<'_, Context> {
             IndentMode::SoftLineOrSpace | IndentMode::SoftSpace => {
                 write!(f, [soft_line_break_or_space()])?
             }
+            IndentMode::HardSpace => write!(f, [hard_space(), soft_line_break()])?,
         }
 
         let is_empty = {
@@ -1296,7 +1589,7 @@ impl<Context> Format<Context> for BlockIndent<'_, Context> {
             IndentMode::Soft => write!(f, [soft_line_break()]),
             IndentMode::Block => write!(f, [hard_line_break()]),
             IndentMode::SoftSpace => write!(f, [soft_line_break_or_space()]),
-            IndentMode::SoftLineOrSpace => Ok(()),
+            IndentMode::SoftLineOrSpace | IndentMode::HardSpace => Ok(()),
         }
     }
 }
@@ -1308,6 +1601,7 @@ impl<Context> std::fmt::Debug for BlockIndent<'_, Context> {
             IndentMode::Block => "HardBlockIndent",
             IndentMode::SoftLineOrSpace => "SoftLineIndentOrSpace",
             IndentMode::SoftSpace => "SoftSpaceBlockIndent",
+            IndentMode::HardSpace => "HardSpaceBlockIndent",
         };
 
         f.debug_tuple(name).field(&"{{content}}").finish()
@@ -1927,7 +2221,7 @@ impl<Context> Format<Context> for IndentIfGroupBreaks<'_, Context> {
     fn fmt(&self, f: &mut Formatter<Context>) -> FormatResult<()> {
         f.write_element(FormatElement::Tag(StartIndentIfGroupBreaks(self.group_id)))?;
         Arguments::from(&self.content).fmt(f)?;
-        f.write_element(FormatElement::Tag(EndIndentIfGroupBreaks))
+        f.write_element(FormatElement::Tag(EndIndentIfGroupBreaks(self.group_id)))
     }
 }
 

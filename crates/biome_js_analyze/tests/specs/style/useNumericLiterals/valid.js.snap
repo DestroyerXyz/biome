@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: valid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -31,5 +32,3 @@ parseInt(1n, 2);
 class C { #parseInt; foo() { Number.#parseInt("111110111", 2); } }
 
 ```
-
-

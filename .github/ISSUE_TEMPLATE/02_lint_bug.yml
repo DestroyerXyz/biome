@@ -1,7 +1,8 @@
 name: 💅 Linter bug report
 description: Report a bug or regression of the linter
 title: "💅 <TITLE>"
-labels: ["S-To triage"]
+labels: [ "S-Needs triage" ]
+type: Bug
 body:
   - type: markdown
     attributes:
@@ -15,7 +16,7 @@ body:
     id: environment
     attributes:
       label: Environment information
-      description: Run the command `biome rage` and paste its output here. Please review it, in case there are sensitive information you don't want to share.
+      description: Run the command `biome rage --linter` and paste its output here. Please review it, in case there are sensitive information you don't want to share.
       render: bash
     validations:
       required: true
@@ -37,8 +38,7 @@ body:
         You can also use the [playground](https://biomejs.dev/playground/) to share code snippets.
         This is useful to reproduce the issue.
 
-        If you can't use the playground, use our official [CBS template](https://codesandbox.io/p/sandbox/biome-starter-cbs-rky6zq).
-        Fork it and share a reproduction.
+        If you can't use the playground, use `npm create @biomejs/biome-reproduction` to quickly create a repository.
       placeholder: https://biomejs.dev/playground/...
     validations:
       required: true

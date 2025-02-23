@@ -1,22 +1,29 @@
-use crate::converters::from_proto;
-use crate::converters::line_index::LineIndex;
+use crate::diagnostics::LspError;
 use crate::session::Session;
 use crate::utils;
 use anyhow::{Context, Result};
-use biome_analyze::{ActionCategory, SourceActionKind};
-use biome_diagnostics::Applicability;
-use biome_fs::RomePath;
+use biome_analyze::{
+    ActionCategory, RuleCategoriesBuilder, SourceActionKind, SUPPRESSION_INLINE_ACTION_CATEGORY,
+};
+use biome_configuration::analyzer::RuleSelector;
+use biome_diagnostics::{Applicability, Error};
+use biome_fs::BiomePath;
+use biome_lsp_converters::from_proto;
+use biome_lsp_converters::line_index::LineIndex;
+use biome_rowan::{TextRange, TextSize};
+use biome_service::file_handlers::{AstroFileHandler, SvelteFileHandler, VueFileHandler};
 use biome_service::workspace::{
-    FeatureName, FeaturesBuilder, FixFileMode, FixFileParams, PullActionsParams,
-    SupportsFeatureParams,
+    CheckFileSizeParams, FeaturesBuilder, FixFileMode, FixFileParams, GetFileContentParams,
+    PullActionsParams, SupportsFeatureParams,
 };
 use biome_service::WorkspaceError;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ops::Sub;
 use tower_lsp::lsp_types::{
     self as lsp, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse,
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 const FIX_ALL_CATEGORY: ActionCategory = ActionCategory::Source(SourceActionKind::FixAll);
 
@@ -30,27 +37,32 @@ fn fix_all_kind() -> CodeActionKind {
 /// Queries the [`AnalysisServer`] for code actions of the file matching its path
 ///
 /// If the AnalysisServer has no matching file, results in error.
-#[tracing::instrument(level = "debug", skip_all, fields(uri = display(&params.text_document.uri), range = debug(params.range), only = debug(&params.context.only), diagnostics = debug(&params.context.diagnostics)), err)]
+#[tracing::instrument(level = "debug", skip_all, fields(uri = display(& params.text_document.uri), range = debug(params.range), only = debug(& params.context.only), diagnostics = debug(& params.context.diagnostics)), err)]
 pub(crate) fn code_actions(
     session: &Session,
     params: CodeActionParams,
-) -> Result<Option<CodeActionResponse>> {
+) -> Result<Option<CodeActionResponse>, LspError> {
     let url = params.text_document.uri.clone();
-    let rome_path = session.file_path(&url)?;
+    let path = session.file_path(&url)?;
+    let doc = session.document(&url)?;
 
     let file_features = &session.workspace.file_features(SupportsFeatureParams {
-        path: rome_path,
-        feature: FeaturesBuilder::new()
-            .with_linter()
-            .with_organize_imports()
-            .build(),
+        project_key: doc.project_key,
+        path: path.clone(),
+        features: FeaturesBuilder::new().with_linter().with_assist().build(),
     })?;
 
-    if !file_features.supports_for(&FeatureName::Lint)
-        && !file_features.supports_for(&FeatureName::OrganizeImports)
-    {
-        debug!("Linter and organize imports are both disabled");
+    if !file_features.supports_lint() && !file_features.supports_assist() {
+        info!("Linter, assist and organize imports are disabled");
         return Ok(Some(Vec::new()));
+    }
+
+    let size_limit_result = session.workspace.check_file_size(CheckFileSizeParams {
+        project_key: doc.project_key,
+        path: path.clone(),
+    })?;
+    if size_limit_result.is_too_large() {
+        return Ok(None);
     }
 
     let mut has_fix_all = false;
@@ -61,7 +73,7 @@ pub(crate) fn code_actions(
             let kind = kind.as_str();
             if FIX_ALL_CATEGORY.matches(kind) {
                 has_fix_all = true;
-            } else if ActionCategory::QuickFix.to_str() == kind {
+            } else if ActionCategory::QuickFix(Cow::Borrowed("")).to_str() == kind {
                 // The action is a on-save quick-fixes
                 has_quick_fix = true;
             }
@@ -69,12 +81,19 @@ pub(crate) fn code_actions(
         }
     }
 
-    let url = params.text_document.uri.clone();
-    let rome_path = session.file_path(&url)?;
-    let doc = session.document(&url)?;
     let position_encoding = session.position_encoding();
 
     let diagnostics = params.context.diagnostics;
+    let content = session.workspace.get_file_content(GetFileContentParams {
+        project_key: doc.project_key,
+        path: path.clone(),
+    })?;
+    let offset = match path.extension() {
+        Some("vue") => VueFileHandler::start(content.as_str()),
+        Some("astro") => AstroFileHandler::start(content.as_str()),
+        Some("svelte") => SvelteFileHandler::start(content.as_str()),
+        _ => None,
+    };
     let cursor_range = from_proto::text_range(&doc.line_index, params.range, position_encoding)
         .with_context(|| {
             format!(
@@ -82,10 +101,32 @@ pub(crate) fn code_actions(
                 params.range, &doc.line_index,
             )
         })?;
+    let cursor_range = if let Some(offset) = offset {
+        if cursor_range.start().gt(&TextSize::from(offset)) {
+            TextRange::new(
+                cursor_range.start().sub(TextSize::from(offset)),
+                cursor_range.end().sub(TextSize::from(offset)),
+            )
+        } else {
+            cursor_range
+        }
+    } else {
+        cursor_range
+    };
 
+    debug!("Cursor range {:?}", &cursor_range);
     let result = match session.workspace.pull_actions(PullActionsParams {
-        path: rome_path.clone(),
-        range: cursor_range,
+        project_key: doc.project_key,
+        path: path.clone(),
+        range: Some(cursor_range),
+        // TODO: compute skip and only based on configuration
+        skip: vec![],
+        only: vec![],
+        suppression_reason: None,
+        enabled_rules: filters
+            .iter()
+            .filter_map(|filter| RuleSelector::from_lsp_filter(filter))
+            .collect(),
     }) {
         Ok(result) => result,
         Err(err) => {
@@ -93,22 +134,23 @@ pub(crate) fn code_actions(
                 Ok(Some(Vec::new()))
             } else {
                 Err(err.into())
-            }
+            };
         }
     };
 
-    debug!("Pull actions result: {:?}", result);
+    debug!("Filters: {:?}", &filters);
 
     // Generate an additional code action to apply all safe fixes on the
     // document if the action category "source.fixAll" was explicitly requested
     // by the language client
     let fix_all = if has_fix_all {
-        fix_all(session, &url, rome_path, &doc.line_index, &diagnostics)?
+        fix_all(session, &url, path, &doc.line_index, &diagnostics, offset)?
     } else {
         None
     };
 
     let mut has_fixes = false;
+
     let mut actions: Vec<_> = result
         .actions
         .into_iter()
@@ -117,14 +159,47 @@ pub(crate) fn code_actions(
             if has_quick_fix && action.suggestion.applicability == Applicability::MaybeIncorrect {
                 return None;
             }
+            // Filter out source.organizeImports.biome action when assist is not supported.
             if action.category.matches("source.organizeImports.biome")
-                && !file_features.supports_for(&FeatureName::OrganizeImports)
+                && !file_features.supports_assist()
             {
+                return None;
+            }
+            // Filter out quickfix.biome action when lint is not supported.
+            if action.category.matches("quickfix.biome") && !file_features.supports_lint() {
+                return None;
+            }
+
+            // Filter out suppressions if the linter isn't supported
+            if (action.category.matches(SUPPRESSION_INLINE_ACTION_CATEGORY)
+                || action.category.matches(SUPPRESSION_INLINE_ACTION_CATEGORY))
+                && !file_features.supports_lint()
+            {
+                return None;
+            }
+
+            // Filter out the suppressions if the client is requesting a fix all signal.
+            // Fix all should apply only the safe changes.
+            if has_fix_all
+                && (action.category.matches(SUPPRESSION_INLINE_ACTION_CATEGORY)
+                    || action.category.matches(SUPPRESSION_INLINE_ACTION_CATEGORY))
+            {
+                return None;
+            }
+
+            if action.category.matches("source.biome") && !file_features.supports_assist() {
                 return None;
             }
             // Remove actions that do not match the categories requested by the
             // language client
-            let matches_filters = filters.iter().any(|filter| action.category.matches(filter));
+            let matches_filters = filters.iter().any(|filter| {
+                debug!(
+                    "Filter {:?}, category {:?}",
+                    filter,
+                    action.category.to_str()
+                );
+                action.category.matches(filter)
+            });
             if !filters.is_empty() && !matches_filters {
                 return None;
             }
@@ -135,12 +210,14 @@ pub(crate) fn code_actions(
                 position_encoding,
                 &diagnostics,
                 action,
+                offset,
             )
             .ok()?;
 
             has_fixes |= action.diagnostics.is_some();
             Some(CodeActionOrCommand::CodeAction(action))
         })
+        .rev()
         .chain(fix_all)
         .collect();
 
@@ -162,25 +239,47 @@ pub(crate) fn code_actions(
 }
 
 /// Generate a "fix all" code action for the given document
-#[tracing::instrument(level = "debug", skip(session), err)]
+#[tracing::instrument(level = "debug", skip(session))]
 fn fix_all(
     session: &Session,
     url: &lsp::Url,
-    rome_path: RomePath,
+    path: BiomePath,
     line_index: &LineIndex,
     diagnostics: &[lsp::Diagnostic],
-) -> Result<Option<CodeActionOrCommand>, WorkspaceError> {
+    offset: Option<u32>,
+) -> Result<Option<CodeActionOrCommand>, Error> {
+    let doc = session.document(url)?;
+
     let should_format = session
         .workspace
         .file_features(SupportsFeatureParams {
-            path: rome_path.clone(),
-            feature: vec![FeatureName::Format],
+            project_key: doc.project_key,
+            path: path.clone(),
+            features: FeaturesBuilder::new().with_formatter().build(),
         })?
-        .supports_for(&FeatureName::Format);
+        .supports_format();
+    let size_limit_result = session.workspace.check_file_size(CheckFileSizeParams {
+        project_key: doc.project_key,
+        path: path.clone(),
+    })?;
+    if size_limit_result.is_too_large() {
+        return Ok(None);
+    }
+
     let fixed = session.workspace.fix_file(FixFileParams {
-        path: rome_path,
+        project_key: doc.project_key,
+        path,
         fix_file_mode: FixFileMode::SafeFixes,
         should_format,
+        only: vec![],
+        skip: vec![],
+        enabled_rules: vec![],
+        suppression_reason: None,
+        rule_categories: RuleCategoriesBuilder::default()
+            .with_syntax()
+            .with_lint()
+            .with_assist()
+            .build(),
     })?;
 
     if fixed.actions.is_empty() {
@@ -200,6 +299,18 @@ fn fix_all(
             let position_encoding = session.position_encoding();
 
             let diag_range = from_proto::text_range(line_index, d.range, position_encoding).ok()?;
+            let diag_range = if let Some(offset) = offset {
+                if diag_range.start().gt(&TextSize::from(offset)) {
+                    TextRange::new(
+                        diag_range.start().sub(TextSize::from(offset)),
+                        diag_range.end().sub(TextSize::from(offset)),
+                    )
+                } else {
+                    diag_range
+                }
+            } else {
+                diag_range
+            };
             let has_matching_rule = fixed.actions.iter().any(|action| {
                 let Some((group_name, rule_name)) = &action.rule_name else {
                     return false;

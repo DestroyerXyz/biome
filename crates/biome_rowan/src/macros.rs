@@ -19,10 +19,10 @@ use crate::{AstNode, Language};
 ///
 /// let text = match_ast! {
 ///     match &root {
-///         RawLanguageRoot(root) => { format!("root: {}", root.text()) },
-///         LiteralExpression(literal) => { format!("literal: {}", literal.text()) },
+///         RawLanguageRoot(root) => { format!("root: {}", root.to_trimmed_string()) },
+///         LiteralExpression(literal) => { format!("literal: {}", literal.to_trimmed_string()) },
 ///         _ => {
-///             root.text().to_string()
+///             root.text_with_trivia().to_string()
 ///         }
 ///     }
 /// };
@@ -65,7 +65,7 @@ macro_rules! declare_node_union {
 
     ( $( #[$attr:meta] )* $vis:vis $name:ident = $( $variant:ident )|* ) => {
         $( #[$attr] )*
-        #[allow(clippy::enum_variant_names)]
+        #[expect(clippy::enum_variant_names)]
         #[derive(Clone, PartialEq, Eq, Hash)]
         $vis enum $name {
             $( $variant($variant), )*
@@ -164,5 +164,6 @@ macro_rules! impl_union_language {
 
 impl_union_language!(
     T00, T01, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16, T17, T18,
-    T19, T20, T21, T22, T23, T24, T25, T26, T27, T28, T29, T30, T31
+    T19, T20, T21, T22, T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T333, T334, T335, T336,
+    T337, T338, T339
 );

@@ -1,18 +1,16 @@
 use crate::prelude::*;
 use biome_formatter::{
-    write, CstFormatContext, FormatContext, FormatOwnedWithRule, FormatRefWithRule,
+    write, CstFormatContext, FormatContext, FormatOptions, FormatOwnedWithRule, FormatRefWithRule,
     FormatRuleWithOptions,
 };
 
 use crate::{AsFormat, IntoFormat};
 use biome_js_syntax::{
-    AnyJsExpression, AnyTsType, JsAssignmentExpression, JsCallExpression,
-    JsComputedMemberExpression, JsConditionalExpression, JsFileSource, JsInitializerClause,
-    JsNewExpression, JsReturnStatement, JsStaticMemberExpression, JsSyntaxKind, JsSyntaxNode,
-    JsSyntaxToken, JsThrowStatement, JsUnaryExpression, JsYieldArgument, TsAsExpression,
-    TsConditionalType, TsNonNullAssertionExpression, TsSatisfiesExpression,
+    AnyJsExpression, AnyTsType, JsAssignmentExpression, JsConditionalExpression, JsFileSource,
+    JsInitializerClause, JsReturnStatement, JsStaticMemberExpression, JsSyntaxKind, JsSyntaxNode,
+    JsSyntaxToken, JsThrowStatement, JsUnaryExpression, JsYieldArgument, TsConditionalType,
 };
-use biome_rowan::{declare_node_union, match_ast, AstNode, SyntaxResult};
+use biome_rowan::{declare_node_union, AstNode, SyntaxResult};
 
 declare_node_union! {
     pub AnyJsConditional = JsConditionalExpression | TsConditionalType
@@ -63,7 +61,7 @@ impl FormatRule<AnyJsConditional> for FormatJsAnyConditionalRule {
         let syntax = conditional.syntax();
         let consequent = conditional.consequent()?;
         let alternate = conditional.alternate()?;
-
+        let indent_style = f.options().indent_style();
         let layout = self.layout(conditional, f.context().options().source_type());
         let jsx_chain = layout.jsx_chain().unwrap_or(self.jsx_chain);
 
@@ -78,7 +76,13 @@ impl FormatRule<AnyJsConditional> for FormatJsAnyConditionalRule {
             )?;
 
             let is_consequent_nested = consequent.syntax().kind() == syntax.kind();
-
+            let consequent = format_with(|f| {
+                if indent_style.is_space() {
+                    write!(f, [align(2, &consequent)])
+                } else {
+                    write!(f, [indent(&consequent)])
+                }
+            });
             if is_consequent_nested {
                 // Add parentheses around the consequent if it is a conditional expression and fits on the same line
                 // so that it's easier to identify the parts that belong to a conditional expression.
@@ -87,12 +91,12 @@ impl FormatRule<AnyJsConditional> for FormatJsAnyConditionalRule {
                     f,
                     [
                         if_group_fits_on_line(&text("(")),
-                        align(2, &consequent),
+                        consequent,
                         if_group_fits_on_line(&text(")"))
                     ]
                 )?;
             } else {
-                write!(f, [align(2, &consequent)])?;
+                write!(f, [consequent])?;
             }
 
             write!(
@@ -103,7 +107,14 @@ impl FormatRule<AnyJsConditional> for FormatJsAnyConditionalRule {
                     space()
                 ]
             )?;
-            write!(f, [align(2, &alternate)])
+            let alternate = format_with(|f| {
+                if indent_style.is_space() {
+                    write!(f, [align(2, &alternate)])
+                } else {
+                    write!(f, [indent(&alternate)])
+                }
+            });
+            write!(f, [alternate])
         });
 
         let format_tail_with_indent = format_with(|f: &mut JsFormatter| {
@@ -310,95 +321,66 @@ impl FormatJsAnyConditionalRule {
         // This tries to find the start of a member chain by iterating over all ancestors of the conditional.
         // The iteration "breaks" as soon as a non-member-chain node is found.
         for ancestor in ancestors {
-            let ancestor = match_ast! {
-                match &ancestor {
-                    JsCallExpression(call_expression) => {
-                        if call_expression
-                            .callee()
-                            .as_ref()
-                            == Ok(&expression)
-                        {
-                            Ancestor::MemberChain(call_expression.into())
-                        } else {
-                            Ancestor::Root(call_expression.into_syntax())
-                        }
-                    },
-
-                    JsStaticMemberExpression(member_expression) => {
-                        if member_expression
-                            .object()
-                            .as_ref()
-                            == Ok(&expression)
-                        {
-                            Ancestor::MemberChain(member_expression.into())
-                        } else {
-                            Ancestor::Root(member_expression.into_syntax())
-                        }
-                    },
-                    JsComputedMemberExpression(member_expression) => {
-                        if member_expression
-                            .object()
-                            .as_ref()
-                            == Ok(&expression)
-                        {
-                            Ancestor::MemberChain(member_expression.into())
-                        } else {
-                            Ancestor::Root(member_expression.into_syntax())
-                        }
-                    },
-                    TsNonNullAssertionExpression(non_null_assertion) => {
-                        if non_null_assertion
-                            .expression()
-                            .as_ref()
-                            == Ok(&expression)
-                        {
-                            Ancestor::MemberChain(non_null_assertion.into())
-                        } else {
-                            Ancestor::Root(non_null_assertion.into_syntax())
-                        }
-                    },
-                    JsNewExpression(new_expression) => {
-                        // Skip over new expressions
-                        if new_expression
-                            .callee()
-                            .as_ref()
-                            == Ok(&expression)
-                        {
-                            parent = new_expression.syntax().parent();
-                            expression = new_expression.into();
-                            break;
-                        }
-
-                        Ancestor::Root(new_expression.into_syntax())
-                    },
-                    TsAsExpression(as_expression) => {
-                        if as_expression
-                            .expression()
-                            .as_ref()
-                            == Ok(&expression)
-                        {
-                            parent = as_expression.syntax().parent();
-                            expression = as_expression.into();
-                            break;
-                        }
-
-                        Ancestor::Root(as_expression.into_syntax())
-                    },
-                    TsSatisfiesExpression(satisfies_expression) => {
-                        if satisfies_expression
-                            .expression()
-                            .as_ref()
-                            == Ok(&expression)
-                        {
-                            parent = satisfies_expression.syntax().parent();
-                            expression = satisfies_expression.into();
-                            break;
-                        }
-
-                        Ancestor::Root(satisfies_expression.into_syntax())
-                    },
-                    _ => Ancestor::Root(ancestor),
+            let ancestor = match AnyJsExpression::try_cast(ancestor) {
+                Ok(AnyJsExpression::JsCallExpression(call_expression)) => {
+                    if call_expression.callee().as_ref() == Ok(&expression) {
+                        Ancestor::MemberChain(call_expression.into())
+                    } else {
+                        Ancestor::Root(call_expression.into_syntax())
+                    }
                 }
+
+                Ok(AnyJsExpression::JsStaticMemberExpression(member_expression)) => {
+                    if member_expression.object().as_ref() == Ok(&expression) {
+                        Ancestor::MemberChain(member_expression.into())
+                    } else {
+                        Ancestor::Root(member_expression.into_syntax())
+                    }
+                }
+                Ok(AnyJsExpression::JsComputedMemberExpression(member_expression)) => {
+                    if member_expression.object().as_ref() == Ok(&expression) {
+                        Ancestor::MemberChain(member_expression.into())
+                    } else {
+                        Ancestor::Root(member_expression.into_syntax())
+                    }
+                }
+                Ok(AnyJsExpression::TsNonNullAssertionExpression(non_null_assertion)) => {
+                    if non_null_assertion.expression().as_ref() == Ok(&expression) {
+                        Ancestor::MemberChain(non_null_assertion.into())
+                    } else {
+                        Ancestor::Root(non_null_assertion.into_syntax())
+                    }
+                }
+                Ok(AnyJsExpression::JsNewExpression(new_expression)) => {
+                    // Skip over new expressions
+                    if new_expression.callee().as_ref() == Ok(&expression) {
+                        parent = new_expression.syntax().parent();
+                        expression = new_expression.into();
+                        break;
+                    }
+
+                    Ancestor::Root(new_expression.into_syntax())
+                }
+                Ok(AnyJsExpression::TsAsExpression(as_expression)) => {
+                    if as_expression.expression().as_ref() == Ok(&expression) {
+                        parent = as_expression.syntax().parent();
+                        expression = as_expression.into();
+                        break;
+                    }
+
+                    Ancestor::Root(as_expression.into_syntax())
+                }
+                Ok(AnyJsExpression::TsSatisfiesExpression(satisfies_expression)) => {
+                    if satisfies_expression.expression().as_ref() == Ok(&expression) {
+                        parent = satisfies_expression.syntax().parent();
+                        expression = satisfies_expression.into();
+                        break;
+                    }
+
+                    Ancestor::Root(satisfies_expression.into_syntax())
+                }
+                Ok(ancestor) => Ancestor::Root(ancestor.into_syntax()),
+                Err(ancestor) => Ancestor::Root(ancestor),
             };
 
             match ancestor {
@@ -453,7 +435,7 @@ impl FormatJsAnyConditionalRule {
                     _ => None,
                 };
 
-                argument.map_or(false, |argument| argument == expression)
+                argument.is_some_and(|argument| argument == expression)
             }
         }
     }
@@ -486,6 +468,7 @@ struct FormatConditionalTest<'a> {
 
 impl Format<JsFormatContext> for FormatConditionalTest<'_> {
     fn fmt(&self, f: &mut Formatter<JsFormatContext>) -> FormatResult<()> {
+        let indent_style = f.options().indent_style();
         let format_inner = format_with(|f| match self.conditional {
             AnyJsConditional::JsConditionalExpression(conditional) => {
                 write!(f, [conditional.test().format()])
@@ -505,7 +488,11 @@ impl Format<JsFormatContext> for FormatConditionalTest<'_> {
         });
 
         if self.layout.is_nested_alternate() {
-            align(2, &format_inner).fmt(f)
+            if indent_style.is_space() {
+                write!(f, [align(2, &format_inner)])
+            } else {
+                write!(f, [indent(&format_inner)])
+            }
         } else {
             format_inner.fmt(f)
         }
@@ -679,7 +666,7 @@ impl AnyJsConditional {
             AnyJsConditional::JsConditionalExpression(conditional) => conditional
                 .test()
                 .ok()
-                .map_or(false, |resolved| resolved.syntax() == node),
+                .is_some_and(|resolved| resolved.syntax() == node),
             AnyJsConditional::TsConditionalType(conditional) => {
                 conditional.check_type().map(AstNode::into_syntax).as_ref() == Ok(node)
                     || conditional

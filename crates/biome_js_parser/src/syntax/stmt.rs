@@ -5,6 +5,7 @@
 use super::binding::*;
 use super::class::is_at_ts_abstract_class_declaration;
 use super::expr::parse_expression;
+use super::metavariable::{is_at_metavariable, is_nth_at_metavariable, parse_metavariable};
 use super::module::parse_export;
 use super::typescript::*;
 use crate::parser::RecoveryResult;
@@ -29,7 +30,7 @@ use crate::syntax::typescript::ts_parse_error::{expected_ts_type, ts_only_syntax
 use crate::span::Span;
 use crate::JsSyntaxFeature::{StrictMode, TypeScript};
 use crate::ParsedSyntax::{Absent, Present};
-use crate::{parser, JsParser, JsSyntaxFeature, ParseRecovery};
+use crate::{parser, JsParser, JsSyntaxFeature, ParseRecoveryTokenSet};
 use biome_js_syntax::{JsSyntaxKind::*, *};
 use biome_parser::diagnostic::expected_token;
 use biome_parser::parse_lists::{ParseNodeList, ParseSeparatedList};
@@ -332,7 +333,10 @@ pub(crate) fn parse_statement(p: &mut JsParser, context: StatementContext) -> Pa
                 parse_expression_statement(p)
             }
         }
-        T![type] if !p.has_nth_preceding_line_break(1) && is_nth_at_identifier(p, 1) => {
+        T![type]
+            if !p.has_nth_preceding_line_break(1)
+                && (is_nth_at_identifier(p, 1) || is_nth_at_metavariable(p, 1)) =>
+        {
             // test ts ts_type_variable
             // let type;
             // type = getFlowTypeInConstructor(symbol, getDeclaringConstructor(symbol)!);
@@ -359,7 +363,7 @@ pub(crate) fn parse_statement(p: &mut JsParser, context: StatementContext) -> Pa
         T![async] if is_at_async_function(p, LineBreak::DoNotCheck) => {
             parse_function_declaration(p, context)
         }
-        T![module] | T![namespace] | T![global] if is_at_any_ts_namespace_declaration(p) => {
+        T![module] | T![namespace] | T![global] if is_nth_at_any_ts_namespace_declaration(p, 0) => {
             let name = p.cur_range();
             TypeScript.parse_exclusive_syntax(
                 p,
@@ -369,7 +373,7 @@ pub(crate) fn parse_statement(p: &mut JsParser, context: StatementContext) -> Pa
                 },
             )
         }
-        _ if is_at_expression(p) => parse_expression_statement(p),
+        _ if is_at_expression(p) || is_at_metavariable(p) => parse_expression_statement(p),
         _ => Absent,
     }
 }
@@ -450,11 +454,11 @@ fn parse_labeled_statement(p: &mut JsParser, context: StatementContext) -> Parse
 					.err_builder("Duplicate statement labels are not allowed", identifier_range)
 					.with_detail(
 						identifier_range,
-						format!("a second use of `{}` here is not allowed", label),
+						format!("a second use of `{label}` here is not allowed"),
 					)
 					.with_detail(
 						*label_item.range(),
-						format!("`{}` is first used as a label here", label),
+						format!("`{label}` is first used as a label here"),
 					);
 
 				p.error(err);
@@ -582,6 +586,9 @@ fn parse_throw_statement(p: &mut JsParser) -> ParsedSyntax {
 //    break foo;
 //   }
 // }
+// out: while (true) {
+//   break out;
+// }
 
 // test_err js break_stmt
 // function foo() { break; }
@@ -598,14 +605,14 @@ fn parse_break_statement(p: &mut JsParser) -> ParsedSyntax {
     let start = p.cur_range();
     p.expect(T![break]); // break keyword
 
-    let error = if !p.has_preceding_line_break() && p.at(T![ident]) {
+    let error = if !p.has_preceding_line_break() && is_at_identifier(p) {
         let label_name = p.cur_text();
 
         let error = match p.state().get_labelled_item(label_name) {
             Some(_) => None,
             None => Some(
                 p.err_builder(
-                    format!("Use of undefined statement label `{}`", label_name,),
+                    format!("Use of undefined statement label `{label_name}`",),
                     p.cur_range(),
                 )
                 .with_hint("This label is used, but it is never defined"),
@@ -670,8 +677,7 @@ fn parse_continue_statement(p: &mut JsParser) -> ParsedSyntax {
 			None => {
 				Some(p
 					.err_builder(format!(
-						"Use of undefined statement label `{}`",
-						label_name
+						"Use of undefined statement label `{label_name}`"
 					), p.cur_range())
 					.with_hint(
 
@@ -725,7 +731,8 @@ fn parse_return_statement(p: &mut JsParser) -> ParsedSyntax {
     semi(p, TextRange::new(start, p.cur_range().end()));
     let mut complete = m.complete(p, JS_RETURN_STATEMENT);
 
-    if !p.state().in_function() {
+    // The frontmatter of Astro files is executed inside a function during the compilation, so it's safe to have illegal returns
+    if !p.state().in_function() && !p.source_type.as_embedding_kind().is_astro() {
         let err = p.err_builder(
             "Illegal return statement outside of a function",
             complete.range(p),
@@ -902,10 +909,14 @@ pub(crate) fn parse_statements(p: &mut JsParser, stop_on_r_curly: bool, statemen
             break;
         }
 
+        if parse_metavariable(p).is_present() {
+            continue;
+        }
+
         if parse_statement(p, StatementContext::StatementList)
-            .or_recover(
+            .or_recover_with_token_set(
                 p,
-                &ParseRecovery::new(JS_BOGUS_STATEMENT, recovery_set),
+                &ParseRecoveryTokenSet::new(JS_BOGUS_STATEMENT, recovery_set),
                 expected_statement,
             )
             .is_err()
@@ -1221,8 +1232,6 @@ fn eat_variable_declaration(
         declarator_context: context,
         remaining_declarator_range: None,
     };
-
-    debug_assert!(p.state().name_map.is_empty());
     let list = variable_declarator_list.parse_list(p);
 
     p.state_mut().name_map.clear();
@@ -1270,9 +1279,9 @@ impl ParseSeparatedList for VariableDeclaratorList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(JS_BOGUS, STMT_RECOVERY_SET.union(token_set!(T![,])))
+            &ParseRecoveryTokenSet::new(JS_BOGUS, STMT_RECOVERY_SET.union(token_set!(T![,])))
                 .enable_recovery_on_line_break(),
             expected_binding,
         )
@@ -1472,22 +1481,22 @@ fn parse_variable_declarator(
             )
         {
             let err = p
-                .err_builder("Object and Array patterns require initializers", id_range)
+                .err_builder("Object and Array patterns require initializers.", id_range)
                 .with_hint(
-                    "this pattern is declared, but it is not given an initialized value",
+                    "This pattern is declared, but it is not given an initialized value.",
                 );
 
             p.error(err);
         } else if initializer.is_none() && context.is_const() && !p.state().in_ambient_context() {
             let err = p
-                .err_builder("Const declarations must have an initialized value", id_range)
-                .with_hint( "this variable needs to be initialized");
+                .err_builder("Const declarations must have an initialized value.", id_range)
+                .with_hint( "This variable needs to be initialized.");
 
             p.error(err);
         } else if initializer.is_none() && context.is_using() {
             let err = p
-                .err_builder("Using declarations must have an initialized value", id_range)
-                .with_hint( "this variable needs to be initialized");
+                .err_builder("Using declarations must have an initialized value.", id_range)
+                .with_hint( "This variable needs to be initialized.");
 
             p.error(err);
         }
@@ -1637,10 +1646,9 @@ fn parse_for_head(p: &mut JsParser, has_l_paren: bool, is_for_await: bool) -> Js
 
         if p.at(T![in]) || p.at(T![of]) {
             // for (assignment_pattern in ...
-            if let Present(assignment_expr) = init_expr {
-                let mut assignment =
-                    expression_to_assignment_pattern(p, assignment_expr, checkpoint);
-
+            if let Present(mut assignment) = init_expr.and_then(|assignment_expr| {
+                expression_to_assignment_pattern(p, assignment_expr, checkpoint)
+            }) {
                 if TypeScript.is_supported(p)
                     && p.at(T![in])
                     && matches!(
@@ -1804,9 +1812,9 @@ impl ParseNodeList for SwitchCaseStatementList {
         p: &mut JsParser,
         parsed_element: ParsedSyntax,
     ) -> parser::RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(JS_BOGUS_STATEMENT, STMT_RECOVERY_SET),
+            &ParseRecoveryTokenSet::new(JS_BOGUS_STATEMENT, STMT_RECOVERY_SET),
             js_parse_error::expected_case,
         )
     }
@@ -1898,9 +1906,9 @@ impl ParseNodeList for SwitchCasesList {
             let m = p.start();
             let statements = p.start();
 
-            let recovered_element = parsed_element.or_recover(
+            let recovered_element = parsed_element.or_recover_with_token_set(
                 p,
-                &ParseRecovery::new(
+                &ParseRecoveryTokenSet::new(
                     JS_BOGUS_STATEMENT,
                     token_set![T![default], T![case], T!['}']],
                 )

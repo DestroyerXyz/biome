@@ -2,7 +2,6 @@
 source: crates/biome_css_parser/tests/spec_test.rs
 expression: snapshot
 ---
-
 ## Input
 
 ```css
@@ -24,10 +23,10 @@ div::highlight(foo) {
 CssRoot {
     bom_token: missing (optional),
     rules: CssRuleList [
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: missing (optional),
                     sub_selectors: CssSubSelectorList [
                         CssPseudoElementSelector {
@@ -44,16 +43,16 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@20..21 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@21..23 "}" [Newline("\n")] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssTypeSelector {
                         namespace: missing (optional),
                         ident: CssIdentifier {
@@ -75,16 +74,16 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@45..46 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@46..48 "}" [Newline("\n")] [],
             },
         },
-        CssRule {
+        CssQualifiedRule {
             prelude: CssSelectorList [
                 CssCompoundSelector {
-                    nesting_selector_token: missing (optional),
+                    nesting_selectors: CssNestedSelectorList [],
                     simple_selector: CssTypeSelector {
                         namespace: missing (optional),
                         ident: CssIdentifier {
@@ -106,9 +105,9 @@ CssRoot {
                     ],
                 },
             ],
-            block: CssDeclarationListBlock {
+            block: CssDeclarationOrRuleBlock {
                 l_curly_token: L_CURLY@70..71 "{" [] [],
-                declarations: CssDeclarationList [],
+                items: CssDeclarationOrRuleList [],
                 r_curly_token: R_CURLY@71..73 "}" [Newline("\n")] [],
             },
         },
@@ -123,10 +122,10 @@ CssRoot {
 0: CSS_ROOT@0..74
   0: (empty)
   1: CSS_RULE_LIST@0..73
-    0: CSS_RULE@0..23
+    0: CSS_QUALIFIED_RULE@0..23
       0: CSS_SELECTOR_LIST@0..20
         0: CSS_COMPOUND_SELECTOR@0..20
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@0..0
           1: (empty)
           2: CSS_SUB_SELECTOR_LIST@0..20
             0: CSS_PSEUDO_ELEMENT_SELECTOR@0..20
@@ -137,14 +136,14 @@ CssRoot {
                 2: CSS_IDENTIFIER@12..18
                   0: IDENT@12..18 "sample" [] []
                 3: R_PAREN@18..20 ")" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@20..23
+      1: CSS_DECLARATION_OR_RULE_BLOCK@20..23
         0: L_CURLY@20..21 "{" [] []
-        1: CSS_DECLARATION_LIST@21..21
+        1: CSS_DECLARATION_OR_RULE_LIST@21..21
         2: R_CURLY@21..23 "}" [Newline("\n")] []
-    1: CSS_RULE@23..48
+    1: CSS_QUALIFIED_RULE@23..48
       0: CSS_SELECTOR_LIST@23..45
         0: CSS_COMPOUND_SELECTOR@23..45
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@23..23
           1: CSS_TYPE_SELECTOR@23..28
             0: (empty)
             1: CSS_IDENTIFIER@23..28
@@ -158,14 +157,14 @@ CssRoot {
                 2: CSS_IDENTIFIER@40..43
                   0: IDENT@40..43 "bar" [] []
                 3: R_PAREN@43..45 ")" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@45..48
+      1: CSS_DECLARATION_OR_RULE_BLOCK@45..48
         0: L_CURLY@45..46 "{" [] []
-        1: CSS_DECLARATION_LIST@46..46
+        1: CSS_DECLARATION_OR_RULE_LIST@46..46
         2: R_CURLY@46..48 "}" [Newline("\n")] []
-    2: CSS_RULE@48..73
+    2: CSS_QUALIFIED_RULE@48..73
       0: CSS_SELECTOR_LIST@48..70
         0: CSS_COMPOUND_SELECTOR@48..70
-          0: (empty)
+          0: CSS_NESTED_SELECTOR_LIST@48..48
           1: CSS_TYPE_SELECTOR@48..53
             0: (empty)
             1: CSS_IDENTIFIER@48..53
@@ -179,12 +178,10 @@ CssRoot {
                 2: CSS_IDENTIFIER@65..68
                   0: IDENT@65..68 "foo" [] []
                 3: R_PAREN@68..70 ")" [] [Whitespace(" ")]
-      1: CSS_DECLARATION_LIST_BLOCK@70..73
+      1: CSS_DECLARATION_OR_RULE_BLOCK@70..73
         0: L_CURLY@70..71 "{" [] []
-        1: CSS_DECLARATION_LIST@71..71
+        1: CSS_DECLARATION_OR_RULE_LIST@71..71
         2: R_CURLY@71..73 "}" [Newline("\n")] []
   2: EOF@73..74 "" [Newline("\n")] []
 
 ```
-
-

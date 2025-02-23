@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalid.jsonc
+snapshot_kind: text
 ---
 # Input
-```js
+```cjs
 var {} = foo;
 ```
 
@@ -11,7 +12,7 @@ var {} = foo;
 ```
 invalid.jsonc:1:5 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty object pattern.
+  × Unexpected empty object pattern.
   
   > 1 │ var {} = foo;
       │     ^^
@@ -20,7 +21,7 @@ invalid.jsonc:1:5 lint/correctness/noEmptyPattern ━━━━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 var [] = foo;
 ```
 
@@ -28,7 +29,7 @@ var [] = foo;
 ```
 invalid.jsonc:1:5 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty array pattern.
+  × Unexpected empty array pattern.
   
   > 1 │ var [] = foo;
       │     ^^
@@ -37,7 +38,7 @@ invalid.jsonc:1:5 lint/correctness/noEmptyPattern ━━━━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 var {a: {}} = foo;
 ```
 
@@ -45,7 +46,7 @@ var {a: {}} = foo;
 ```
 invalid.jsonc:1:9 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty object pattern.
+  × Unexpected empty object pattern.
   
   > 1 │ var {a: {}} = foo;
       │         ^^
@@ -54,7 +55,7 @@ invalid.jsonc:1:9 lint/correctness/noEmptyPattern ━━━━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 var {a, b: {}} = foo;
 ```
 
@@ -62,7 +63,7 @@ var {a, b: {}} = foo;
 ```
 invalid.jsonc:1:12 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty object pattern.
+  × Unexpected empty object pattern.
   
   > 1 │ var {a, b: {}} = foo;
       │            ^^
@@ -71,7 +72,7 @@ invalid.jsonc:1:12 lint/correctness/noEmptyPattern ━━━━━━━━━�
 ```
 
 # Input
-```js
+```cjs
 var {a: []} = foo;
 ```
 
@@ -79,7 +80,7 @@ var {a: []} = foo;
 ```
 invalid.jsonc:1:9 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty array pattern.
+  × Unexpected empty array pattern.
   
   > 1 │ var {a: []} = foo;
       │         ^^
@@ -88,7 +89,7 @@ invalid.jsonc:1:9 lint/correctness/noEmptyPattern ━━━━━━━━━━
 ```
 
 # Input
-```js
+```cjs
 function foo({}) {};
 ```
 
@@ -96,7 +97,7 @@ function foo({}) {};
 ```
 invalid.jsonc:1:14 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty object pattern.
+  × Unexpected empty object pattern.
   
   > 1 │ function foo({}) {};
       │              ^^
@@ -105,7 +106,7 @@ invalid.jsonc:1:14 lint/correctness/noEmptyPattern ━━━━━━━━━�
 ```
 
 # Input
-```js
+```cjs
 function foo([]) {};
 ```
 
@@ -113,7 +114,7 @@ function foo([]) {};
 ```
 invalid.jsonc:1:14 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty array pattern.
+  × Unexpected empty array pattern.
   
   > 1 │ function foo([]) {};
       │              ^^
@@ -122,7 +123,7 @@ invalid.jsonc:1:14 lint/correctness/noEmptyPattern ━━━━━━━━━�
 ```
 
 # Input
-```js
+```cjs
 function foo({a: {}}) {};
 ```
 
@@ -130,7 +131,7 @@ function foo({a: {}}) {};
 ```
 invalid.jsonc:1:18 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty object pattern.
+  × Unexpected empty object pattern.
   
   > 1 │ function foo({a: {}}) {};
       │                  ^^
@@ -139,7 +140,7 @@ invalid.jsonc:1:18 lint/correctness/noEmptyPattern ━━━━━━━━━�
 ```
 
 # Input
-```js
+```cjs
 function foo({a: []}) {};
 ```
 
@@ -147,12 +148,10 @@ function foo({a: []}) {};
 ```
 invalid.jsonc:1:18 lint/correctness/noEmptyPattern ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Unexpected empty array pattern.
+  × Unexpected empty array pattern.
   
   > 1 │ function foo({a: []}) {};
       │                  ^^
   
 
 ```
-
-

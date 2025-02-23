@@ -2,9 +2,8 @@ use crate::run_cli;
 use crate::snap_test::{assert_cli_snapshot, assert_file_contents, SnapshotPayload};
 use biome_console::BufferConsole;
 use biome_fs::MemoryFileSystem;
-use biome_service::DynRef;
 use bpaf::Args;
-use std::path::Path;
+use camino::Utf8Path;
 
 const FIX_BEFORE: &str = "(1 >= -0)";
 const FIX_AFTER: &str = "(1 >= 0)";
@@ -19,38 +18,30 @@ const SIMPLE_NUMBERS_AFTER: &str = "({ 1: 1 });";
 fn does_handle_included_file_and_disable_linter() {
     let mut console = BufferConsole::default();
     let mut fs = MemoryFileSystem::default();
-    let file_path = Path::new("biome.json");
+    let file_path = Utf8Path::new("biome.json");
     fs.insert(
         file_path.into(),
         r#"{
   "files": {
-    "include": ["test.js", "special/**"]
+    "includes": ["test.js", "special/**"]
   },
-  "overrides": [{ "include": ["special/**"], "linter": { "enabled": false } }]
+  "overrides": [{ "includes": ["special/**"], "linter": { "enabled": false } }]
 }
 
 "#
         .as_bytes(),
     );
 
-    let test = Path::new("test.js");
+    let test = Utf8Path::new("test.js");
     fs.insert(test.into(), FIX_BEFORE.as_bytes());
 
-    let test2 = Path::new("special/test2.js");
+    let test2 = Utf8Path::new("special/test2.js");
     fs.insert(test2.into(), FIX_BEFORE.as_bytes());
 
-    let result = run_cli(
-        DynRef::Borrowed(&mut fs),
+    let (fs, result) = run_cli(
+        fs,
         &mut console,
-        Args::from(
-            [
-                ("lint"),
-                ("--apply"),
-                test.as_os_str().to_str().unwrap(),
-                test2.as_os_str().to_str().unwrap(),
-            ]
-            .as_slice(),
-        ),
+        Args::from(["lint", "--write", test.as_str(), test2.as_str()].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -71,11 +62,11 @@ fn does_handle_included_file_and_disable_linter() {
 fn does_include_file_with_different_rules() {
     let mut console = BufferConsole::default();
     let mut fs = MemoryFileSystem::default();
-    let file_path = Path::new("biome.json");
+    let file_path = Utf8Path::new("biome.json");
     fs.insert(
         file_path.into(),
         r#"{
-  "overrides": [{ "include": ["special/**"], "linter": { "rules": {
+  "overrides": [{ "includes": ["special/**"], "linter": { "rules": {
     "suspicious": { "noDebugger": "off" }
   } } }]
 }
@@ -84,24 +75,16 @@ fn does_include_file_with_different_rules() {
         .as_bytes(),
     );
 
-    let test = Path::new("test.js");
+    let test = Utf8Path::new("test.js");
     fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let test2 = Path::new("special/test2.js");
+    let test2 = Utf8Path::new("special/test2.js");
     fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let result = run_cli(
-        DynRef::Borrowed(&mut fs),
+    let (fs, result) = run_cli(
+        fs,
         &mut console,
-        Args::from(
-            [
-                ("lint"),
-                ("--apply-unsafe"),
-                test.as_os_str().to_str().unwrap(),
-                test2.as_os_str().to_str().unwrap(),
-            ]
-            .as_slice(),
-        ),
+        Args::from(["lint", "--write", "--unsafe", test.as_str(), test2.as_str()].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -122,13 +105,13 @@ fn does_include_file_with_different_rules() {
 fn does_include_file_with_different_linting_and_applies_all_of_them() {
     let mut console = BufferConsole::default();
     let mut fs = MemoryFileSystem::default();
-    let file_path = Path::new("biome.json");
+    let file_path = Utf8Path::new("biome.json");
     fs.insert(
         file_path.into(),
         r#"{
     "overrides": [
         {
-            "include": [
+            "includes": [
                 "special/**"
             ],
             "linter": {
@@ -140,7 +123,7 @@ fn does_include_file_with_different_linting_and_applies_all_of_them() {
             }
         },
         {
-            "include": [
+            "includes": [
                 "special/**"
             ],
             "linter": {
@@ -158,24 +141,16 @@ fn does_include_file_with_different_linting_and_applies_all_of_them() {
         .as_bytes(),
     );
 
-    let test = Path::new("test.js");
+    let test = Utf8Path::new("test.js");
     fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let test2 = Path::new("special/test2.js");
+    let test2 = Utf8Path::new("special/test2.js");
     fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let result = run_cli(
-        DynRef::Borrowed(&mut fs),
+    let (fs, result) = run_cli(
+        fs,
         &mut console,
-        Args::from(
-            [
-                ("lint"),
-                ("--apply-unsafe"),
-                test.as_os_str().to_str().unwrap(),
-                test2.as_os_str().to_str().unwrap(),
-            ]
-            .as_slice(),
-        ),
+        Args::from(["lint", "--write", "--unsafe", test.as_str(), test2.as_str()].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -196,13 +171,13 @@ fn does_include_file_with_different_linting_and_applies_all_of_them() {
 fn does_include_file_with_different_overrides() {
     let mut console = BufferConsole::default();
     let mut fs = MemoryFileSystem::default();
-    let file_path = Path::new("biome.json");
+    let file_path = Utf8Path::new("biome.json");
     fs.insert(
         file_path.into(),
         r#"{
     "overrides": [
         {
-            "include": [
+            "includes": [
                 "test.js"
             ],
             "linter": {
@@ -214,7 +189,7 @@ fn does_include_file_with_different_overrides() {
             }
         },
         {
-            "include": [
+            "includes": [
                 "test2.js"
             ],
             "linter": {
@@ -232,24 +207,16 @@ fn does_include_file_with_different_overrides() {
         .as_bytes(),
     );
 
-    let test = Path::new("test.js");
+    let test = Utf8Path::new("test.js");
     fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let test2 = Path::new("test2.js");
+    let test2 = Utf8Path::new("test2.js");
     fs.insert(test2.into(), SIMPLE_NUMBERS_BEFORE.as_bytes());
 
-    let result = run_cli(
-        DynRef::Borrowed(&mut fs),
+    let (fs, result) = run_cli(
+        fs,
         &mut console,
-        Args::from(
-            [
-                ("lint"),
-                ("--apply-unsafe"),
-                test.as_os_str().to_str().unwrap(),
-                test2.as_os_str().to_str().unwrap(),
-            ]
-            .as_slice(),
-        ),
+        Args::from(["lint", "--write", "--unsafe", test.as_str(), test2.as_str()].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -270,13 +237,13 @@ fn does_include_file_with_different_overrides() {
 fn does_override_the_rules() {
     let mut console = BufferConsole::default();
     let mut fs = MemoryFileSystem::default();
-    let file_path = Path::new("biome.json");
+    let file_path = Utf8Path::new("biome.json");
     fs.insert(
         file_path.into(),
         r#"{
     "overrides": [
         {
-            "include": [
+            "includes": [
                 "test.js"
             ],
             "linter": {
@@ -294,24 +261,16 @@ fn does_override_the_rules() {
         .as_bytes(),
     );
 
-    let test = Path::new("test.js");
+    let test = Utf8Path::new("test.js");
     fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let test2 = Path::new("test2.js");
+    let test2 = Utf8Path::new("test2.js");
     fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let result = run_cli(
-        DynRef::Borrowed(&mut fs),
+    let (fs, result) = run_cli(
+        fs,
         &mut console,
-        Args::from(
-            [
-                ("lint"),
-                ("--apply-unsafe"),
-                test.as_os_str().to_str().unwrap(),
-                test2.as_os_str().to_str().unwrap(),
-            ]
-            .as_slice(),
-        ),
+        Args::from(["lint", "--write", "--unsafe", test.as_str(), test2.as_str()].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -332,7 +291,7 @@ fn does_override_the_rules() {
 fn does_not_change_linting_settings() {
     let mut console = BufferConsole::default();
     let mut fs = MemoryFileSystem::default();
-    let file_path = Path::new("biome.json");
+    let file_path = Utf8Path::new("biome.json");
     fs.insert(
         file_path.into(),
         r#"{
@@ -344,7 +303,7 @@ fn does_not_change_linting_settings() {
                 }
             },
   "overrides": [
-    { "include": ["test.js"], "formatter": { "enabled": false } }
+    { "includes": ["test.js"], "formatter": { "enabled": false } }
   ]
 }
 
@@ -352,24 +311,16 @@ fn does_not_change_linting_settings() {
         .as_bytes(),
     );
 
-    let test = Path::new("test.js");
+    let test = Utf8Path::new("test.js");
     fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let test2 = Path::new("test2.js");
+    let test2 = Utf8Path::new("test2.js");
     fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
 
-    let result = run_cli(
-        DynRef::Borrowed(&mut fs),
+    let (fs, result) = run_cli(
+        fs,
         &mut console,
-        Args::from(
-            [
-                ("lint"),
-                ("--apply-unsafe"),
-                test.as_os_str().to_str().unwrap(),
-                test2.as_os_str().to_str().unwrap(),
-            ]
-            .as_slice(),
-        ),
+        Args::from(["lint", "--write", "--unsafe", test.as_str(), test2.as_str()].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
@@ -380,6 +331,366 @@ fn does_not_change_linting_settings() {
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "does_not_change_linting_settings",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_override_recommended() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Utf8Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+            "linter": {
+                "rules": {
+                    "recommended": true
+                }
+            },
+            "overrides": [
+                {
+                    "includes": ["test.js"],
+                    "linter": {
+                        "rules": {
+                            "recommended": false
+                        }
+                    }
+                }
+            ]
+        }"#
+        .as_bytes(),
+    );
+
+    let test = Utf8Path::new("test.js");
+    fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let test2 = Utf8Path::new("test2.js");
+    fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let (fs, result) = run_cli(
+        fs,
+        &mut console,
+        Args::from(["lint", "--write", "--unsafe", "."].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, test, DEBUGGER_BEFORE);
+    assert_file_contents(&fs, test2, DEBUGGER_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_override_recommended",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_override_groupe_recommended() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Utf8Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "recommended": true
+                    }
+                }
+            },
+            "overrides": [
+                {
+                    "includes": ["test.js"],
+                    "linter": {
+                        "rules": {
+                            "suspicious": {
+                                "recommended": false
+                            }
+                        }
+                    }
+                }
+            ]
+        }"#
+        .as_bytes(),
+    );
+
+    let test = Utf8Path::new("test.js");
+    fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let test2 = Utf8Path::new("test2.js");
+    fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let (fs, result) = run_cli(
+        fs,
+        &mut console,
+        Args::from(["lint", "--write", "--unsafe", "."].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, test, DEBUGGER_BEFORE);
+    assert_file_contents(&fs, test2, DEBUGGER_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_override_groupe_recommended",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_preserve_group_recommended_when_override_global_recommened() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Utf8Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "recommended": false
+                    }
+                }
+            },
+            "overrides": [
+                {
+                    "includes": ["test.js"],
+                    "linter": {
+                        "rules": {
+                            "recommended": true
+                        }
+                    }
+                }
+            ]
+        }"#
+        .as_bytes(),
+    );
+
+    let test = Utf8Path::new("test.js");
+    fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let test2 = Utf8Path::new("test2.js");
+    fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let (fs, result) = run_cli(
+        fs,
+        &mut console,
+        Args::from(["lint", "--write", "--unsafe", "."].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, test, DEBUGGER_BEFORE);
+    assert_file_contents(&fs, test2, DEBUGGER_BEFORE);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_preserve_group_recommended_when_override_global_recommened",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_preserve_individually_diabled_rules_in_overrides() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Utf8Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noDebugger": "off"
+                    }
+                }
+            },
+            "overrides": [
+                {
+                    "includes": ["test.js"],
+                    "linter": {
+                        "rules": {
+                            "suspicious": {}
+                        }
+                    }
+                }
+            ]
+        }"#
+        .as_bytes(),
+    );
+
+    let test = Utf8Path::new("test.js");
+    fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let test2 = Utf8Path::new("test2.js");
+    fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let (fs, result) = run_cli(
+        fs,
+        &mut console,
+        Args::from(["lint", "--write", "--unsafe", "."].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, test, DEBUGGER_BEFORE);
+    assert_file_contents(&fs, test2, DEBUGGER_BEFORE);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_preserve_individually_diabled_rules_in_overrides",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_merge_all_overrides() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Utf8Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noDebugger": "error"
+                    }
+                }
+            },
+            "overrides": [
+                {
+                    "includes": ["*.js"],
+                    "linter": {
+                        "rules": {
+                            "suspicious": {
+                                "noDebugger": "warn"
+                            }
+                        }
+                    }
+                }, {
+                    "includes": ["test.js"],
+                    "linter": {
+                        "rules": {
+                            "suspicious": {
+                                "noDebugger": "off"
+                            }
+                        }
+                    }
+                }, {
+                    "includes": ["test3.js"]
+                }
+            ]
+        }"#
+        .as_bytes(),
+    );
+
+    let test = Utf8Path::new("test.js");
+    fs.insert(test.into(), DEBUGGER_BEFORE.as_bytes());
+    let test2 = Utf8Path::new("test2.js");
+    fs.insert(test2.into(), DEBUGGER_BEFORE.as_bytes());
+    let test3 = Utf8Path::new("test3.js");
+    fs.insert(test3.into(), DEBUGGER_BEFORE.as_bytes());
+
+    let (fs, result) = run_cli(fs, &mut console, Args::from(["lint", "."].as_slice()));
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_merge_all_overrides",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_not_conceal_overrides_globals() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Utf8Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+            "linter": {
+                "rules": {
+                    "correctness": {
+                        "noUndeclaredVariables": "error"
+                    }
+                }
+            },
+            "overrides": [
+                {
+                    "includes": ["*.js"],
+                    "javascript": { "globals": ["GLOBAL_VAR"] }
+                }, {
+                    "includes": ["*.js"]
+                }
+            ]
+        }"#
+        .as_bytes(),
+    );
+
+    let test = Utf8Path::new("test.js");
+    fs.insert(test.into(), "export { GLOBAL_VAR };".as_bytes());
+
+    let (fs, result) = run_cli(fs, &mut console, Args::from(["lint", "."].as_slice()));
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_not_conceal_overrides_globals",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn takes_last_linter_enabled_into_account() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Utf8Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+            "linter": {
+                "rules": {
+                    "correctness": {
+                        "noUndeclaredVariables": "error"
+                    }
+                }
+            },
+            "overrides": [
+                {
+                    "includes": ["*.js"],
+                    "linter": { "enabled": false }
+                }, {
+                    "includes": ["*.js"],
+                    "linter": { "enabled": true }
+                }
+            ]
+        }"#
+        .as_bytes(),
+    );
+
+    let test = Utf8Path::new("test.js");
+    fs.insert(test.into(), "export { GLOBAL_VAR };".as_bytes());
+
+    let (fs, result) = run_cli(fs, &mut console, Args::from(["lint", "."].as_slice()));
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "takes_last_linter_enabled_into_account",
         fs,
         console,
         result,

@@ -31,10 +31,10 @@ pub enum FormatError {
 impl std::fmt::Display for FormatError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FormatError::SyntaxError => fmt.write_str("syntax error"),
+            FormatError::SyntaxError => fmt.write_str("Can't format code because it contains syntax errors"),
             FormatError::RangeError { input, tree } => std::write!(
                 fmt,
-                "formatting range {input:?} is larger than syntax tree {tree:?}"
+                "Formatting range {input:?} is larger than syntax tree {tree:?}"
             ),
             FormatError::InvalidDocument(error) => std::write!(fmt, "Invalid document: {error}\n\n This is an internal Biome error. Please report if necessary."),
             FormatError::PoorLayout => {
@@ -55,7 +55,9 @@ impl From<SyntaxError> for FormatError {
 impl From<&SyntaxError> for FormatError {
     fn from(syntax_error: &SyntaxError) -> Self {
         match syntax_error {
-            SyntaxError::MissingRequiredChild => FormatError::SyntaxError,
+            SyntaxError::MissingRequiredChild
+            | SyntaxError::UnexpectedBogusNode
+            | SyntaxError::UnexpectedMetavariable => FormatError::SyntaxError,
         }
     }
 }
@@ -235,7 +237,7 @@ impl Diagnostic for PrintError {
     fn message(&self, fmt: &mut Formatter<'_>) -> std::io::Result<()> {
         match self {
             PrintError::InvalidDocument(inner) => {
-                let inner = format!("{}", inner);
+                let inner = format!("{inner}");
                 fmt.write_markup(markup! {
                     "Invalid document: "{{inner}}
                 })

@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: valid.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -8,5 +9,3 @@ const x = "test";
 z: expr;
 
 ```
-
-

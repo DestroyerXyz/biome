@@ -1,9 +1,10 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: noChildren.jsx
+snapshot_kind: text
 ---
 # Input
-```js
+```jsx
 // invalid
 
 <>
@@ -18,13 +19,15 @@ expression: noChildren.jsx
 ```
 noChildren.jsx:4:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Avoid using unnecessary Fragment.
+  i This fragment is unnecessary.
   
     3 │ <>
   > 4 │     <></>
       │     ^^^^^
     5 │     <React.Fragment></React.Fragment>
     6 │     <Fragment></Fragment>
+  
+  i A fragment is redundant if it contains only one child, or if it is the child of a html element, and is not a keyed fragment.
   
   i Unsafe fix: Remove the Fragment
   
@@ -36,7 +39,7 @@ noChildren.jsx:4:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━�
 ```
 noChildren.jsx:5:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Avoid using unnecessary Fragment.
+  i This fragment is unnecessary.
   
     3 │ <>
     4 │     <></>
@@ -44,6 +47,8 @@ noChildren.jsx:5:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━�
       │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     6 │     <Fragment></Fragment>
     7 │ </>
+  
+  i A fragment is redundant if it contains only one child, or if it is the child of a html element, and is not a keyed fragment.
   
   i Unsafe fix: Remove the Fragment
   
@@ -55,7 +60,7 @@ noChildren.jsx:5:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━�
 ```
 noChildren.jsx:6:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! Avoid using unnecessary Fragment.
+  i This fragment is unnecessary.
   
     4 │     <></>
     5 │     <React.Fragment></React.Fragment>
@@ -64,11 +69,11 @@ noChildren.jsx:6:5 lint/complexity/noUselessFragments  FIXABLE  ━━━━━�
     7 │ </>
     8 │ 
   
+  i A fragment is redundant if it contains only one child, or if it is the child of a html element, and is not a keyed fragment.
+  
   i Unsafe fix: Remove the Fragment
   
     6 │ ····<Fragment></Fragment>
       │     ---------------------
 
 ```
-
-

@@ -8,20 +8,24 @@ keywords.workspace   = true
 license.workspace    = true
 name                 = "biome_js_syntax"
 repository.workspace = true
-version              = "0.3.1"
+version              = "0.5.7"
 
 [dependencies]
-biome_console     = { workspace = true }
-biome_diagnostics = { workspace = true }
-biome_rowan       = { workspace = true }
-schemars          = { version = "0.8.10", optional = true }
-serde             = { version = "1.0.136", features = ["derive"], optional = true }
+biome_aria          = { workspace = true }
+biome_aria_metadata = { workspace = true }
+biome_rowan         = { workspace = true, features = ["serde"] }
+biome_string_case   = { workspace = true }
+camino              = { workspace = true }
+enumflags2          = { workspace = true }
+schemars            = { workspace = true, optional = true }
+serde               = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 biome_js_factory = { path = "../biome_js_factory" }
+biome_js_parser  = { path = "../biome_js_parser" }
 
 [features]
-serde = ["dep:serde", "schemars", "biome_rowan/serde"]
+schema = ["schemars", "biome_rowan/serde"]
 
 [lints]
 workspace = true

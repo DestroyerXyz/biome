@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidObjectSetter.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -21,7 +22,7 @@ export default {
 ```
 invalidObjectSetter.js:2:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object setter name should be in camelCase.
+  i This object setter name should be in camelCase.
   
     1 │ export default {
   > 2 │     set X(x) {},
@@ -29,15 +30,13 @@ invalidObjectSetter.js:2:9 lint/style/useNamingConvention ━━━━━━━�
     3 │ 
     4 │     set PROPERTY(x) {},
   
-  i The name could be renamed to `x`.
-  
 
 ```
 
 ```
 invalidObjectSetter.js:4:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object setter name should be in camelCase.
+  i This object setter name should be in camelCase.
   
     2 │     set X(x) {},
     3 │ 
@@ -46,15 +45,13 @@ invalidObjectSetter.js:4:9 lint/style/useNamingConvention ━━━━━━━�
     5 │ 
     6 │     set SpecialProperty(x) {},
   
-  i The name could be renamed to `property`.
-  
 
 ```
 
 ```
 invalidObjectSetter.js:6:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object setter name should be in camelCase.
+  i This object setter name should be in camelCase.
   
     4 │     set PROPERTY(x) {},
     5 │ 
@@ -63,15 +60,13 @@ invalidObjectSetter.js:6:9 lint/style/useNamingConvention ━━━━━━━�
     7 │ 
     8 │     set special_property(x) {},
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
 ```
 invalidObjectSetter.js:8:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object setter name should be in camelCase.
+  i This object setter name should be in camelCase.
   
      6 │     set SpecialProperty(x) {},
      7 │ 
@@ -80,15 +75,13 @@ invalidObjectSetter.js:8:9 lint/style/useNamingConvention ━━━━━━━�
      9 │ 
     10 │     set Unknown_Style(x) {},
   
-  i The name could be renamed to `specialProperty`.
-  
 
 ```
 
 ```
 invalidObjectSetter.js:10:9 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This object setter name should be in camelCase.
+  i This object setter name should be in camelCase.
   
      8 │     set special_property(x) {},
      9 │ 
@@ -96,9 +89,5 @@ invalidObjectSetter.js:10:9 lint/style/useNamingConvention ━━━━━━━
        │         ^^^^^^^^^^^^^
     11 │ }
   
-  i The name could be renamed to `unknownStyle`.
-  
 
 ```
-
-

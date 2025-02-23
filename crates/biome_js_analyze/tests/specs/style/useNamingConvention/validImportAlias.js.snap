@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: validImportAlias.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -28,5 +29,3 @@ import $ from ""
 
 import _ from ""
 ```
-
-

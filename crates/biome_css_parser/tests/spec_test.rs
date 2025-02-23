@@ -1,11 +1,16 @@
+use biome_configuration::Configuration;
 use biome_console::fmt::{Formatter, Termcolor};
 use biome_console::markup;
 use biome_css_parser::{parse_css, CssParserOptions};
+use biome_deserialize::json::deserialize_from_str;
 use biome_diagnostics::display::PrintDiagnostic;
-use biome_diagnostics::termcolor;
 use biome_diagnostics::DiagnosticExt;
+use biome_diagnostics::{print_diagnostic_to_string, termcolor};
+use biome_fs::BiomePath;
 use biome_rowan::SyntaxKind;
+use biome_service::settings::Settings;
 use biome_test_utils::has_bogus_nodes_or_empty_slots;
+use camino::Utf8Path;
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
@@ -36,8 +41,46 @@ pub fn run(test_case: &str, _snapshot_name: &str, test_directory: &str, outcome_
     let content = fs::read_to_string(test_case_path)
         .expect("Expected test path to be a readable file in UTF8 encoding");
 
-    let parse_config = CssParserOptions::default().allow_wrong_line_comments();
-    let parsed = parse_css(&content, parse_config);
+    let mut options = CssParserOptions::default()
+        // it is an internal option that cannot be configured via options.json
+        // TODO: find a way to make it configurable
+        .allow_metavariables();
+
+    let options_path = Utf8Path::new(test_directory).join("options.json");
+
+    if options_path.exists() {
+        let mut options_path = BiomePath::new(&options_path);
+
+        let mut settings = Settings::default();
+        // SAFETY: we checked its existence already, we assume we have rights to read it
+        let (test_options, diagnostics) =
+            deserialize_from_str::<Configuration>(options_path.get_buffer_from_file().as_str())
+                .consume();
+
+        settings
+            .merge_with_configuration(test_options.unwrap_or_default(), None, None, &[])
+            .unwrap();
+
+        let settings = settings.languages.css.parser;
+
+        if settings.css_modules_enabled() {
+            options = options.allow_css_modules();
+        }
+
+        if settings.allow_wrong_line_comments() {
+            options = options.allow_wrong_line_comments();
+        }
+
+        if !diagnostics.is_empty() {
+            for diagnostic in diagnostics {
+                println!("{:?}", print_diagnostic_to_string(&diagnostic));
+            }
+
+            panic!("Configuration is invalid");
+        }
+    }
+
+    let parsed = parse_css(&content, options);
     let formatted_ast = format!("{:#?}", parsed.tree());
 
     let mut snapshot = String::new();
@@ -103,15 +146,12 @@ pub fn run(test_case: &str, _snapshot_name: &str, test_directory: &str, outcome_
                     .descendants()
                     .any(|node| node.kind().is_bogus())
             {
-                panic!("Parsed tree of a 'OK' test case should not contain any missing required children or bogus nodes: \n {formatted_ast:#?} \n\n {}", formatted_ast);
+                panic!("Parsed tree of a 'OK' test case should not contain any missing required children or bogus nodes: \n {formatted_ast:#?} \n\n {formatted_ast}");
             }
 
             let syntax = parsed.syntax();
             if has_bogus_nodes_or_empty_slots(&syntax) {
-                panic!(
-                    "modified tree has bogus nodes or empty slots:\n{syntax:#?} \n\n {}",
-                    syntax
-                )
+                panic!("modified tree has bogus nodes or empty slots:\n{syntax:#?} \n\n {syntax}")
             }
         }
         ExpectedOutcome::Fail => {
@@ -134,19 +174,21 @@ pub fn run(test_case: &str, _snapshot_name: &str, test_directory: &str, outcome_
 #[test]
 pub fn quick_test() {
     let code = r#"
-@scope (.media-object) to (.content > *) {}
+    .foo {
+       color: blue;;
+    }
     "#;
 
     let root = parse_css(
         code,
-        CssParserOptions::default().allow_wrong_line_comments(),
+        CssParserOptions::default()
+            .allow_wrong_line_comments()
+            .allow_css_modules()
+            .allow_metavariables(),
     );
     let syntax = root.syntax();
     dbg!(&syntax, root.diagnostics(), root.has_errors());
     if has_bogus_nodes_or_empty_slots(&syntax) {
-        panic!(
-            "modified tree has bogus nodes or empty slots:\n{syntax:#?} \n\n {}",
-            syntax
-        )
+        panic!("modified tree has bogus nodes or empty slots:\n{syntax:#?} \n\n {syntax}")
     }
 }

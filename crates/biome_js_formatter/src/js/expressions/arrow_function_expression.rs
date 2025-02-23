@@ -1,25 +1,22 @@
+use crate::context::trailing_commas::FormatTrailingCommas;
 use crate::js::bindings::parameters::has_only_simple_parameters;
+use crate::js::expressions::call_arguments::GroupedCallArgumentLayout;
 use crate::prelude::*;
+use crate::utils::function_body::{FormatMaybeCachedFunctionBody, FunctionBodyCacheMode};
+use crate::utils::AssignmentLikeLayout;
+
 use biome_formatter::{
     format_args, write, CstFormatContext, FormatRuleWithOptions, RemoveSoftLinesBuffer,
 };
-use std::iter::once;
-
-use crate::context::trailing_comma::FormatTrailingComma;
-use crate::js::expressions::call_arguments::GroupedCallArgumentLayout;
-use crate::parentheses::{
-    is_binary_like_left_or_right, is_callee, is_conditional_test,
-    update_or_lower_expression_needs_parentheses, AnyJsExpressionLeftSide, NeedsParentheses,
-};
-use crate::utils::function_body::{FormatMaybeCachedFunctionBody, FunctionBodyCacheMode};
-use crate::utils::test_call::is_test_call_argument;
-use crate::utils::{resolve_left_most_expression, AssignmentLikeLayout};
+use biome_js_syntax::expression_left_side::AnyJsExpressionLeftSide;
+use biome_js_syntax::parentheses::NeedsParentheses;
 use biome_js_syntax::{
-    AnyJsArrowFunctionParameters, AnyJsBindingPattern, AnyJsExpression, AnyJsFormalParameter,
-    AnyJsFunctionBody, AnyJsParameter, AnyJsTemplateElement, JsArrowFunctionExpression,
-    JsFormalParameter, JsSyntaxKind, JsSyntaxNode, JsTemplateExpression,
+    is_test_call_argument, AnyJsArrowFunctionParameters, AnyJsBindingPattern, AnyJsExpression,
+    AnyJsFormalParameter, AnyJsFunctionBody, AnyJsParameter, AnyJsTemplateElement,
+    JsArrowFunctionExpression, JsFormalParameter, JsSyntaxKind, JsTemplateExpression,
 };
 use biome_rowan::{SyntaxNodeOptionExt, SyntaxResult};
+use std::iter::once;
 
 #[derive(Debug, Copy, Clone, Default)]
 pub(crate) struct FormatJsArrowFunctionExpression {
@@ -134,7 +131,8 @@ impl FormatNodeRule<JsArrowFunctionExpression> for FormatJsArrowFunctionExpressi
                     }
                     _ => false,
                 };
-
+                let body_is_condition_type =
+                    matches!(body, AnyJsExpression(JsConditionalExpression(_)));
                 if body_has_soft_line_break {
                     write![f, [formatted_signature, space(), format_body]]
                 } else {
@@ -149,30 +147,57 @@ impl FormatNodeRule<JsArrowFunctionExpression> for FormatJsArrowFunctionExpressi
                         // if it's inside a JSXExpression (e.g. an attribute) we should align the expression's closing } with the line with the opening {.
                         || matches!(node.syntax().parent().kind(), Some(JsSyntaxKind::JSX_EXPRESSION_CHILD | JsSyntaxKind::JSX_EXPRESSION_ATTRIBUTE_VALUE)))
                         && !f.context().comments().has_comments(node.syntax());
+                    if body_is_condition_type {
+                        write!(
+                            f,
+                            [
+                                formatted_signature,
+                                group(&format_args![
+                                    soft_line_indent_or_hard_space(&format_with(|f| {
+                                        if should_add_parens {
+                                            write!(f, [if_group_fits_on_line(&text("("))])?;
+                                        }
 
-                    write!(
-                        f,
-                        [
-                            formatted_signature,
-                            group(&format_args![
-                                soft_line_indent_or_space(&format_with(|f| {
-                                    if should_add_parens {
-                                        write!(f, [if_group_fits_on_line(&text("("))])?;
-                                    }
+                                        write!(f, [format_body])?;
 
-                                    write!(f, [format_body])?;
+                                        if should_add_parens {
+                                            write!(f, [if_group_fits_on_line(&text(")"))])?;
+                                        }
 
-                                    if should_add_parens {
-                                        write!(f, [if_group_fits_on_line(&text(")"))])?;
-                                    }
+                                        Ok(())
+                                    })),
+                                    is_last_call_arg
+                                        .then_some(format_args![FormatTrailingCommas::All,]),
+                                    should_add_soft_line.then_some(format_args![soft_line_break()])
+                                ])
+                            ]
+                        )
+                    } else {
+                        write!(
+                            f,
+                            [
+                                formatted_signature,
+                                group(&format_args![
+                                    soft_line_indent_or_space(&format_with(|f| {
+                                        if should_add_parens {
+                                            write!(f, [if_group_fits_on_line(&text("("))])?;
+                                        }
 
-                                    Ok(())
-                                })),
-                                is_last_call_arg.then_some(format_args![FormatTrailingComma::All,]),
-                                should_add_soft_line.then_some(format_args![soft_line_break()])
-                            ])
-                        ]
-                    )
+                                        write!(f, [format_body])?;
+
+                                        if should_add_parens {
+                                            write!(f, [if_group_fits_on_line(&text(")"))])?;
+                                        }
+
+                                        Ok(())
+                                    })),
+                                    is_last_call_arg
+                                        .then_some(format_args![FormatTrailingCommas::All,]),
+                                    should_add_soft_line.then_some(format_args![soft_line_break()])
+                                ])
+                            ]
+                        )
+                    }
                 }
             }
         }
@@ -225,21 +250,20 @@ fn format_signature(
                 AnyJsArrowFunctionParameters::AnyJsBinding(binding) => {
                     let should_hug =
                         is_test_call_argument(arrow.syntax())? || is_first_or_last_call_argument;
-
                     let parentheses_not_needed = can_avoid_parentheses(arrow, f);
 
                     if !parentheses_not_needed {
                         write!(f, [text("(")])?;
                     }
 
-                    if should_hug {
+                    if should_hug || parentheses_not_needed {
                         write!(f, [binding.format()])?;
                     } else {
                         write!(
                             f,
                             [&soft_block_indent(&format_args![
                                 binding.format(),
-                                FormatTrailingComma::All
+                                FormatTrailingCommas::All
                             ])]
                         )?
                     }
@@ -342,14 +366,15 @@ fn should_add_parens(body: &AnyJsFunctionBody) -> bool {
         AnyJsFunctionBody::AnyJsExpression(
             expression @ AnyJsExpression::JsConditionalExpression(_),
         ) => {
-            let are_parentheses_mandatory = matches!(
-                resolve_left_most_expression(expression),
+            let var_name = matches!(
+                AnyJsExpressionLeftSide::leftmost(expression.clone()),
                 AnyJsExpressionLeftSide::AnyJsExpression(
                     AnyJsExpression::JsObjectExpression(_)
                         | AnyJsExpression::JsFunctionExpression(_)
                         | AnyJsExpression::JsClassExpression(_)
                 )
             );
+            let are_parentheses_mandatory = var_name;
 
             !are_parentheses_mandatory
         }
@@ -374,9 +399,10 @@ fn has_rest_object_or_array_parameter(parameters: &AnyJsArrowFunctionParameters)
                             | AnyJsBindingPattern::JsObjectBindingPattern(_))
                     )
                 }
-                AnyJsParameter::AnyJsFormalParameter(AnyJsFormalParameter::JsBogusParameter(_)) => {
-                    false
-                }
+                AnyJsParameter::AnyJsFormalParameter(
+                    AnyJsFormalParameter::JsBogusParameter(_)
+                    | AnyJsFormalParameter::JsMetavariable(_),
+                ) => false,
                 AnyJsParameter::TsThisParameter(_) => false,
                 AnyJsParameter::JsRestParameter(_) => true,
             }),
@@ -385,7 +411,7 @@ fn has_rest_object_or_array_parameter(parameters: &AnyJsArrowFunctionParameters)
 
 /// Returns `true` if parentheses can be safely avoided and the `arrow_parentheses` formatter option allows it
 pub fn can_avoid_parentheses(arrow: &JsArrowFunctionExpression, f: &mut JsFormatter) -> bool {
-    arrow.parameters().map_or(false, |parameters| {
+    arrow.parameters().is_ok_and(|parameters| {
         f.options().arrow_parentheses().is_as_needed()
             && parameters.len() == 1
             && arrow.type_parameters().is_none()
@@ -394,7 +420,7 @@ pub fn can_avoid_parentheses(arrow: &JsArrowFunctionExpression, f: &mut JsFormat
             && !parameters
                 .as_js_parameters()
                 .and_then(|p| p.items().first()?.ok())
-                .and_then(|p| JsFormalParameter::cast(p.syntax().clone()))
+                .and_then(|p| JsFormalParameter::cast(p.into_syntax()))
                 .is_some_and(|p| {
                     f.context().comments().has_comments(p.syntax())
                         || p.initializer().is_some()
@@ -478,9 +504,12 @@ impl Format<JsFormatContext> for ArrowChain {
         //        () => () =>
         //          a
         //      )();
-        let is_callee = head_parent
-            .as_ref()
-            .map_or(false, |parent| is_callee(head.syntax(), parent));
+        let is_callee = head_parent.as_ref().is_some_and(|parent| {
+            matches!(
+                parent.kind(),
+                JsSyntaxKind::JS_CALL_EXPRESSION | JsSyntaxKind::JS_NEW_EXPRESSION
+            )
+        });
 
         // With arrays, objects, sequence expressions, and block function bodies,
         // the opening brace gives a convenient boundary to insert a line break,
@@ -794,30 +823,12 @@ impl ArrowFunctionLayout {
     }
 }
 
-impl NeedsParentheses for JsArrowFunctionExpression {
-    fn needs_parentheses_with_parent(&self, parent: &JsSyntaxNode) -> bool {
-        match parent.kind() {
-            JsSyntaxKind::TS_AS_EXPRESSION
-            | JsSyntaxKind::TS_SATISFIES_EXPRESSION
-            | JsSyntaxKind::JS_UNARY_EXPRESSION
-            | JsSyntaxKind::JS_AWAIT_EXPRESSION
-            | JsSyntaxKind::TS_TYPE_ASSERTION_EXPRESSION => true,
-
-            _ => {
-                is_conditional_test(self.syntax(), parent)
-                    || update_or_lower_expression_needs_parentheses(self.syntax(), parent)
-                    || is_binary_like_left_or_right(self.syntax(), parent)
-            }
-        }
-    }
-}
-
 /// Returns `true` if the template contains any new lines inside of its text chunks.
 fn template_literal_contains_new_line(template: &JsTemplateExpression) -> bool {
     template.elements().iter().any(|element| match element {
         AnyJsTemplateElement::JsTemplateChunkElement(chunk) => chunk
             .template_chunk_token()
-            .map_or(false, |chunk| chunk.text().contains('\n')),
+            .is_ok_and(|chunk| chunk.text().contains('\n')),
         AnyJsTemplateElement::JsTemplateElement(_) => false,
     })
 }
@@ -851,7 +862,7 @@ fn template_literal_contains_new_line(template: &JsTemplateExpression) -> bool {
 pub(crate) fn is_multiline_template_starting_on_same_line(template: &JsTemplateExpression) -> bool {
     let contains_new_line = template_literal_contains_new_line(template);
 
-    let starts_on_same_line = template.syntax().first_token().map_or(false, |token| {
+    let starts_on_same_line = template.syntax().first_token().is_some_and(|token| {
         for piece in token.leading_trivia().pieces() {
             if let Some(comment) = piece.as_comments() {
                 if comment.has_newline() {

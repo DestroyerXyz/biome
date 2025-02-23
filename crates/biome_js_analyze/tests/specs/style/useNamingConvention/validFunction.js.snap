@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: validFunction.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -24,5 +25,3 @@ function $() {}
 
 const g = function g() {}
 ```
-
-

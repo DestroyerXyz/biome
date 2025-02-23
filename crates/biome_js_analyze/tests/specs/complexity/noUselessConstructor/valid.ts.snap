@@ -1,10 +1,9 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
-assertion_line: 96
 expression: valid.ts
 ---
 # Input
-```js
+```ts
 declare class A { constructor(options: any) }
 
 class B {
@@ -30,6 +29,12 @@ class F {
 class G extends B {
     private constructor(foo, bar) {
       super(bar);
+    }
+}
+
+class H extends B {
+    constructor(name = "default") {
+      super(name);
     }
 }
 

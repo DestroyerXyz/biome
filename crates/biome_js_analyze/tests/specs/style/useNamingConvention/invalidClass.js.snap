@@ -1,6 +1,7 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: invalidClass.js
+snapshot_kind: text
 ---
 # Input
 ```js
@@ -19,14 +20,12 @@ class Unknown_Style {}
 ```
 invalidClass.js:1:7 lint/style/useNamingConvention  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This class name should be in PascalCase.
+  i This class name should be in PascalCase.
   
   > 1 │ class c {}
       │       ^
     2 │ 
     3 │ class camelCase {}
-  
-  i The name could be renamed to `C`.
   
   i Safe fix: Rename this symbol in PascalCase.
   
@@ -41,7 +40,7 @@ invalidClass.js:1:7 lint/style/useNamingConvention  FIXABLE  ━━━━━━�
 ```
 invalidClass.js:3:7 lint/style/useNamingConvention  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This class name should be in PascalCase.
+  i This class name should be in PascalCase.
   
     1 │ class c {}
     2 │ 
@@ -49,8 +48,6 @@ invalidClass.js:3:7 lint/style/useNamingConvention  FIXABLE  ━━━━━━�
       │       ^^^^^^^^^
     4 │ 
     5 │ export default class default_class {}
-  
-  i The name could be renamed to `CamelCase`.
   
   i Safe fix: Rename this symbol in PascalCase.
   
@@ -67,7 +64,7 @@ invalidClass.js:3:7 lint/style/useNamingConvention  FIXABLE  ━━━━━━�
 ```
 invalidClass.js:5:22 lint/style/useNamingConvention ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This class name should be in PascalCase.
+  i This class name should be in PascalCase.
   
     3 │ class camelCase {}
     4 │ 
@@ -76,15 +73,13 @@ invalidClass.js:5:22 lint/style/useNamingConvention ━━━━━━━━━�
     6 │ 
     7 │ const x = class CLASS_EXPRESSION {}
   
-  i The name could be renamed to `DefaultClass`.
-  
 
 ```
 
 ```
 invalidClass.js:7:17 lint/style/useNamingConvention  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This class name should be in PascalCase.
+  i This class name should be in PascalCase.
   
     5 │ export default class default_class {}
     6 │ 
@@ -92,8 +87,6 @@ invalidClass.js:7:17 lint/style/useNamingConvention  FIXABLE  ━━━━━━
       │                 ^^^^^^^^^^^^^^^^
     8 │ 
     9 │ class Unknown_Style {}
-  
-  i The name could be renamed to `ClassExpression`.
   
   i Safe fix: Rename this symbol in PascalCase.
   
@@ -110,14 +103,12 @@ invalidClass.js:7:17 lint/style/useNamingConvention  FIXABLE  ━━━━━━
 ```
 invalidClass.js:9:7 lint/style/useNamingConvention  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This class name should be in PascalCase.
+  i This class name should be in PascalCase.
   
     7 │ const x = class CLASS_EXPRESSION {}
     8 │ 
   > 9 │ class Unknown_Style {}
       │       ^^^^^^^^^^^^^
-  
-  i The name could be renamed to `UnknownStyle`.
   
   i Safe fix: Rename this symbol in PascalCase.
   
@@ -128,5 +119,3 @@ invalidClass.js:9:7 lint/style/useNamingConvention  FIXABLE  ━━━━━━�
   
 
 ```
-
-
